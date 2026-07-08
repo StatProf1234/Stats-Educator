@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Statistical Calculators</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jstat@1.9.6/dist/jstat.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="calculators.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <nav id="sidebar" aria-label="Calculator navigation">
+      <a class="sidebar-brand" href="#" aria-label="Home — full calculator index">
+        <span class="brand-name">Statistical<br>Calculators</span>
+      </a>
+      <div class="sidebar-search">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="9.5" y1="9.5" x2="13" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <input type="search" id="search" placeholder="Search calculators…"
+               aria-label="Search calculators" autocomplete="off" spellcheck="false">
+        <button type="button" id="search-clear" class="search-clear" aria-label="Clear search" hidden>&times;</button>
+      </div>
+      <a class="wizard-nav-link" href="#wizard">
+        <span class="wizard-nav-link-icon">?</span>
+        Which Calculator Should I Use?
+      </a>
+      <div id="nav-list" role="list"></div>
+    </nav>
+
+    <main id="main" role="main">
+      <div id="view"></div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,838 @@
+// app.js — Statistical Calculators
+
+document.addEventListener('DOMContentLoaded', () => {
+  buildNav();
+  applyActiveState();
+
+  const searchEl      = document.getElementById('search');
+  const searchClearEl = document.getElementById('search-clear');
+
+  searchEl.addEventListener('input', e => {
+    searchClearEl.hidden = e.target.value === '';
+    buildNav(e.target.value.trim().toLowerCase());
+    applyActiveState();
+  });
+
+  // Explicit clear button — restores the collapsed, categories-only
+  // view in one click instead of having to delete the typed text.
+  searchClearEl.addEventListener('click', () => {
+    searchEl.value = '';
+    searchClearEl.hidden = true;
+    buildNav();
+    applyActiveState();
+    searchEl.focus();
+  });
+
+  window.addEventListener('hashchange', () => {
+    applyActiveState();
+    route();
+  });
+
+  // Brand click: always go home, even when already at # (no hashchange fires then)
+  document.querySelector('.sidebar-brand').addEventListener('click', e => {
+    if (location.hash === '' || location.hash === '#') {
+      e.preventDefault();
+      renderHome();
+    }
+  });
+
+  route();
+});
+
+/* ── ROUTING ────────────────────────────────────────────── */
+
+function route() {
+  const hash = location.hash.slice(1);
+  if (hash === 'wizard' || hash.startsWith('wizard/')) {
+    renderWizard(hash === 'wizard' ? [] : hash.slice('wizard/'.length).split('/'));
+    return;
+  }
+  const calc = CALCULATORS.find(c => c.id === hash);
+  calc ? renderCalculator(calc) : renderHome();
+}
+
+// Which sidebar categories are expanded — collapsed by default so
+// the 85-calculator list reads as 12 scannable headers rather than
+// one long scroll. Only changes when a header is clicked — nothing
+// expands or collapses on its own, so the sidebar always shows
+// exactly what you last set it to.
+const expandedCategories = new Set();
+
+function applyActiveState() {
+  const id = location.hash.slice(1);
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
+}
+
+/* ── SIDEBAR ────────────────────────────────────────────── */
+
+// Weighted relevance score for how well `calc` matches a search filter.
+// A whole-phrase match anywhere counts most; individual words count less
+// (so multi-word natural-language queries like "before and after" still
+// match calculators that only contain some of those words). Fields are
+// weighted by how strongly they signal intent: the curated SEARCH_KEYWORDS
+// synonym list (calculators.js) — common ways to describe a problem,
+// like "two independent groups" — outranks the calculator's own name,
+// which outranks its hint/description/category.
+function searchScore(calc, filter, filterWords) {
+  const fields = [
+    { text: calc.name.toLowerCase(),                                  weight: 10 },
+    { text: (SEARCH_KEYWORDS[calc.id] || []).join(' ').toLowerCase(), weight: 12 },
+    { text: calc.hint.toLowerCase(),                                  weight: 4 },
+    { text: (calc.description || '').toLowerCase(),                   weight: 2 },
+    { text: calc.category.toLowerCase(),                              weight: 2 },
+  ];
+  let score = 0;
+  for (const { text, weight } of fields) {
+    if (!text) continue;
+    if (text.includes(filter)) score += weight * 3;
+    for (const word of filterWords) {
+      if (text.includes(word)) score += weight;
+    }
+  }
+  return score;
+}
+
+function buildNav(filter) {
+  const list = document.getElementById('nav-list');
+  list.innerHTML = '';
+
+  const filterWords = filter ? filter.split(/\s+/).filter(w => w.length > 1) : [];
+  const scores = new Map();
+
+  const groups = {};
+  for (const calc of CALCULATORS) {
+    if (filter) {
+      const score = searchScore(calc, filter, filterWords);
+      if (score <= 0) continue;
+      scores.set(calc.id, score);
+    }
+    (groups[calc.category] = groups[calc.category] || []).push(calc);
+  }
+
+  let entries = Object.entries(groups);
+  if (filter) {
+    // Best matches first: sort calculators within each category by score,
+    // then sort categories themselves by their single best-scoring
+    // calculator, so the most relevant results surface at the very top
+    // instead of being buried under unrelated categories.
+    for (const calcs of Object.values(groups)) {
+      calcs.sort((a, b) => scores.get(b.id) - scores.get(a.id));
+    }
+    entries = entries.sort(([, a], [, b]) => scores.get(b[0].id) - scores.get(a[0].id));
+  }
+
+  for (const [cat, calcs] of entries) {
+    // While searching, force every matching category open so results
+    // are visible — but don't touch expandedCategories itself, so the
+    // manually-chosen collapse state is restored once the search clears.
+    const isOpen = !!filter || expandedCategories.has(cat);
+
+    const header = document.createElement('button');
+    header.type = 'button';
+    header.className = 'nav-category' + (isOpen ? ' open' : '');
+    header.setAttribute('aria-expanded', String(isOpen));
+    header.innerHTML = `
+      <span class="nav-category-chevron">▸</span>
+      <span class="nav-category-name">${esc(cat)}</span>
+      <span class="nav-category-count">${calcs.length}</span>
+    `;
+    list.appendChild(header);
+
+    const group = document.createElement('div');
+    group.className = 'nav-group' + (isOpen ? ' open' : '');
+    group.setAttribute('role', 'list');
+
+    for (const calc of calcs) {
+      const a = document.createElement('a');
+      a.className  = 'nav-item';
+      a.href       = '#' + calc.id;
+      a.dataset.id = calc.id;
+      a.setAttribute('role', 'listitem');
+      a.innerHTML  = `
+        <span class="nav-item-name">${esc(calc.name)}</span>
+        <span class="nav-item-hint">${esc(calc.hint)}</span>
+      `;
+      group.appendChild(a);
+    }
+    list.appendChild(group);
+
+    // Only toggleable when not searching — while searching, categories
+    // are force-open to show matches, so a click would have nothing to do.
+    if (!filter) {
+      header.addEventListener('click', () => {
+        const nowOpen = !expandedCategories.has(cat);
+        nowOpen ? expandedCategories.add(cat) : expandedCategories.delete(cat);
+        header.classList.toggle('open', nowOpen);
+        header.setAttribute('aria-expanded', String(nowOpen));
+        group.classList.toggle('open', nowOpen);
+      });
+    }
+  }
+}
+
+/* ── HOME VIEW ──────────────────────────────────────────── */
+
+function renderHome() {
+  // Group CALCULATOR_INDEX by category, preserving insertion order
+  const groups = {};
+  for (const entry of CALCULATOR_INDEX) {
+    (groups[entry.category] = groups[entry.category] || []).push(entry);
+  }
+
+  const total     = CALCULATOR_INDEX.length;
+  const available = CALCULATOR_INDEX.filter(e => e.status === 'available').length;
+
+  const sections = Object.entries(groups).map(([cat, entries]) => {
+    const cards = entries.map(entry => {
+      const isAvailable = entry.status === 'available';
+      // For available calculators, find the full definition for the formula hint
+      const fullCalc = isAvailable ? CALCULATORS.find(c => c.id === entry.id) : null;
+      const hintHtml = fullCalc
+        ? `<div class="home-card-hint">${esc(fullCalc.hint)}</div>`
+        : '';
+
+      if (isAvailable) {
+        return `
+          <a class="home-card" href="#${entry.id}">
+            <div class="home-card-name">${esc(entry.name)}</div>
+            ${hintHtml}
+            <div class="home-card-desc">${esc(entry.description)}</div>
+          </a>`;
+      } else {
+        return `
+          <div class="home-card planned">
+            <div class="home-card-badge">Coming soon</div>
+            <div class="home-card-name">${esc(entry.name)}</div>
+            <div class="home-card-desc">${esc(entry.description)}</div>
+          </div>`;
+      }
+    }).join('');
+
+    const availCount = entries.filter(e => e.status === 'available').length;
+    const countLabel = availCount > 0
+      ? `${availCount} of ${entries.length} available`
+      : `${entries.length} calculators`;
+
+    return `
+      <div class="home-section">
+        <div class="home-section-header">
+          <h2 class="home-section-title">${esc(cat)}</h2>
+          <span class="home-section-count">${countLabel}</span>
+        </div>
+        <div class="home-cards">${cards}</div>
+      </div>`;
+  }).join('');
+
+  view().innerHTML = `
+    <div class="home-eyebrow">Statistical Calculator Library</div>
+    <h1 class="home-title">Full Calculator Index</h1>
+    <p class="home-desc">
+      ${total} calculators across ${Object.keys(groups).length} categories —
+      <strong>${available} available now</strong>, the rest coming soon.
+      Click any available calculator to open it.
+    </p>
+    <a class="wizard-banner" href="#wizard">
+      <div class="wizard-banner-title">Not sure which calculator you need?</div>
+      <div class="wizard-banner-desc">Answer a few questions about your data — categorical or continuous, how many samples, paired or independent — and get pointed straight to the right one.</div>
+      <div class="wizard-banner-cta">Find My Calculator →</div>
+    </a>
+    ${sections}
+  `;
+  document.getElementById('main').scrollTop = 0;
+}
+
+/* ── SELECTION WIZARD ───────────────────────────────────── */
+
+// Renders the calculator-selection wizard (WIZARD_TREE, defined in
+// calculators.js) at the given path — an array of node ids visited so
+// far, with the LAST entry being the current node ('start' if empty).
+// The path lives entirely in the URL hash (#wizard/id1/id2/...), so
+// answering a question is just navigating to a longer hash and the
+// browser's own back button walks back through it for free.
+function renderWizard(path) {
+  const currentId = path.length ? path[path.length - 1] : 'start';
+  const node = WIZARD_TREE[currentId];
+
+  if (!node) {
+    view().innerHTML = `<p class="calc-desc">That wizard step doesn't exist. <a href="#wizard">Start over</a>.</p>`;
+    return;
+  }
+
+  // Breadcrumb: for each step, look up the option label that was
+  // chosen to get there (the label lives on the PREVIOUS node).
+  const crumbs = ['start', ...path].map((id, i, arr) => {
+    if (i === 0) return null;
+    const prevNode = WIZARD_TREE[arr[i - 1]];
+    const opt = prevNode && prevNode.options && prevNode.options.find(o => o.next === id);
+    return opt ? opt.label : null;
+  }).filter(Boolean);
+
+  const breadcrumbHtml = crumbs.length ? `
+    <div class="wizard-breadcrumb">
+      <a href="#wizard">Start over</a>
+      ${crumbs.map(c => `<span class="wizard-crumb-sep">›</span><span class="wizard-crumb">${esc(c)}</span>`).join('')}
+    </div>` : '';
+
+  const backHref = path.length > 1 ? `#wizard/${path.slice(0, -1).join('/')}` : '#wizard';
+  const backHtml = path.length ? `<a class="wizard-back" href="${backHref}">← Back</a>` : '';
+
+  if (node.question) {
+    const optionsHtml = node.options.map(opt => `
+      <a class="wizard-option" href="#wizard/${[...path, opt.next].join('/')}">
+        <span>${esc(opt.label)}</span>
+        <span class="wizard-option-arrow">→</span>
+      </a>`).join('');
+
+    view().innerHTML = `
+      <div class="calc-eyebrow">Calculator Finder</div>
+      ${breadcrumbHtml}
+      <h1 class="wizard-question">${esc(node.question)}</h1>
+      <div class="wizard-options">${optionsHtml}</div>
+      ${backHtml}
+    `;
+  } else {
+    const [primary, ...also] = node.results;
+    const cardFor = (r, isPrimary) => {
+      const calc = CALCULATORS.find(c => c.id === r.id);
+      if (!calc) return '';
+      return `
+        <a class="wizard-result-card${isPrimary ? ' primary' : ''}" href="#${calc.id}">
+          ${isPrimary ? '<div class="wizard-result-badge">Recommended</div>' : ''}
+          <div class="wizard-result-name">${esc(calc.name)}</div>
+          <div class="wizard-result-hint">${esc(calc.hint)}</div>
+          <div class="wizard-result-why">${esc(r.why)}</div>
+        </a>`;
+    };
+
+    view().innerHTML = `
+      <div class="calc-eyebrow">Calculator Finder</div>
+      ${breadcrumbHtml}
+      <h1 class="wizard-question">Here's what fits</h1>
+      <div class="wizard-results">
+        ${cardFor(primary, true)}
+        ${also.length ? `<div class="wizard-also-label">Also consider</div>` : ''}
+        ${also.map(r => cardFor(r, false)).join('')}
+      </div>
+      ${backHtml}
+    `;
+  }
+
+  document.getElementById('main').scrollTop = 0;
+}
+
+/* ── CALCULATOR VIEW ────────────────────────────────────── */
+
+function renderCalculator(calc) {
+  const formulas = calc.formulas.map(f => `
+    <div>
+      <div class="formula-row-label">${esc(f.label)}</div>
+      <div class="formula-katex">${tryKatex(f.latex, true)}</div>
+    </div>
+  `).join('');
+
+  // Notation glossary (NOTATION, defined in calculators.js) — a plain-
+  // English meaning for every symbol used in this calculator's formulas,
+  // e.g. "e" in a survey sample size calculator meaning margin of error.
+  // Looked up by id rather than stored on the calculator itself so it
+  // could be added for all 91 calculators without touching each one's
+  // existing formulas/inputs/calculate block.
+  const notation = NOTATION[calc.id] || [];
+  const notationHtml = notation.map(n => `
+    <div class="notation-row">
+      <div class="notation-symbol">${tryKatex(n.symbol, false)}</div>
+      <div class="notation-meaning">${esc(n.meaning)}</div>
+    </div>
+  `).join('');
+
+  const inputsHtml = calc.inputLayout === '2x2' ? render2x2(calc)
+    : calc.inputLayout === 'groups' ? renderGroupedInputs(calc)
+    : renderGrid(calc);
+
+  view().innerHTML = `
+    <div class="calc-eyebrow">
+      <a class="calc-back" href="#" aria-label="Back to all calculators">← All</a>
+      ${esc(calc.category)}
+    </div>
+    <h1 class="calc-title">${esc(calc.name)}</h1>
+    <p class="calc-desc">${esc(calc.description)}</p>
+
+    ${calc.example ? `
+    <details class="example-block">
+      <summary class="example-summary">Medical Example — when &amp; how to use this</summary>
+      <p class="example-body" id="example-body"></p>
+    </details>` : ''}
+
+    <div class="inputs-block">
+      <div class="block-label">Inputs</div>
+      ${inputsHtml}
+    </div>
+
+    <button class="calc-btn" id="calc-btn">Calculate</button>
+    <div id="results-wrap"></div>
+
+    <div class="formula-block">
+      <div class="block-label">Formula</div>
+      <div class="formula-list">${formulas}</div>
+    </div>
+
+    ${notation.length ? `
+    <div class="notation-block">
+      <div class="block-label">Notation</div>
+      <div class="notation-list">${notationHtml}</div>
+    </div>` : ''}
+  `;
+  document.getElementById('main').scrollTop = 0;
+
+  function run() {
+    const values = readInputs(calc);
+    const results = calc.calculate(values);
+    showResults(results);
+    updateExample(calc, values);
+  }
+
+  document.getElementById('calc-btn').addEventListener('click', run);
+
+  if (calc.inputLayout === '2x2') {
+    attachTotalListeners();
+  }
+
+  attachSliderListeners(calc, run);
+
+  // Auto-run with the defaults already populated into the inputs above,
+  // so users see example output immediately without clicking Calculate.
+  run();
+}
+
+// Re-renders the "Medical Example" text using the calculator's current
+// input values, so worked numbers in the example always match what's
+// actually entered instead of going stale after the user edits inputs.
+function updateExample(calc, values) {
+  const el = document.getElementById('example-body');
+  if (el && typeof calc.example === 'function') el.textContent = calc.example(values);
+}
+
+// Slider inputs recompute live as they're dragged, unlike every other
+// input type which waits for the Calculate button — sliders are for
+// exploring how an output changes continuously, not a one-shot entry.
+function attachSliderListeners(calc, run) {
+  calc.inputs.filter(inp => inp.type === 'slider').forEach(inp => {
+    const el    = document.getElementById('inp-' + inp.id);
+    const label = document.getElementById('val-' + inp.id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      if (label) label.textContent = inp.format ? inp.format(parseFloat(el.value)) : el.value;
+      run();
+    });
+  });
+}
+
+/* ── INPUT RENDERERS ────────────────────────────────────── */
+
+function renderGrid(calc) {
+  return `<div class="inputs-grid">` +
+    calc.inputs.map(inp => {
+      if (inp.type === 'textarea') {
+        return `
+          <div class="input-field input-field-wide">
+            <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+            <textarea class="input-el inputs-textarea" id="inp-${inp.id}"
+                      data-id="${inp.id}" rows="3" spellcheck="false">${esc(String(inp.default))}</textarea>
+          </div>`;
+      }
+      if (inp.type === 'slider') {
+        const display = inp.format ? inp.format(inp.default) : String(inp.default);
+        return `
+          <div class="input-field input-field-wide">
+            <label class="input-label" for="inp-${inp.id}">
+              ${esc(inp.label)} — <span class="slider-value" id="val-${inp.id}">${esc(display)}</span>
+            </label>
+            <input class="input-slider" type="range" id="inp-${inp.id}" data-id="${inp.id}"
+                   min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">
+          </div>`;
+      }
+      if (inp.type === 'select') {
+        const opts = inp.options.map(o =>
+          `<option value="${esc(o.value)}"${o.value === inp.default ? ' selected' : ''}>${esc(o.label)}</option>`
+        ).join('');
+        const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
+        return `
+          <div class="input-field input-field-wide">
+            <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+            <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
+            ${hint}
+          </div>`;
+      }
+      if (inp.type === 'text') {
+        return `
+          <div class="input-field">
+            <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+            <input class="input-el" type="text" id="inp-${inp.id}" data-id="${inp.id}"
+                   value="${esc(String(inp.default))}"${inp.placeholder ? ` placeholder="${esc(inp.placeholder)}"` : ''} autocomplete="off" spellcheck="false">
+          </div>`;
+      }
+      return `
+        <div class="input-field">
+          <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+          <input class="input-el" type="number" id="inp-${inp.id}"
+                 data-id="${inp.id}" value="${inp.default}" step="any">
+        </div>`;
+    }).join('') +
+  `</div>`;
+}
+
+// Renders calculators whose inputs come in repeated per-group sets
+// (e.g. Group 1 Mean/SD/N, Group 2 Mean/SD/N, ...) as a table — one
+// column per group, one row per field — instead of a plain field-by-
+// field grid where "Group 1 Mean" and "Group 2 Mean" end up far apart
+// and hard to visually line up. Driven by `calc.groupFields` (row
+// definitions: [{ prefix, label }]) and, for calculators with more
+// than 2 groups, whichever group numbers 1-`calc.groupMax` (default 6)
+// actually have at least one of those fields present in `calc.inputs`
+// — so purely-optional trailing groups (e.g. Group 4-6 in a 6-group
+// ANOVA) don't force empty columns to render for every calculator
+// that caps out lower than its declared groupMax.
+// Any input NOT part of the group pattern (e.g. a shared alpha) is
+// rendered normally, below the table, via the plain grid layout.
+function renderGroupedInputs(calc) {
+  const byId = id => calc.inputs.find(i => i.id === id);
+  const maxGroups = calc.groupMax || 6;
+  const groupNums = [];
+  for (let i = 1; i <= maxGroups; i++) {
+    if (calc.groupFields.some(f => byId(f.prefix + i))) groupNums.push(i);
+  }
+
+  const groupedIds = new Set();
+  calc.groupFields.forEach(f => groupNums.forEach(i => groupedIds.add(f.prefix + i)));
+
+  const term = calc.groupTerm || 'Group';
+  const colLabel = i => (calc.groupLabels && calc.groupLabels[i - 1]) ? `${term} ${i} — ${esc(calc.groupLabels[i - 1])}` : `${term} ${i}`;
+
+  const header = `<div class="group-corner"></div>` +
+    groupNums.map(i => `<div class="group-col-header">${colLabel(i)}</div>`).join('');
+
+  const rows = calc.groupFields.map(f => {
+    const rowHeader = `<div class="group-row-header">${esc(f.label)}</div>`;
+    const cells = groupNums.map(i => {
+      const inp = byId(f.prefix + i);
+      if (!inp) return `<div class="group-cell"></div>`;
+      return `
+        <div class="group-cell">
+          <input class="input-el" type="number" id="inp-${inp.id}" data-id="${inp.id}"
+                 value="${inp.default}" step="any" aria-label="${term} ${i} ${esc(f.label)}">
+        </div>`;
+    }).join('');
+    return rowHeader + cells;
+  }).join('');
+
+  const groupTableHtml = `
+    <div class="group-table" style="grid-template-columns: 150px repeat(${groupNums.length}, minmax(110px, 1fr));">
+      ${header}
+      ${rows}
+    </div>
+  `;
+
+  const otherInputs = calc.inputs.filter(inp => !groupedIds.has(inp.id));
+  const otherHtml = otherInputs.length ? renderGrid({ ...calc, inputs: otherInputs }) : '';
+
+  return groupTableHtml + otherHtml;
+}
+
+function render2x2(calc) {
+  const [a, b, c, d, ...extraInputs] = calc.inputs;
+  const sum = (...ids) => ids.reduce((s, id) => s + +calc.inputs.find(i => i.id === id).default, 0);
+  const labels = calc.tableLabels || {};
+  const colPos = labels.colPos || 'Outcome +';
+  const colNeg = labels.colNeg || 'Outcome −';
+  const rowPos = labels.rowPos || 'Exposed +';
+  const rowNeg = labels.rowNeg || 'Exposed −';
+  return `
+    ${render2x2ExtraInputs(extraInputs)}
+    <p class="table-instruction">
+      Enter your counts in the four shaded cells —
+      <strong>a</strong>, <strong>b</strong>, <strong>c</strong>, and <strong>d</strong> —
+      then click <strong>Calculate</strong>.
+    </p>
+    <div class="table-2x2-wrap">
+      <div class="table-2x2">
+        <div class="t2-corner"></div>
+        <div class="t2-col-head">${esc(colPos)}</div>
+        <div class="t2-col-head">${esc(colNeg)}</div>
+        <div class="t2-total-head">Total</div>
+
+        <div class="t2-row-head">${esc(rowPos)}</div>
+        <div class="t2-cell">
+          <span class="t2-cell-label">a</span>
+          <input class="input-el" type="number" id="inp-a" data-id="a"
+                 value="${a.default}" min="0" step="1" aria-label="a — ${esc(a.desc)}">
+        </div>
+        <div class="t2-cell">
+          <span class="t2-cell-label">b</span>
+          <input class="input-el" type="number" id="inp-b" data-id="b"
+                 value="${b.default}" min="0" step="1" aria-label="b — ${esc(b.desc)}">
+        </div>
+        <div class="t2-total" id="tot-r1">${sum('a','b')}</div>
+
+        <div class="t2-row-head">${esc(rowNeg)}</div>
+        <div class="t2-cell">
+          <span class="t2-cell-label">c</span>
+          <input class="input-el" type="number" id="inp-c" data-id="c"
+                 value="${c.default}" min="0" step="1" aria-label="c — ${esc(c.desc)}">
+        </div>
+        <div class="t2-cell">
+          <span class="t2-cell-label">d</span>
+          <input class="input-el" type="number" id="inp-d" data-id="d"
+                 value="${d.default}" min="0" step="1" aria-label="d — ${esc(d.desc)}">
+        </div>
+        <div class="t2-total" id="tot-r2">${sum('c','d')}</div>
+
+        <div class="t2-row-head" style="font-size:10.5px">Total</div>
+        <div class="t2-total" id="tot-c1">${sum('a','c')}</div>
+        <div class="t2-total" id="tot-c2">${sum('b','d')}</div>
+        <div class="t2-total" id="tot-n">${sum('a','b','c','d')}</div>
+      </div>
+    </div>
+  `;
+}
+
+// Renders any inputs beyond the four table cells (a, b, c, d) that a
+// '2x2'-layout calculator declares — e.g. a study-design selector —
+// as a prominent callout ABOVE the table (not a plain input field
+// easy to miss below it), since picking the wrong option silently
+// changes which results get shown further down.
+function render2x2ExtraInputs(inputs) {
+  return inputs.map(inp => {
+    if (inp.type === 'select') {
+      const opts = inp.options.map(o =>
+        `<option value="${esc(o.value)}"${o.value === inp.default ? ' selected' : ''}>${esc(o.label)}</option>`
+      ).join('');
+      const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
+      return `
+        <div class="design-callout">
+          <div class="design-callout-label">Before you calculate</div>
+          <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+          <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
+          ${hint}
+        </div>`;
+    }
+    return '';
+  }).join('');
+}
+
+function attachTotalListeners() {
+  ['a','b','c','d'].forEach(id => {
+    const el = document.getElementById('inp-' + id);
+    if (el) el.addEventListener('input', refreshTotals);
+  });
+}
+
+function refreshTotals() {
+  const g = id => +(document.getElementById('inp-' + id)?.value || 0);
+  const a = g('a'), b = g('b'), c = g('c'), d = g('d');
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('tot-r1', a+b); set('tot-r2', c+d);
+  set('tot-c1', a+c); set('tot-c2', b+d);
+  set('tot-n',  a+b+c+d);
+}
+
+/* ── READ INPUTS ────────────────────────────────────────── */
+
+function readInputs(calc) {
+  const vals = {};
+  for (const inp of calc.inputs) {
+    const el = document.getElementById('inp-' + inp.id);
+    if (!el) { vals[inp.id] = inp.default; continue; }
+    vals[inp.id] = (inp.type === 'textarea' || inp.type === 'select' || inp.type === 'text') ? el.value : parseFloat(el.value);
+  }
+  return vals;
+}
+
+/* ── RESULTS ────────────────────────────────────────────── */
+
+function computeDomains(results) {
+  const withCI = results.filter(r => r.ci && r.ci.length === 2);
+
+  // Ratio domain (log scale) — include null=1 so reference line is always visible
+  const ratioRows = withCI.filter(r => r.isRatio);
+  let ratioDomain = null;
+  if (ratioRows.length) {
+    const vals = ratioRows.flatMap(r => [r.value, r.ci[0], r.ci[1], 1]).filter(v => v > 0);
+    const logMin = Math.min(...vals.map(Math.log));
+    const logMax = Math.max(...vals.map(Math.log));
+    const span   = logMax - logMin;
+    const pad    = Math.max(span * 0.4, 0.35); // at least ~0.35 log units each side
+    ratioDomain  = [Math.exp(logMin - pad), Math.exp(logMax + pad)];
+  }
+
+  // Difference domain (linear) — include null=0
+  const diffRows = withCI.filter(r => !r.isRatio);
+  let diffDomain = null;
+  if (diffRows.length) {
+    const vals = diffRows.flatMap(r => [r.value, r.ci[0], r.ci[1], 0]);
+    const mn   = Math.min(...vals);
+    const mx   = Math.max(...vals);
+    const span = mx - mn;
+    const pad  = Math.max(span * 0.4, 0.05);
+    diffDomain = [mn - pad, mx + pad];
+  }
+
+  return { ratioDomain, diffDomain };
+}
+
+function showResults(results) {
+  const wrap  = document.getElementById('results-wrap');
+  if (!wrap) return;
+
+  const hasCI = results.some(r => r.ci && r.ci.length === 2);
+  const cls   = hasCI ? 'has-ci' : 'no-ci';
+  const { ratioDomain, diffDomain } = computeDomains(results);
+
+  const headerCICell = hasCI
+    ? `<div class="results-header-cell">95% CI</div>` : '';
+
+  const rows = results.map(r => {
+    if (r.isSVG) {
+      return `<div class="result-row result-viz">${r.svg}</div>`;
+    }
+
+    const valStr = (typeof r.value === 'number') ? String(r.value) : (r.value ?? '');
+
+    let ciCell = '';
+    if (hasCI && !r.isText) {
+      if (r.ci && r.ci.length === 2) {
+        const [lo, hi] = r.ci;
+        const pt     = typeof r.value === 'number' ? r.value : 0;
+        const domain = r.isRatio ? ratioDomain : diffDomain;
+        ciCell = `
+          <div class="result-ci">
+            ${forestSVG(pt, lo, hi, r.isRatio, domain)}
+            <span class="ci-text">[${+lo.toFixed(4)}, ${+hi.toFixed(4)}]</span>
+          </div>`;
+      } else {
+        ciCell = `<div class="result-ci"></div>`;
+      }
+    }
+
+    const rowCls = [
+      'result-row',
+      cls,
+      r.isText    ? 'is-text-row' : '',
+      r.highlight ? 'highlight' : '',
+      r.isError   ? 'error-row' : '',
+    ].filter(Boolean).join(' ');
+
+    return `
+      <div class="${rowCls}">
+        <div class="result-label">${esc(r.label)}</div>
+        <div class="result-value ${r.isText ? 'is-text' : ''}">${esc(valStr)}</div>
+        ${ciCell}
+      </div>
+    `;
+  }).join('');
+
+  const legendHtml = hasCI ? `
+    <div class="legend-bar">
+      <span class="legend-item">
+        <svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true">
+          <line x1="0" y1="5" x2="20" y2="5" stroke="#4E6EDB" stroke-width="1.5"/>
+          <line x1="0" y1="2" x2="0" y2="8" stroke="#4E6EDB" stroke-width="1.5"/>
+          <line x1="20" y1="2" x2="20" y2="8" stroke="#4E6EDB" stroke-width="1.5"/>
+        </svg>
+        95% CI
+      </span>
+      <span class="legend-item">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <polygon points="5,0 10,5 5,10 0,5" fill="#E07B2C"/>
+        </svg>
+        Point estimate
+      </span>
+      <span class="legend-item">
+        <svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true">
+          <line x1="10" y1="0" x2="10" y2="10" stroke="#1A1A2E"
+                stroke-width="1" stroke-dasharray="2 2" opacity=".4"/>
+        </svg>
+        Null (1 for ratios, 0 for differences)
+      </span>
+    </div>
+  ` : '';
+
+  wrap.innerHTML = `
+    <div class="results-block">
+      <div class="results-header ${cls}">
+        <div class="results-header-cell">Measure</div>
+        <div class="results-header-cell align-right">Value</div>
+        ${headerCICell}
+      </div>
+      <div class="results-table">${rows}</div>
+      ${legendHtml}
+    </div>
+  `;
+}
+
+/* ── FOREST PLOT SVG ────────────────────────────────────── */
+
+function forestSVG(value, lo, hi, isRatio, domain) {
+  const W = 200, H = 22, PAD = 14;
+  const pw = W - 2*PAD;
+
+  let toX;
+  if (isRatio) {
+    const [dLo, dHi] = domain || [0.05, 20];
+    const lMin = Math.log(dLo), lMax = Math.log(dHi);
+    toX = v => PAD + ((Math.log(Math.max(v, 1e-6)) - lMin) / (lMax - lMin)) * pw;
+  } else {
+    const [dLo, dHi] = domain || [-1.2, 1.2];
+    toX = v => PAD + ((Math.max(Math.min(v, dHi), dLo) - dLo) / (dHi - dLo)) * pw;
+  }
+
+  const clamp = x => Math.max(PAD, Math.min(W-PAD, x));
+  const nullX = isRatio ? toX(1) : toX(0);
+  const loX   = clamp(toX(lo));
+  const hiX   = clamp(toX(hi));
+  const cx    = clamp(toX(value));
+  const cy    = H/2;
+  const dh    = 5;
+
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
+               class="forest-svg" aria-hidden="true">
+    <line x1="${PAD}" y1="${cy}" x2="${W-PAD}" y2="${cy}"
+          stroke="#CDD2E0" stroke-width="1"/>
+    <rect x="${loX}" y="${cy-3}" width="${Math.max(hiX-loX,2)}" height="6"
+          fill="#4E6EDB" opacity=".15" rx="1"/>
+    <line x1="${loX}" y1="${cy}" x2="${hiX}" y2="${cy}"
+          stroke="#4E6EDB" stroke-width="1.5"/>
+    <line x1="${loX}" y1="${cy-4}" x2="${loX}" y2="${cy+4}"
+          stroke="#4E6EDB" stroke-width="1.5"/>
+    <line x1="${hiX}" y1="${cy-4}" x2="${hiX}" y2="${cy+4}"
+          stroke="#4E6EDB" stroke-width="1.5"/>
+    <line x1="${nullX}" y1="1" x2="${nullX}" y2="${H-1}"
+          stroke="#1A1A2E" stroke-width="1" stroke-dasharray="2 2" opacity=".35"/>
+    <polygon points="${cx},${cy-dh} ${cx+dh},${cy} ${cx},${cy+dh} ${cx-dh},${cy}"
+             fill="#E07B2C"/>
+  </svg>`;
+}
+
+/* ── UTILITIES ──────────────────────────────────────────── */
+
+function view() {
+  return document.getElementById('view');
+}
+
+function tryKatex(latex, display = false) {
+  if (typeof katex === 'undefined') return `<code>${esc(latex)}</code>`;
+  try {
+    return katex.renderToString(latex, { throwOnError: false, displayMode: display });
+  } catch (e) {
+    return `<code>${esc(latex)}</code>`;
+  }
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
