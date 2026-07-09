@@ -8426,6 +8426,348 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 89. META-ANALYSIS FOR PROPORTIONS ──────────────────────────────────
+     Pools raw event counts (x) and totals (n) from up to 6 studies
+     into an overall proportion — a different problem from the
+     generic 'Meta-Analysis' calculator, which expects an
+     already-computed effect + SE per study. Naively pooling raw
+     percentages breaks down as p approaches 0% or 100% (variance
+     p(1-p)/n shrinks to 0, so a study with 0/40 events gets infinite
+     weight), so this offers the standard variance-stabilizing
+     transforms from the prevalence-meta-analysis literature
+     (Barendregt et al. 2013): Arcsine (Fisher) — recommended,
+     variance 1/(4n) independent of p, needs no correction even at
+     the extremes; Logit; and Raw/untransformed for comparison. Same
+     DerSimonian-Laird FE/RE/Q/tau2/PI machinery as 'Meta-Analysis',
+     just fed transformed values and back-transformed at the end.  */
+  {
+    id:          'meta-analysis-proportions',
+    name:        'Meta-Analysis for Proportions',
+    hint:        'Pools event rates via arcsine, logit, GLMM, or raw pooling',
+    category:    'Bayesian & Meta-Analysis',
+    description: 'Pools proportions (e.g., prevalence or event rates) across studies from raw event counts and sample sizes, using a variance-stabilizing transformation (or a one-stage GLMM), then tests heterogeneity and computes a prediction interval.',
+
+    formulas: [
+      {
+        label: 'Per-Study Proportion',
+        latex: '\\hat p_i = \\dfrac{x_i}{n_i}'
+      },
+      {
+        label: 'Arcsine (Fisher) Transform — Recommended (Two-Stage)',
+        latex: '\\varphi_i = \\arcsin\\sqrt{\\hat p_i}, \\qquad \\text{Var}(\\varphi_i) = \\dfrac{1}{4n_i}'
+      },
+      {
+        label: 'Logit Transform (Two-Stage)',
+        latex: '\\ell_i = \\ln\\dfrac{x_i}{n_i-x_i}, \\qquad \\text{Var}(\\ell_i)=\\dfrac{1}{x_i}+\\dfrac{1}{n_i-x_i}'
+      },
+      {
+        label: 'Two-Stage Fixed-Effect Pooling & Heterogeneity',
+        latex: '\\hat\\theta_{FE}=\\dfrac{\\sum w_iy_i}{\\sum w_i}, \\quad Q=\\sum w_i(y_i-\\hat\\theta_{FE})^2, \\quad w_i=\\dfrac{1}{\\text{Var}(y_i)}'
+      },
+      {
+        label: 'Two-Stage DerSimonian–Laird τ² & Random-Effects Pooling',
+        latex: '\\tau^2=\\max\\!\\left(0,\\dfrac{Q-df}{C}\\right), \\qquad \\hat\\theta_{RE}=\\dfrac{\\sum w_i^{*}y_i}{\\sum w_i^{*}}, \\quad w_i^{*}=\\dfrac{1}{\\text{Var}(y_i)+\\tau^2}'
+      },
+      {
+        label: 'Logit (GLMM) — One-Stage Binomial-Normal Model',
+        latex: 'x_i \\mid u_i \\sim \\text{Binomial}(n_i, p_i), \\quad \\text{logit}(p_i) = \\mu + u_i, \\quad u_i \\sim N(0,\\tau^2)'
+      },
+      {
+        label: 'GLMM Marginal Likelihood — Fit by Numerical Maximum Likelihood',
+        latex: 'L_i(\\mu,\\tau^2) = \\displaystyle\\int \\binom{n_i}{x_i}p_i^{x_i}(1-p_i)^{n_i-x_i}\\,\\phi(u_i;0,\\tau^2)\\,du_i'
+      },
+      {
+        label: 'Back-Transformation to a Proportion',
+        latex: '\\text{Arcsine: } \\hat p=\\sin^2\\hat\\theta \\qquad \\text{Logit / GLMM: } \\hat p=\\dfrac{e^{\\hat\\theta}}{1+e^{\\hat\\theta}} \\qquad \\text{Raw: } \\hat p=\\hat\\theta'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Study',
+    groupFields: [
+      { prefix: 'x', label: 'Events (x)' },
+      { prefix: 'n', label: 'Total (n)' },
+    ],
+    inputs: [
+      { id: 'method', type: 'select', label: 'Pooling Method', default: 'glmm',
+        note: 'GLMM is "one-stage": it fits a binomial model directly to the raw counts by numerical maximum likelihood, so it needs no continuity correction even at 0%/100% events, but has no Cochran\'s Q or I² (τ² is its own direct estimate of between-study variance instead). Arcsine, Logit, and Raw are "two-stage" methods — each study is first transformed to one (effect, SE) pair, then pooled by DerSimonian–Laird.',
+        options: [
+          { value: 'glmm',    label: 'Logit (GLMM) — recommended, one-stage binomial model, no correction needed' },
+          { value: 'arcsine', label: 'Arcsine (Fisher) — recommended two-stage method, stable at 0%/100%' },
+          { value: 'logit',   label: 'Logit (DerSimonian–Laird) — two-stage, log-odds scale' },
+          { value: 'raw',     label: 'Raw / Untransformed — simplest, least robust near 0%/100%' },
+        ] },
+
+      { id: 'x1', label: 'Study 1 Events (x₁)', default: 3 },
+      { id: 'n1', label: 'Study 1 Total (n₁)',  default: 50 },
+      { id: 'x2', label: 'Study 2 Events (x₂)', default: 0 },
+      { id: 'n2', label: 'Study 2 Total (n₂)',  default: 40 },
+      { id: 'x3', label: 'Study 3 Events (x₃)', default: 8 },
+      { id: 'n3', label: 'Study 3 Total (n₃)',  default: 60 },
+      { id: 'x4', label: 'Study 4 Events (x₄)', default: 5 },
+      { id: 'n4', label: 'Study 4 Total (n₄)',  default: 45 },
+      { id: 'x5', label: 'Study 5 Events (optional)', default: '' },
+      { id: 'n5', label: 'Study 5 Total (optional)',  default: '' },
+      { id: 'x6', label: 'Study 6 Events (optional)', default: '' },
+      { id: 'n6', label: 'Study 6 Total (optional)',  default: '' },
+    ],
+
+    example(values) {
+      const { studies: raw, error } = gatherProportionStudies(values);
+      if (error || raw.length < 2 || typeof jStat === 'undefined' || !jStat.chisquare)
+        return 'Enter Events and Total for at least 2 studies to see a worked medical example here.';
+      const method = values.method;
+
+      if (method === 'glmm') {
+        const { mu, tau2 } = fitProportionGLMM(raw);
+        const pct = +(invlogit(mu) * 100).toFixed(1);
+        const zeroStudy = raw.find(s => s.x === 0);
+        const zeroNote = zeroStudy ? ` It handles ${zeroStudy.label}'s zero events directly, with no continuity correction needed.` : '';
+        return `${raw.length} trials each report how many of their patients developed a post-procedure complication. Rather than transforming each study's proportion and pooling in two stages, the GLMM fits a single binomial model directly to the raw counts, estimating the overall rate and the between-study variance (τ² = ${(+tau2.toFixed(3))} on the logit scale) together by maximum likelihood. The pooled complication rate is ${pct}%.${zeroNote}`;
+      }
+
+      const studies = raw.map(s => ({ ...proportionEffectAndSE(s.x, s.n, method), label: s.label }));
+      const k = studies.length;
+      const w = studies.map(s => 1 / s.se ** 2);
+      const sumW = w.reduce((s, v) => s + v, 0);
+      const pooledFE = studies.reduce((s, st, i) => s + w[i] * st.effect, 0) / sumW;
+      const Q = studies.reduce((s, st, i) => s + w[i] * (st.effect - pooledFE) ** 2, 0);
+      const df = k - 1;
+      const I2 = Q > 0 ? Math.max(0, (Q - df) / Q) * 100 : 0;
+      const pct = +(proportionInverse(pooledFE, method) * 100).toFixed(1);
+      const heterogeneity = I2 < 25 ? 'low' : I2 < 75 ? 'moderate' : 'high';
+      const zeroStudy = raw.find(s => s.x === 0);
+      const zeroNote = zeroStudy
+        ? ` One trial even reported zero events (${zeroStudy.label}), which ${method === 'arcsine' ? 'the arcsine transform handles natively' : 'the other methods can only handle with a continuity correction'}.`
+        : '';
+      return `${k} trials each report how many of their patients developed a post-procedure complication, out of very different sample sizes. Pooling directly on the raw percentage scale would give near-infinite weight to studies with rates close to 0% or 100%, so this calculator first stabilizes each study's variance with the ${method} transform before pooling, then converts back. The pooled complication rate is ${pct}%, with ${heterogeneity} heterogeneity across trials (I² = ${I2.toFixed(1)}%).${zeroNote}`;
+    },
+
+    calculate(values) {
+      const { studies: raw, error } = gatherProportionStudies(values);
+      if (error) return [err(error)];
+      if (raw.length < 2) return [err('Enter Events and Total for at least 2 studies')];
+      if (typeof jStat === 'undefined' || !jStat.chisquare || !jStat.studentt)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const method = values.method;
+
+      if (method === 'glmm') {
+        const { mu, tau2, seMu } = fitProportionGLMM(raw);
+        const { mu: muFixed, seMu: seMuFixed } = fitProportionGLMMFixed(raw);
+        const Z = 1.96;
+        const k = raw.length;
+        const toPct = v => +(invlogit(v) * 100).toFixed(2);
+        const f = (v, dp = 4) => +(v.toFixed(dp));
+
+        const rows = [
+          { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
+          { label: 'Pooled Proportion (Fixed-Effect GLMM)', value: toPct(muFixed),
+            ci: [toPct(muFixed - Z * seMuFixed), toPct(muFixed + Z * seMuFixed)], isRatio: false, highlight: true },
+          { label: 'Pooled Proportion (Random-Effects GLMM)', value: toPct(mu),
+            ci: [toPct(mu - Z * seMu), toPct(mu + Z * seMu)], isRatio: false, highlight: true },
+          { label: 'τ² (GLMM-estimated, logit scale)', value: f(tau2), ci: null, isRatio: false, highlight: true },
+        ];
+
+        if (k >= 3) {
+          const tCrit = jStat.studentt.inv(0.975, k - 2);
+          const piMargin = tCrit * Math.sqrt(tau2 + seMu ** 2);
+          rows.push({ label: '95% Prediction Interval (%)', value: toPct(mu),
+            ci: [toPct(mu - piMargin), toPct(mu + piMargin)], isRatio: false, highlight: true });
+        } else {
+          rows.push({ label: 'Note', isText: true, ci: null, isRatio: false, value: 'A prediction interval needs at least 3 studies (df = k − 2 ≥ 1).' });
+        }
+
+        rows.push({
+          label: 'Forest Plot (%)', isSVG: true,
+          svg: glmmForestPlotSVG(
+            raw,
+            toPct(muFixed), [toPct(muFixed - Z * seMuFixed), toPct(muFixed + Z * seMuFixed)],
+            toPct(mu), [toPct(mu - Z * seMu), toPct(mu + Z * seMu)]
+          )
+        });
+
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: "The GLMM (one-stage) approach models the raw event counts directly with a binomial likelihood, so it needs no continuity correction even for studies with 0% or 100% events. The fixed-effect GLMM fixes τ² at 0, assuming every study shares one true rate and treating all between-study spread as sampling noise — this is the one-stage analogue of a fixed-effect (inverse-variance) pool. The random-effects GLMM instead estimates τ² directly by maximum likelihood alongside the pooled rate, allowing the true rate to vary across studies. Because both are fit in one step from the raw counts rather than the two-stage transform-then-pool approach, neither has a Cochran's Q or I² — τ² above is the random-effects model's own direct estimate of between-study variance instead." });
+
+        rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+          value: `Fixed-effect GLMM pooled proportion = ${toPct(muFixed)}%, 95% CI [${toPct(muFixed - Z * seMuFixed)}%, ${toPct(muFixed + Z * seMuFixed)}%]. Random-effects GLMM pooled proportion = ${toPct(mu)}%, 95% CI [${toPct(mu - Z * seMu)}%, ${toPct(mu + Z * seMu)}%]. ${tau2 < 0.01
+            ? 'Estimated between-study variance is negligible (τ² ≈ 0), so the two estimates are close — the studies appear to share a common underlying rate.'
+            : `Estimated between-study variance is τ² = ${f(tau2)} on the logit scale, indicating real differences in the underlying rate across studies beyond chance; this is why the random-effects estimate and its CI differ from the fixed-effect one.`}` });
+
+        return rows;
+      }
+
+      const studies = raw.map(s => {
+        const { effect, se, corrected } = proportionEffectAndSE(s.x, s.n, method);
+        return { label: s.label, effect, se, corrected };
+      });
+
+      const k = studies.length;
+      const Z = 1.96;
+
+      const w = studies.map(s => 1 / s.se ** 2);
+      const sumW = w.reduce((s, v) => s + v, 0);
+      const pooledFE = studies.reduce((s, st, i) => s + w[i] * st.effect, 0) / sumW;
+      const seFE = Math.sqrt(1 / sumW);
+
+      const Q  = studies.reduce((s, st, i) => s + w[i] * (st.effect - pooledFE) ** 2, 0);
+      const df = k - 1;
+      const pQ = 1 - jStat.chisquare.cdf(Q, df);
+      const I2 = Q > 0 ? Math.max(0, (Q - df) / Q) * 100 : 0;
+
+      const sumW2 = w.reduce((s, v) => s + v ** 2, 0);
+      const C = sumW - sumW2 / sumW;
+      const tau2 = (df > 0 && C > 0) ? Math.max(0, (Q - df) / C) : 0;
+
+      const wStar = studies.map(s => 1 / (s.se ** 2 + tau2));
+      const sumWStar = wStar.reduce((s, v) => s + v, 0);
+      const pooledRE = studies.reduce((s, st, i) => s + wStar[i] * st.effect, 0) / sumWStar;
+      const seRE = Math.sqrt(1 / sumWStar);
+
+      const toPct = v => +(proportionInverse(v, method) * 100).toFixed(2);
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
+        { label: 'Fixed-Effect Pooled Proportion (%)', value: toPct(pooledFE),
+          ci: [toPct(pooledFE - Z * seFE), toPct(pooledFE + Z * seFE)], isRatio: false, highlight: true },
+        { label: "Cochran's Q (transformed scale)", value: f(Q), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom (df)', value: df, ci: null, isRatio: false },
+        { label: 'p-value (heterogeneity test)', value: formatPValue(pQ), ci: null, isRatio: false },
+        { label: 'I² (% variance due to heterogeneity)', value: f(I2, 1), ci: null, isRatio: false, highlight: true },
+        { label: 'τ² (DerSimonian–Laird, transformed scale)', value: f(tau2), ci: null, isRatio: false },
+        { label: 'Random-Effects Pooled Proportion (%)', value: toPct(pooledRE),
+          ci: [toPct(pooledRE - Z * seRE), toPct(pooledRE + Z * seRE)], isRatio: false, highlight: true },
+      ];
+
+      if (k >= 3) {
+        const tCrit = jStat.studentt.inv(0.975, k - 2);
+        const piMargin = tCrit * Math.sqrt(tau2 + seRE ** 2);
+        rows.push({ label: '95% Prediction Interval (%)', value: toPct(pooledRE),
+          ci: [toPct(pooledRE - piMargin), toPct(pooledRE + piMargin)], isRatio: false, highlight: true });
+      } else {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false, value: 'A prediction interval needs at least 3 studies (df = k − 2 ≥ 1).' });
+      }
+
+      rows.push({
+        label: 'Forest Plot (%)', isSVG: true,
+        svg: proportionForestPlotSVG(studies, v => proportionInverse(v, method), w, pooledFE,
+          [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE])
+      });
+
+      const correctedNums = studies.map((s, i) => s.corrected ? i + 1 : null).filter(n => n !== null);
+      if (correctedNums.length > 0) {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: `${method === 'raw' ? 'Raw' : 'Logit'} pooling needed a continuity correction (+0.5) for ${correctedNums.length === 1 ? `Study ${correctedNums[0]}` : `Studies ${correctedNums.join(', ')}`}, which reported 0% or 100% events — switch to the Arcsine transform to avoid this correction entirely.` });
+      }
+
+      const heterogeneity = I2 < 25 ? 'low' : I2 < 75 ? 'moderate' : 'high';
+      rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `${heterogeneity[0].toUpperCase()}${heterogeneity.slice(1)} heterogeneity (I² = ${f(I2, 1)}%); Cochran's Q test is ${pQ < 0.05 ? 'significant' : 'not significant'} (${formatPText(pQ)}).` });
+
+      return rows;
+    }
+  },
+
+  /* ── 90. INTERQUARTILE RANGE (IQR) ──────────────────────────────────────
+     Q1, median, Q3, and IQR from raw data, plus Tukey's 1.5×IQR
+     outlier fences and a box-and-whisker plot. Offers two quartile
+     conventions since textbooks and software genuinely disagree:
+     Median of Halves (Moore/McCabe — split at the median, excluding
+     it from both halves when n is odd; the hand-calculable method
+     most intro/AP statistics courses teach) and Linear Interpolation
+     (Excel PERCENTILE.INC / NumPy's default) — switching methods on
+     the same data is a good demonstration of why "the IQR" can
+     differ slightly between a textbook worked answer and a
+     spreadsheet, without either one being wrong.                   */
+  {
+    id:          'interquartile-range',
+    name:        'Interquartile Range (IQR)',
+    hint:        'Q3 − Q1, with Tukey outlier fences & box plot',
+    category:    'Descriptive Statistics',
+    description: "Computes Q1, the median, Q3, and the interquartile range from raw data, flags outliers using Tukey's 1.5×IQR fences, and draws a box-and-whisker plot.",
+
+    formulas: [
+      {
+        label: 'Quartiles — Median of Halves (Moore/McCabe)',
+        latex: '\\text{Sort the data; } Q_1=\\text{median(lower half)}, \\quad Q_3=\\text{median(upper half)}'
+      },
+      {
+        label: 'Quartiles — Linear Interpolation (Excel / NumPy Style)',
+        latex: 'r = 1+p(n-1), \\qquad Q_p = x_{\\lfloor r \\rfloor} + (r-\\lfloor r\\rfloor)\\left(x_{\\lfloor r\\rfloor+1}-x_{\\lfloor r\\rfloor}\\right)'
+      },
+      {
+        label: 'Interquartile Range',
+        latex: 'IQR = Q_3 - Q_1'
+      },
+      {
+        label: "Tukey's Outlier Fences",
+        latex: '\\text{Lower Fence} = Q_1-1.5\\times IQR, \\qquad \\text{Upper Fence} = Q_3+1.5\\times IQR'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'method', type: 'select', label: 'Quartile Method', default: 'median-split',
+        note: "Median of Halves is the hand-calculable method most intro/AP statistics courses teach. Linear Interpolation matches what Excel's PERCENTILE.INC and NumPy compute — the two can give slightly different Q1/Q3 on the same data, which is a normal, well-known discrepancy between conventions, not an error.",
+        options: [
+          { value: 'median-split', label: 'Median of Halves (Moore/McCabe — common in intro stats)' },
+          { value: 'linear-interpolation', label: 'Linear Interpolation (Excel PERCENTILE.INC / NumPy style)' },
+        ] },
+      { id: 'data', type: 'textarea', label: 'Data (comma-separated)', default: '12,15,14,10,13,16,11,14,13,45' },
+    ],
+
+    example({ data, method }) {
+      const x = parseNumberList(data);
+      if (x.some(v => !isFinite(v)) || x.length < 4)
+        return 'Enter at least 4 numeric values to see a worked medical example here.';
+      const sorted = [...x].sort((a, b) => a - b);
+      const { q1, q3 } = computeQuartiles(sorted, method);
+      const iqr = q3 - q1;
+      const lowerFence = q1 - 1.5 * iqr, upperFence = q3 + 1.5 * iqr;
+      const outliers = sorted.filter(v => v < lowerFence || v > upperFence);
+      const f = v => +v.toFixed(2);
+      const outlierNote = outliers.length
+        ? ` One value, ${outliers[0]}, falls outside the fence [${f(lowerFence)}, ${f(upperFence)}] and would be flagged as a possible outlier — worth a second look, not automatic exclusion.`
+        : ' No values fall outside the fences, so nothing here would be flagged as an outlier by this rule.';
+      return `A clinic records how long (in minutes) ${x.length} patients waited past their appointment time. The middle half of wait times falls between Q1 = ${f(q1)} and Q3 = ${f(q3)} minutes — an IQR of ${f(iqr)} minutes — which describes the typical spread without being thrown off by a few unusually long waits.${outlierNote}`;
+    },
+
+    calculate({ data, method }) {
+      const x = parseNumberList(data);
+      if (x.some(v => !isFinite(v))) return [err('All values must be numeric')];
+      if (x.length < 4) return [err('Enter at least 4 numeric values')];
+
+      const sorted = [...x].sort((a, b) => a - b);
+      const { q1, median, q3 } = computeQuartiles(sorted, method);
+      const iqr = q3 - q1;
+      const lowerFence = q1 - 1.5 * iqr, upperFence = q3 + 1.5 * iqr;
+      const outliers = sorted.filter(v => v < lowerFence || v > upperFence);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Sample Size (n)', value: x.length, ci: null, isRatio: false },
+        { label: 'Q1 (First Quartile)', value: f(q1), ci: null, isRatio: false },
+        { label: 'Median (Q2)', value: f(median), ci: null, isRatio: false },
+        { label: 'Q3 (Third Quartile)', value: f(q3), ci: null, isRatio: false },
+        { label: 'Interquartile Range (IQR)', value: f(iqr), ci: null, isRatio: false, highlight: true },
+        { label: "Tukey's Fences (Lower, Upper)", isText: true, ci: null, isRatio: false,
+          value: `[${f(lowerFence, 2)}, ${f(upperFence, 2)}]` },
+        { label: 'Outliers (Beyond 1.5×IQR)', isText: true, ci: null, isRatio: false, highlight: outliers.length > 0,
+          value: outliers.length ? outliers.join(', ') : 'None detected' },
+        { label: 'Box Plot', isSVG: true, svg: boxPlotSVG(sorted, f(q1, 2), f(median, 2), f(q3, 2), lowerFence, upperFence) },
+        { label: 'Interpretation', isText: true, ci: null, isRatio: false,
+          value: `The middle 50% of values lie within ${f(iqr, 2)} units of each other (from ${f(q1, 2)} to ${f(q3, 2)}). ${outliers.length
+            ? `${outliers.length} value(s) fall outside Tukey's fences and warrant a closer look, though "outlier" here just means unusual relative to this rule, not necessarily wrong or excludable.`
+            : "No values fall outside Tukey's fences."}` },
+      ];
+
+      return rows;
+    }
+  },
+
 ];
 
 /* ── HELPERS ─────────────────────────────────────────────────────────── */
@@ -8514,6 +8856,49 @@ function logChoose(n, k) {
 // newline separated) into a flat numeric array.
 function parseNumberList(text) {
   return String(text).trim().split(/[,\s]+/).filter(Boolean).map(Number);
+}
+
+// Median of a PRE-SORTED numeric array.
+function medianOfSorted(sorted) {
+  const n = sorted.length;
+  const mid = Math.floor(n / 2);
+  return n % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+// Q1/median/Q3 from a PRE-SORTED array, for 'interquartile-range', by
+// either of two standard (and standardly disagreeing) conventions:
+//   - 'median-split' (Moore/McCabe): split the data at the median —
+//     excluding the median itself from BOTH halves when n is odd —
+//     then Q1/Q3 are the medians of the lower/upper halves. This is
+//     the hand-calculable method most intro/AP statistics courses
+//     teach.
+//   - 'linear-interpolation' (Excel PERCENTILE.INC / NumPy default /
+//     R quantile type 7): Q_p sits at 1-indexed rank 1+p(n-1),
+//     interpolating linearly between the two bracketing order
+//     statistics.
+// The two methods can give slightly different Q1/Q3 on identical
+// data — a well-known, expected discrepancy (e.g. for 1..9, median-
+// split gives Q1=2.5/Q3=7.5, linear interpolation gives Q1=3/Q3=7),
+// not a bug in either one.
+function computeQuartiles(sorted, method) {
+  const median = medianOfSorted(sorted);
+  if (method === 'linear-interpolation') {
+    const percentile = p => {
+      const n = sorted.length;
+      const rank = 1 + p * (n - 1);
+      const lo = Math.floor(rank);
+      const frac = rank - lo;
+      const loVal = sorted[lo - 1];
+      if (frac === 0 || lo >= n) return loVal;
+      return loVal + frac * (sorted[lo] - loVal);
+    };
+    return { q1: percentile(0.25), median, q3: percentile(0.75) };
+  }
+  const n = sorted.length;
+  const mid = Math.floor(n / 2);
+  const lower = sorted.slice(0, mid);
+  const upper = n % 2 === 0 ? sorted.slice(mid) : sorted.slice(mid + 1);
+  return { q1: medianOfSorted(lower), median, q3: medianOfSorted(upper) };
 }
 
 // Assigns 1-based ranks to `arr`, averaging ranks within tied groups.
@@ -8609,6 +8994,222 @@ function gatherGroupStats(values, maxGroups = 4) {
     groups.push({ mean, sd, n });
   }
   return { groups };
+}
+
+// Reads x{1..6}/n{1..6} (events/total) pairs for
+// 'meta-analysis-proportions', skipping blank slots (so studies 4-6
+// are optional, same convention as gatherEffectStudies()).
+function gatherProportionStudies(values, maxStudies = 6) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const studies = [];
+  for (let i = 1; i <= maxStudies; i++) {
+    const x = values['x' + i], n = values['n' + i];
+    const any = provided(x) || provided(n);
+    const all = provided(x) && provided(n);
+    if (!any) continue;
+    if (!all) return { error: `Study ${i}: enter both Events and Total, or leave both blank` };
+    if (!Number.isInteger(x) || !Number.isInteger(n)) return { error: `Study ${i}: Events and Total must be whole numbers` };
+    if (n < 1) return { error: `Study ${i}: Total (n) must be at least 1` };
+    if (x < 0 || x > n) return { error: `Study ${i}: Events (x) must be between 0 and Total (n)` };
+    studies.push({ label: `Study ${i}`, x, n });
+  }
+  return { studies };
+}
+
+// Converts one study's raw (x, n) into an (effect, SE) pair on
+// whichever scale stabilizes its variance, per the standard
+// prevalence-meta-analysis literature (Barendregt et al. 2013):
+//   - Arcsine (Fisher): phi = arcsin(sqrt(p)), Var(phi) = 1/(4n) —
+//     derived via the delta method from Var(p-hat) = p(1-p)/n, and
+//     it's independent of p, so it's defined and well-behaved even
+//     at x=0 or x=n with NO continuity correction needed.
+//   - Logit: ln(x/(n-x)), Var = 1/x + 1/(n-x) — needs the standard
+//     Haldane-Anscombe +0.5 correction when x=0 or x=n (else
+//     undefined).
+//   - Raw/untransformed: p = x/n, Var = p(1-p)/n — same correction
+//     needed at the extremes, since Var would otherwise be exactly 0
+//     (infinite weight).
+// `corrected` flags whether that correction was applied, so the
+// calculator can surface it as a note.
+function proportionEffectAndSE(x, n, method) {
+  if (method === 'arcsine') {
+    return { effect: Math.asin(Math.sqrt(x / n)), se: Math.sqrt(1 / (4 * n)), corrected: false };
+  }
+  const needsCorrection = x === 0 || x === n;
+  if (method === 'logit') {
+    const xc = needsCorrection ? x + 0.5 : x;
+    const nxc = needsCorrection ? (n - x) + 0.5 : (n - x);
+    return { effect: Math.log(xc / nxc), se: Math.sqrt(1 / xc + 1 / nxc), corrected: needsCorrection };
+  }
+  // raw
+  const nc = needsCorrection ? n + 1 : n;
+  const xc = needsCorrection ? x + 0.5 : x;
+  const p = xc / nc;
+  return { effect: p, se: Math.sqrt(p * (1 - p) / nc), corrected: needsCorrection };
+}
+
+// Back-transforms a pooled effect (on whichever scale `method` used)
+// to a plain proportion in [0, 1]. Exact algebraic inverses in every
+// case — sin(arcsin(x)) = x, the logistic function inverts the
+// logit — not approximations, so applying this directly to a
+// transformed-scale CI bound gives a correctly asymmetric CI in
+// proportion-space (the standard, correct way to back-transform an
+// interval built on a different scale).
+function proportionInverse(theta, method) {
+  const clip = v => Math.max(0, Math.min(1, v));
+  if (method === 'arcsine') return clip(Math.sin(theta) ** 2);
+  if (method === 'logit') return clip(1 / (1 + Math.exp(-theta)));
+  return clip(theta);
+}
+
+/* ── GLMM (ONE-STAGE BINOMIAL-NORMAL MODEL) FOR PROPORTIONS ─────────────
+   The two-stage methods above (arcsine/logit/raw) each summarize a
+   study as one (effect, SE) pair, assuming that summary is
+   approximately normal — an approximation that gets worse for small
+   or extreme studies. The GLMM instead models the raw counts
+   directly: x_i ~ Binomial(n_i, p_i), logit(p_i) = mu + u_i, u_i ~
+   N(0, tau^2). There's no closed form once tau^2 > 0 (the random
+   effect must be integrated out of the likelihood), so mu and tau^2
+   are found by numerical maximum likelihood: Simpson's-rule
+   integration over the random effect (a simple, easily-verified
+   quadrature — not literally Gauss-Hermite, but converges to the
+   same integral with enough points, which is what actually matters
+   for a correct answer) nested inside a golden-section search over
+   both parameters. One direct benefit of modeling the exact binomial
+   likelihood: no continuity correction is ever needed, even for a
+   study with 0% or 100% events.                                    */
+
+function invlogit(x) { return 1 / (1 + Math.exp(-x)); }
+
+// Binomial log-likelihood at linear predictor theta, omitting the
+// log-binomial-coefficient term — a constant with respect to (mu,
+// tau^2) that doesn't affect where the likelihood is maximized.
+function binomLogLikNoConst(x, n, theta) {
+  const p = invlogit(theta);
+  const eps = 1e-15;
+  return x * Math.log(Math.max(p, eps)) + (n - x) * Math.log(Math.max(1 - p, eps));
+}
+
+// One study's marginal log-likelihood under the GLMM, integrating
+// the normal random effect out via composite Simpson's rule over
+// [-8*tau, 8*tau] (the normal density is ~1e-14 of its peak there,
+// so truncation error is negligible). Falls back to the plain
+// binomial log-likelihood when tau^2 is essentially 0, since the
+// integral degenerates to a point mass at u=0.
+function glmmStudyLogLik(x, n, mu, tau2) {
+  if (tau2 < 1e-8) return binomLogLikNoConst(x, n, mu);
+  const tau = Math.sqrt(tau2);
+  const halfWidth = 8 * tau;
+  const steps = 100;
+  const h = (2 * halfWidth) / steps;
+  const density = u => Math.exp(-(u * u) / (2 * tau2)) / (tau * Math.sqrt(2 * Math.PI));
+  const integrand = u => Math.exp(binomLogLikNoConst(x, n, mu + u)) * density(u);
+
+  let sum = integrand(-halfWidth) + integrand(halfWidth);
+  for (let j = 1; j < steps; j++) {
+    sum += (j % 2 === 0 ? 2 : 4) * integrand(-halfWidth + j * h);
+  }
+  return Math.log(Math.max((h / 3) * sum, 1e-300));
+}
+
+function glmmTotalLogLik(studies, mu, tau2) {
+  return studies.reduce((s, st) => s + glmmStudyLogLik(st.x, st.n, mu, tau2), 0);
+}
+
+// Standard golden-section search for the maximum of a unimodal
+// function over [lo, hi]. Exploits the golden ratio's self-similarity
+// so each iteration only evaluates f once (the other interior point
+// carries over from the previous iteration) rather than twice.
+function goldenSectionMax(f, lo, hi, tol = 1e-5, maxIter = 100) {
+  const gr = (Math.sqrt(5) - 1) / 2;
+  let a = lo, b = hi;
+  let c = b - gr * (b - a), d = a + gr * (b - a);
+  let fc = f(c), fd = f(d);
+  for (let i = 0; i < maxIter && (b - a) > tol; i++) {
+    if (fc > fd) {
+      b = d; d = c; fd = fc;
+      c = b - gr * (b - a);
+      fc = f(c);
+    } else {
+      a = c; c = d; fc = fd;
+      d = a + gr * (b - a);
+      fd = f(d);
+    }
+  }
+  const x = (a + b) / 2;
+  return { x, value: f(x) };
+}
+
+// SE(mu-hat) from the observed information: a numerical second
+// derivative of the profile log-likelihood at (mu-hat, tau2-hat).
+// Retries with a larger step if the curvature comes out non-negative
+// (which would mean the search hasn't fully converged), and falls
+// back to the two-stage logit method's fixed-effect-only SE — a
+// deliberately conservative fallback, flagged separately — in the
+// unlikely event none of those steps succeed.
+function glmmSE(studies, muHat, tau2Hat) {
+  const curvatureSE = h => {
+    const ll0 = glmmTotalLogLik(studies, muHat, tau2Hat);
+    const llPlus = glmmTotalLogLik(studies, muHat + h, tau2Hat);
+    const llMinus = glmmTotalLogLik(studies, muHat - h, tau2Hat);
+    const curvature = (llPlus - 2 * ll0 + llMinus) / (h * h);
+    return curvature < -1e-10 ? Math.sqrt(-1 / curvature) : null;
+  };
+  const naiveFallback = () => Math.sqrt(1 / studies.reduce((s, st) => {
+    const corrected = st.x === 0 || st.x === st.n;
+    const xc = corrected ? st.x + 0.5 : st.x;
+    const nxc = corrected ? (st.n - st.x) + 0.5 : (st.n - st.x);
+    return s + 1 / (1 / xc + 1 / nxc);
+  }, 0));
+  return curvatureSE(1e-3) ?? curvatureSE(1e-2) ?? curvatureSE(1e-1) ?? naiveFallback();
+}
+
+// Fits mu and tau^2 by maximum likelihood: an outer golden-section
+// search over tau^2, profiling out mu at each candidate tau^2 via an
+// inner golden-section search — then re-optimizes mu one final time
+// at the winning tau^2 for a cleaner estimate. Search bounds are
+// fixed and generous rather than data-adaptive (mu in [-15, 15]
+// logit units covers proportions from about 3e-7 to 1 - 3e-7; tau^2
+// up to 10 covers far more between-study spread than any real
+// prevalence meta-analysis would show) so there's no adaptive
+// heuristic that could silently narrow the search incorrectly.
+function fitProportionGLMM(studies) {
+  const MU_LO = -15, MU_HI = 15, TAU2_LO = 0, TAU2_HI = 10;
+  const profileMuValue = tau2 => goldenSectionMax(mu => glmmTotalLogLik(studies, mu, tau2), MU_LO, MU_HI, 1e-5, 80).value;
+  const tau2Hat = Math.max(0, goldenSectionMax(profileMuValue, TAU2_LO, TAU2_HI, 1e-4, 60).x);
+  const muHat = goldenSectionMax(mu => glmmTotalLogLik(studies, mu, tau2Hat), MU_LO, MU_HI, 1e-6, 80).x;
+  const seMu = glmmSE(studies, muHat, tau2Hat);
+  return { mu: muHat, tau2: tau2Hat, seMu };
+}
+
+// Fixed-effects GLMM: the same one-stage binomial likelihood as
+// above, but with tau^2 fixed at 0 — i.e. no random study effect, so
+// every study is assumed to share one true logit(p) and any
+// between-study spread is treated as pure sampling noise. This is
+// the one-stage analogue of a fixed-effect (inverse-variance) pool:
+// there's a single common p, so it corresponds to pooling all
+// events/non-events into one binomial-likelihood optimization over
+// mu alone. Because glmmStudyLogLik already falls back to the exact
+// binomial log-likelihood when tau2 is ~0, this reuses the same
+// machinery as the random-effects fit with no new integration logic.
+function fitProportionGLMMFixed(studies) {
+  const MU_LO = -15, MU_HI = 15;
+  const muHat = goldenSectionMax(mu => glmmTotalLogLik(studies, mu, 0), MU_LO, MU_HI, 1e-6, 80).x;
+  const seMu = glmmSE(studies, muHat, 0);
+  return { mu: muHat, tau2: 0, seMu };
+}
+
+// Wilson score interval for a single study's raw proportion — used
+// only for the GLMM forest plot, since a one-stage model has no
+// per-study (effect, SE) the way the two-stage methods do. Unlike a
+// naive Wald interval, it stays inside [0,1] and behaves sensibly at
+// x=0 or x=n.
+function wilsonCI(x, n, z = 1.96) {
+  const phat = x / n;
+  const denom = 1 + (z * z) / n;
+  const center = (phat + (z * z) / (2 * n)) / denom;
+  const margin = (z / denom) * Math.sqrt(phat * (1 - phat) / n + (z * z) / (4 * n * n));
+  return { center, lo: Math.max(0, center - margin), hi: Math.min(1, center + margin) };
 }
 
 // Reads trtA{1..15}/trtB{1..15}/effect{1..15}/se{1..15} rows for
@@ -9052,6 +9653,52 @@ function sdBellCurveSVG(mean, sd, data) {
   <line x1="${PL}" y1="${stripY + 20}" x2="${W-PR}" y2="${stripY + 20}" stroke="#EEF1F7" stroke-width="1"/>
   ${dots}
   ${ticks}
+</svg>`;
+}
+
+// Horizontal box-and-whisker plot for 'interquartile-range': box from
+// Q1 to Q3 with a median line, whiskers extending to the most
+// extreme NON-outlier data point on each side (the standard Tukey
+// convention — drawn to the nearest in-range point, NOT all the way
+// out to the fence itself), and any outliers plotted individually as
+// open circles beyond the whiskers. Q1/Q3 labels sit above the box
+// anchored outward (away from center) and the median label sits
+// below it, so the three labels can't collide even when Q1, the
+// median, and Q3 are numerically close together.
+function boxPlotSVG(sorted, q1, median, q3, lowerFence, upperFence) {
+  const outliers = sorted.filter(v => v < lowerFence || v > upperFence);
+  const nonOutliers = sorted.filter(v => v >= lowerFence && v <= upperFence);
+  const whiskerLo = nonOutliers.length ? Math.min(...nonOutliers) : sorted[0];
+  const whiskerHi = nonOutliers.length ? Math.max(...nonOutliers) : sorted[sorted.length - 1];
+
+  const W = 560, H = 150;
+  const PL = 20, PR = 20, PT = 34;
+  const plotW = W - PL - PR;
+
+  let lo = Math.min(...sorted), hi = Math.max(...sorted);
+  const pad = (hi - lo) * 0.08 || 1;
+  lo -= pad; hi += pad;
+  const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
+
+  const midY = PT + 28;
+  const boxTop = midY - 20, boxBottom = midY + 20;
+  const x1 = toX(q1), x3 = toX(q3), xMed = toX(median), xWLo = toX(whiskerLo), xWHi = toX(whiskerHi);
+
+  const outlierDots = outliers.map(v =>
+    `<circle cx="${toX(v).toFixed(1)}" cy="${midY}" r="4" fill="none" stroke="#E0527C" stroke-width="1.5"/>`
+  ).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Box-and-whisker plot showing the quartiles, whiskers, and any outliers">
+  <line x1="${xWLo.toFixed(1)}" y1="${midY}" x2="${x1.toFixed(1)}" y2="${midY}" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="${x3.toFixed(1)}" y1="${midY}" x2="${xWHi.toFixed(1)}" y2="${midY}" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="${xWLo.toFixed(1)}" y1="${(midY - 10).toFixed(1)}" x2="${xWLo.toFixed(1)}" y2="${(midY + 10).toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="${xWHi.toFixed(1)}" y1="${(midY - 10).toFixed(1)}" x2="${xWHi.toFixed(1)}" y2="${(midY + 10).toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="${Math.min(x1, x3).toFixed(1)}" y="${boxTop}" width="${Math.max(Math.abs(x3 - x1), 0.5).toFixed(1)}" height="${boxBottom - boxTop}" fill="rgba(78,110,219,.12)" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="${xMed.toFixed(1)}" y1="${boxTop}" x2="${xMed.toFixed(1)}" y2="${boxBottom}" stroke="#4E6EDB" stroke-width="2.5"/>
+  ${outlierDots}
+  <text x="${(x1 - 3).toFixed(1)}" y="${(boxTop - 8).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q1=${q1}</text>
+  <text x="${(x3 + 3).toFixed(1)}" y="${(boxTop - 8).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q3=${q3}</text>
+  <text x="${xMed.toFixed(1)}" y="${(boxBottom + 16).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Median=${median}</text>
 </svg>`;
 }
 
@@ -9550,6 +10197,175 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
 </svg>`;
 }
 
+// Forest plot for 'meta-analysis-proportions': like metaForestPlotSVG,
+// but every value is back-transformed to a percentage and laid out
+// on a plain 0-100% linear axis rather than the raw/log scale. The
+// dashed reference line here is at 0% — a prevalence has no
+// comparative "null" the way a risk difference (0) or ratio (1)
+// does (there's no "no effect" value being tested against), so this
+// is just a fixed visual anchor point, not a hypothesis-test line
+// like the other forest plots'. `transform` maps a transformed-scale
+// value back to a proportion in [0,1]; applying it to each CI bound
+// separately (not just the point estimate) is what gives the
+// back-transformed interval its correct, often-asymmetric shape.
+function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, pooledRE, ciRE) {
+  const k = studies.length;
+  const rowH = 24;
+  const W = 560;
+  const PL = 108, PR = 20, PT = 28, PB = 26;
+  // Same gap used between the divider line and the pooled-estimate
+  // rows as glmmForestPlotSVG, so both forest plots in this
+  // calculator read consistently regardless of which method is
+  // selected.
+  const diamondGap = 21;
+  const plotW = W - PL - PR;
+  const dividerY = PT + k * rowH;
+  const H = dividerY + diamondGap + 2 * rowH + PB;
+  const baseline = H - PB;
+
+  const toPct = v => transform(v) * 100;
+  const studyPts = studies.map(s => ({
+    pt: toPct(s.effect), lo: toPct(s.effect - 1.96 * s.se), hi: toPct(s.effect + 1.96 * s.se)
+  }));
+  const feLo = toPct(ciFE[0]), feHi = toPct(ciFE[1]), fePt = toPct(pooledFE);
+  const reLo = toPct(ciRE[0]), reHi = toPct(ciRE[1]), rePt = toPct(pooledRE);
+
+  // 0 is always included in the plotted range (like the additive/
+  // ratio forest plots always include their own null value) so the
+  // 0% reference line below is never scrolled out of view.
+  const allVals = [...studyPts.flatMap(p => [p.lo, p.hi]), feLo, feHi, reLo, reHi, 0];
+  let lo = Math.min(...allVals), hi = Math.max(...allVals);
+  const pad = (hi - lo) * 0.15 || 1;
+  lo = Math.max(0, lo - pad); hi = Math.min(100, hi + pad);
+  if (hi <= lo) { lo = Math.max(0, lo - 1); hi = Math.min(100, hi + 1); }
+
+  const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
+  const zeroX = toX(0).toFixed(1);
+
+  const maxW = Math.max(...weightsFE);
+  const sizeFor = w => 4 + 6 * (w / maxW);
+
+  const rows = studies.map((s, i) => {
+    const y = PT + i * rowH + rowH / 2;
+    const { pt, lo: ciLo, hi: ciHi } = studyPts[i];
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(pt).toFixed(1);
+    const sz = sizeFor(weightsFE[i]);
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
+      <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
+      <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
+      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${pt.toFixed(1)}%</text>`;
+  }).join('');
+
+  const diamond = (ciLo, ciHi, pt, y, label, color) => {
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(pt).toFixed(1);
+    const dh = 6;
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
+      <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
+      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${pt.toFixed(1)}%</text>`;
+  };
+
+  const yFE = dividerY + diamondGap + rowH / 2;
+  const yRE = dividerY + diamondGap + rowH + rowH / 2;
+  const feDiamond = diamond(feLo, feHi, fePt, yFE, 'Fixed-Effect', '#4E6EDB');
+  const reDiamond = diamond(reLo, reHi, rePt, yRE, 'Random-Effects', '#E07B2C');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual study proportions and pooled fixed/random-effects estimates, as percentages">
+  <line x1="${zeroX}" y1="${(PT - 4).toFixed(1)}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0%</text>
+  ${rows}
+  <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
+  ${feDiamond}
+  ${reDiamond}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+</svg>`;
+}
+
+// Forest plot for the GLMM branch of 'meta-analysis-proportions':
+// each study's RAW observed proportion with a Wilson score interval
+// (there's no per-study effect+SE the way the two-stage methods
+// have, since the binomial counts are modeled directly rather than
+// summarized per study first), square size scaled by n, plus two
+// diamonds — one for the fixed-effect GLMM (tau^2 fixed at 0) and
+// one for the random-effects GLMM (tau^2 estimated by ML) — so the
+// plot mirrors the two pooled estimates now shown in the output
+// table above it.
+function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE) {
+  const k = studies.length;
+  const rowH = 24;
+  const W = 560;
+  // PL is wider than the site's other forest plots (108) because
+  // "Fixed-Effect GLMM" / "Random-Effects GLMM" are much longer
+  // than a typical "Study N" label — at the old width they'd overflow
+  // past the SVG's left edge and get clipped.
+  const PL = 140, PR = 20, PT = 20, PB = 26;
+  // Extra clearance between the divider line and the pooled-estimate
+  // rows, so each diamond's % value label (drawn just above the
+  // diamond) doesn't crowd the line right above it, without pushing
+  // the diamonds so far down there's a big empty gap above them.
+  const diamondGap = 21;
+  const plotW = W - PL - PR;
+  const dividerY = PT + k * rowH;
+  const H = dividerY + diamondGap + 2 * rowH + PB;
+  const baseline = H - PB;
+
+  const studyPts = studies.map(s => {
+    const { center, lo, hi } = wilsonCI(s.x, s.n);
+    return { pt: center * 100, lo: lo * 100, hi: hi * 100 };
+  });
+
+  // 0 is always included in the plotted range (like the additive/
+  // ratio forest plots always include their own null value) so the
+  // 0% reference line below is never scrolled out of view.
+  const allVals = [...studyPts.flatMap(p => [p.lo, p.hi]), ciPctFE[0], ciPctFE[1], ciPctRE[0], ciPctRE[1], 0];
+  let lo = Math.min(...allVals), hi = Math.max(...allVals);
+  const pad = (hi - lo) * 0.15 || 1;
+  lo = Math.max(0, lo - pad); hi = Math.min(100, hi + pad);
+  if (hi <= lo) { lo = Math.max(0, lo - 1); hi = Math.min(100, hi + 1); }
+
+  const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
+  const zeroX = toX(0).toFixed(1);
+  const maxN = Math.max(...studies.map(s => s.n));
+  const sizeFor = n => 4 + 6 * Math.sqrt(n / maxN);
+
+  const rows = studies.map((s, i) => {
+    const y = PT + i * rowH + rowH / 2;
+    const { pt, lo: ciLo, hi: ciHi } = studyPts[i];
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(pt).toFixed(1);
+    const sz = sizeFor(s.n);
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
+      <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
+      <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
+      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${pt.toFixed(1)}%</text>`;
+  }).join('');
+
+  const diamond = (ciLo, ciHi, pt, y, label, color) => {
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(pt).toFixed(1);
+    const dh = 6;
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
+      <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
+      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${pt.toFixed(1)}%</text>`;
+  };
+
+  const yFE = dividerY + diamondGap + rowH / 2;
+  const yRE = dividerY + diamondGap + rowH + rowH / 2;
+  const feDiamond = diamond(ciPctFE[0], ciPctFE[1], pooledPctFE, yFE, 'Fixed-Effect GLMM', '#4E6EDB');
+  const reDiamond = diamond(ciPctRE[0], ciPctRE[1], pooledPctRE, yRE, 'Random-Effects GLMM', '#E07B2C');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each study's raw proportion (Wilson score interval) and the pooled fixed-effect and random-effects GLMM estimates">
+  <line x1="${zeroX}" y1="${(PT - 4).toFixed(1)}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0%</text>
+  ${rows}
+  <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
+  ${feDiamond}
+  ${reDiamond}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+</svg>`;
+}
+
 // Forest plot for 'network-meta-analysis': every non-reference
 // treatment's random-effects estimate versus the network's chosen
 // reference treatment (no pooled diamonds here — each row already
@@ -9794,12 +10610,28 @@ function blandAltmanPlotSVG(points, meanDiff, loaLo, loaHi) {
     return `<text x="${x}" y="${H - 10}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${v.toFixed(0)}</text>`;
   }).join('');
 
+  // Zero-difference reference line — "no systematic bias between the
+  // two methods" — the same null-value convention as the forest
+  // plots' dashed line, just horizontal here since difference is the
+  // Y-axis. Only drawn if 0 actually falls within the plotted range,
+  // so a real bias far from zero doesn't force the axis to stretch
+  // and dilute the plot's main content.
+  const zeroInRange = 0 >= yMin && 0 <= yMax;
+  const zeroLine = zeroInRange
+    ? `<line x1="${PL}" y1="${toY(0).toFixed(1)}" x2="${W - PR}" y2="${toY(0).toFixed(1)}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>`
+    : '';
+  const zeroLabel = zeroInRange
+    ? `<text x="${(PL + 4).toFixed(1)}" y="${(toY(0) - 4).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0 (no difference)</text>`
+    : '';
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Bland-Altman mean-difference plot">
   ${gridY}
+  ${zeroLine}
   ${hLine(loaLo, '#E07B2C', '5,3')}
   ${hLine(loaHi, '#E07B2C', '5,3')}
   ${hLine(meanDiff, '#1A1A2E', null)}
   ${dots}
+  ${zeroLabel}
   ${labelFor(meanDiff, 'Mean')}
   ${labelFor(loaHi, '+1.96 SD')}
   ${labelFor(loaLo, '−1.96 SD')}
@@ -10148,6 +10980,7 @@ const CALCULATOR_INDEX = [
   { id: 'variance-sd-sem-graph',name: 'Variance, Standard Deviation & Standard Error of the Mean — Graph', category: 'Descriptive Statistics', description: 'Plots variance, standard deviation, and standard error of the mean together.',                 status: 'available' },
   { id: 'revman-sd',            name: 'RevMan — Finding SD',             category: 'Descriptive Statistics',      description: 'Derives standard deviations from confidence intervals or standard errors for meta-analysis.',  status: 'available' },
   { id: 'combine-groups',       name: 'Combining Groups (Mean, SD & N)', category: 'Descriptive Statistics',  description: 'Combines 2 to 4 separately reported subgroups (e.g., age bands, sites, or sexes) into one overall mean, SD, and N, as if the raw data itself had been pooled.', status: 'available' },
+  { id: 'interquartile-range',  name: 'Interquartile Range (IQR)',       category: 'Descriptive Statistics',  description: "Computes Q1, the median, Q3, and the interquartile range from raw data, flags outliers using Tukey's 1.5×IQR fences, and draws a box-and-whisker plot.", status: 'available' },
 
   // ── 2. PROBABILITY & DISTRIBUTIONS ───────────────────────────────────
   { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution.',    status: 'available' },
@@ -10255,6 +11088,7 @@ const CALCULATOR_INDEX = [
   { id: 'bayesian-cri',            name: 'Bayesian Credible Intervals',  category: 'Bayesian & Meta-Analysis',    description: 'Derives Beta-posterior credible intervals for a proportion given prior and observed data.',      status: 'available' },
   { id: 'bayes-factor',            name: 'Bayes Factor',                 category: 'Bayesian & Meta-Analysis',    description: 'Quantifies the relative evidence for H₁ vs H₀ on a continuous scale.',                         status: 'available' },
   { id: 'meta-analysis',           name: 'Meta-Analysis (Q, τ², I², PI)', category: 'Bayesian & Meta-Analysis',  description: 'Pools effect sizes, tests heterogeneity, and computes prediction intervals.',                  status: 'available' },
+  { id: 'meta-analysis-proportions', name: 'Meta-Analysis for Proportions', category: 'Bayesian & Meta-Analysis', description: 'Pools proportions (e.g., prevalence or event rates) across studies from raw event counts and sample sizes, using a variance-stabilizing transformation (or a one-stage GLMM), then tests heterogeneity and computes a prediction interval.', status: 'available' },
   { id: 'network-meta-analysis',   name: 'Network Meta-Analysis (Indirect & Mixed Comparisons)', category: 'Bayesian & Meta-Analysis', description: 'Combines direct and indirect evidence across three or more named treatments into one connected network, producing a network diagram, a full league table, heterogeneity statistics, and a frequentist treatment ranking.', status: 'available' },
 
   // ── 13. SURVIVAL ANALYSIS ─────────────────────────────────────────────
@@ -10307,6 +11141,7 @@ const WIZARD_TREE = {
       { id: 'variance-sd-sem-graph', why: 'Compares SD (spread of individuals) against SEM (precision of the mean) side by side.' },
       { id: 'revman-sd',             why: 'Back-calculates an SD from a paper that only reported a CI or SE — useful for meta-analysis prep.' },
       { id: 'combine-groups',        why: 'Merges 2 to 4 separately reported subgroups (e.g. age bands or sites) into one overall mean, SD, and N.' },
+      { id: 'interquartile-range',   why: 'Q1, median, Q3, and IQR from raw data, with Tukey outlier fences and a box plot — a spread measure unaffected by extreme values.' },
     ]
   },
 
@@ -10740,6 +11575,15 @@ const WIZARD_TREE = {
   bayesFactorResult:  { results: [ { id: 'bayes-factor', why: 'Converts a p-value into a minimum-Bayes-factor bound on the evidence against H₀.' } ] },
 
   metaResult: {
+    question: 'What kind of quantity are you pooling from each study?',
+    options: [
+      { label: 'A single proportion or rate per study (e.g., % of patients with an outcome)', next: 'proportionMetaResult' },
+      { label: 'A comparison between groups/treatments per study (mean difference, OR, RR, etc.)', next: 'comparisonMetaGoal' },
+    ]
+  },
+  proportionMetaResult: { results: [ { id: 'meta-analysis-proportions', why: 'Pools raw event counts and totals into an overall proportion, using a variance-stabilizing transform so studies with 0% or 100% events are handled cleanly.' } ] },
+
+  comparisonMetaGoal: {
     question: 'How many treatments/interventions are involved?',
     options: [
       { label: 'Two — pooling multiple studies of the same comparison',                  next: 'pairwiseMetaResult' },
@@ -10769,6 +11613,7 @@ const SEARCH_KEYWORDS = {
   'variance-sd-sem-graph': ['sd vs sem', 'standard deviation vs standard error', 'compare sd and sem'],
   'revman-sd':             ['back calculate sd', 'derive sd from a confidence interval', 'meta-analysis sd', 'convert se to sd', 'cochrane revman'],
   'combine-groups':        ['combine groups', 'pooled mean and sd', 'overall mean and sd', 'merge male and female', 'combining subgroups', 'grand mean and sd', 'cochrane combine groups', 'combine multiple groups', 'combine four groups', 'weighted average mean and sd'],
+  'interquartile-range':   ['interquartile range', 'iqr', 'q1', 'q3', 'first quartile', 'third quartile', 'box plot', 'box and whisker plot', 'tukey fences', 'outlier detection', 'five number summary'],
 
   // Probability & Distributions
   'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve'],
@@ -10876,6 +11721,7 @@ const SEARCH_KEYWORDS = {
   'bayesian-cri':   ['credible interval', 'bayesian proportion estimate'],
   'bayes-factor':   ['bayes factor', 'convert a p-value to evidence strength'],
   'meta-analysis':  ['meta-analysis', 'pooled effect size', 'heterogeneity', 'forest plot', 'pool multiple studies'],
+  'meta-analysis-proportions': ['meta-analysis for proportions', 'pooled prevalence', 'pooled proportion', 'pooled event rate', 'arcsine transformation', 'freeman-tukey', 'logit transformation proportion', 'prevalence meta-analysis', 'pooling percentages', 'glmm meta-analysis', 'generalized linear mixed model', 'binomial-normal model', 'one-stage meta-analysis', 'logit glmm'],
   'network-meta-analysis': ['network meta-analysis', 'nma', 'indirect comparison', 'mixed treatment comparison', 'bucher method', 'league table', 'multiple treatments comparison', 'p-score', 'sucra', 'ranking treatments', 'network diagram', 'network graph', 'network plot', 'evidence web', 'network geometry'],
 
   // Survival Analysis
@@ -10953,6 +11799,14 @@ const NOTATION = {
     { symbol: '\\bar{x}', meaning: "All groups' means, weighted by their sample sizes into one overall (grand) mean." },
     { symbol: 'SD', meaning: 'Combined standard deviation as if the raw data from every group had been pooled into one sample — larger than the plain within-groups pooled SD whenever the group means differ meaningfully, since it also reflects how spread out those means are from the grand mean.' },
     { symbol: 's_{\\text{pooled}}', meaning: "The equal-means pooled SD shown for comparison (the same quantity behind Cohen's d, a t-test, or one-way ANOVA's MSE), which assumes every group shares one true mean rather than accounting for the spread between them." },
+  ],
+  'interquartile-range': [
+    { symbol: 'Q_1', meaning: 'First Quartile — the value below which about 25% of the data falls.' },
+    { symbol: 'Q_2', meaning: 'The median — the value below which about 50% of the data falls.' },
+    { symbol: 'Q_3', meaning: 'Third Quartile — the value below which about 75% of the data falls.' },
+    { symbol: 'IQR', meaning: 'Interquartile Range, Q3 − Q1 — the spread of the middle 50% of the data, unaffected by extreme values.' },
+    { symbol: 'r', meaning: 'Linear Interpolation method only: the (possibly fractional) 1-indexed rank a given percentile falls at.' },
+    { symbol: '\\text{Lower/Upper Fence}', meaning: "Tukey's boundaries for flagging outliers, 1.5×IQR beyond Q1 and Q3 respectively." },
   ],
 
   // Probability & Distributions
@@ -11767,6 +12621,21 @@ const NOTATION = {
     { symbol: 't_{k-2,\\,0.975}', meaning: 'Critical t-value used to set the width of the prediction interval, based on the number of studies.' },
     { symbol: 'SE_{RE}', meaning: 'Standard error of the random-effects pooled estimate.' },
     { symbol: 'RR_i, OR_i', meaning: "In Ratio mode, a study's risk ratio or odds ratio, entered as its natural log and exponentiated back after pooling." },
+  ],
+  'meta-analysis-proportions': [
+    { symbol: 'x_i,\\ n_i', meaning: "Study i's own reported number of events and total sample size." },
+    { symbol: '\\hat p_i', meaning: "Study i's raw observed proportion, x_i / n_i." },
+    { symbol: '\\varphi_i', meaning: "Study i's arcsine-transformed proportion, arcsin(√p̂_i) — stabilizes variance so it no longer depends on p." },
+    { symbol: '\\ell_i', meaning: "Study i's logit-transformed proportion, ln(x_i/(n_i-x_i)) — the log-odds scale." },
+    { symbol: 'w_i', meaning: 'Fixed-effect weight for study i on the transformed scale, equal to the inverse of its variance.' },
+    { symbol: 'Q', meaning: "Cochran's Q on the transformed scale — tests heterogeneity across studies' pooled proportions." },
+    { symbol: '\\tau^2', meaning: 'DerSimonian–Laird between-study variance on the transformed scale, used in the random-effects model.' },
+    { symbol: '\\hat\\theta_{FE},\\ \\hat\\theta_{RE}', meaning: 'Fixed-effect and random-effects pooled estimates on the transformed scale, back-transformed to a percentage for reporting.' },
+    { symbol: '\\hat p', meaning: 'The back-transformed pooled proportion — sin²(θ̂) for Arcsine, the inverse-logit for Logit, or θ̂ itself for Raw.' },
+    { symbol: '\\mu', meaning: 'Random-Effects GLMM: the overall logit-scale mean, fit jointly with τ² from the raw counts by maximum likelihood, rather than by pooling per-study transforms.' },
+    { symbol: '\\mu_{\\text{Fixed}}', meaning: "Fixed-Effect GLMM: the same kind of overall logit-scale mean, but fit with τ² forced to 0 — the one-stage analogue of a fixed-effect (inverse-variance) pool." },
+    { symbol: 'u_i', meaning: "Random-Effects GLMM only: study i's own random deviation from μ, assumed Normal(0, τ²) — this is what τ² measures. The fixed-effect GLMM has no u_i, since τ² is fixed at 0." },
+    { symbol: 'L_i(\\mu,\\tau^2)', meaning: "Either GLMM's per-study marginal likelihood — numerically integrating the random effect out of the binomial likelihood for the random-effects model, or (with τ²=0) simply the binomial likelihood itself for the fixed-effect model." },
   ],
   'network-meta-analysis': [
     { symbol: '\\theta_{A(k)},\\ \\theta_{B(k)}', meaning: "Comparison k's two treatments' effects, each measured relative to the reference treatment (which is fixed at 0)." },

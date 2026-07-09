@@ -36,6 +36,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Chart export (PNG/JPG) — a single delegated listener attached
+  // once here, rather than one per button, since showResults()
+  // rebuilds the results DOM (and every button in it) from scratch
+  // on every Calculate click; delegating to a listener on `document`
+  // means it keeps working across all of those rebuilds without ever
+  // needing to be re-attached.
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.export-chart-btn');
+    if (!btn) return;
+    const svgEl = btn.closest('.result-viz')?.querySelector('svg');
+    if (!svgEl) return;
+    exportSVGAsImage(svgEl, btn.dataset.filename || 'chart', btn.dataset.format);
+  });
+
   route();
 });
 
@@ -57,6 +71,12 @@ function route() {
 // expands or collapses on its own, so the sidebar always shows
 // exactly what you last set it to.
 const expandedCategories = new Set();
+
+// Same idea for the home/"Full Calculator Index" page, but inverted:
+// that page is a browsable directory, so categories default OPEN
+// (unlike the sidebar's default-closed) and this only tracks the
+// ones a user has manually collapsed.
+const collapsedHomeCategories = new Set();
 
 function applyActiveState() {
   const id = location.hash.slice(1);
@@ -215,12 +235,17 @@ function renderHome() {
       ? `${availCount} of ${entries.length} available`
       : `${entries.length} calculators`;
 
+    const isOpen = !collapsedHomeCategories.has(cat);
+
     return `
-      <div class="home-section">
-        <div class="home-section-header">
-          <h2 class="home-section-title">${esc(cat)}</h2>
-          <span class="home-section-count">${countLabel}</span>
-        </div>
+      <div class="home-section${isOpen ? '' : ' collapsed'}" data-cat="${esc(cat)}">
+        <h2 class="home-section-heading">
+          <button type="button" class="home-section-header${isOpen ? ' open' : ''}" aria-expanded="${isOpen}">
+            <span class="home-section-chevron">▸</span>
+            <span class="home-section-title">${esc(cat)}</span>
+            <span class="home-section-count">${countLabel}</span>
+          </button>
+        </h2>
         <div class="home-cards">${cards}</div>
       </div>`;
   }).join('');
@@ -241,6 +266,18 @@ function renderHome() {
     ${sections}
   `;
   document.getElementById('main').scrollTop = 0;
+
+  document.querySelectorAll('.home-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const section = header.closest('.home-section');
+      const cat = section.dataset.cat;
+      const nowOpen = !header.classList.contains('open');
+      nowOpen ? collapsedHomeCategories.delete(cat) : collapsedHomeCategories.add(cat);
+      header.classList.toggle('open', nowOpen);
+      header.setAttribute('aria-expanded', String(nowOpen));
+      section.classList.toggle('collapsed', !nowOpen);
+    });
+  });
 }
 
 /* ── SELECTION WIZARD ───────────────────────────────────── */
@@ -388,7 +425,7 @@ function renderCalculator(calc) {
   function run() {
     const values = readInputs(calc);
     const results = calc.calculate(values);
-    showResults(results);
+    showResults(results, calc.id);
     updateExample(calc, values);
   }
 
@@ -680,7 +717,7 @@ function computeDomains(results) {
   return { ratioDomain, diffDomain };
 }
 
-function showResults(results) {
+function showResults(results, calcId) {
   const wrap  = document.getElementById('results-wrap');
   if (!wrap) return;
 
@@ -691,9 +728,19 @@ function showResults(results) {
   const headerCICell = hasCI
     ? `<div class="results-header-cell">95% CI</div>` : '';
 
+  let svgCount = 0;
   const rows = results.map(r => {
     if (r.isSVG) {
-      return `<div class="result-row result-viz">${r.svg}</div>`;
+      svgCount++;
+      const filename = [calcId, slugify(r.label), svgCount > 1 ? svgCount : null].filter(Boolean).join('-');
+      return `
+        <div class="result-row result-viz">
+          <div class="viz-toolbar">
+            <button type="button" class="export-chart-btn" data-format="png" data-filename="${esc(filename)}" title="Download this chart as a PNG image">PNG ⬇</button>
+            <button type="button" class="export-chart-btn" data-format="jpg" data-filename="${esc(filename)}" title="Download this chart as a JPG image">JPG ⬇</button>
+          </div>
+          ${r.svg}
+        </div>`;
     }
 
     const valStr = (typeof r.value === 'number') ? String(r.value) : (r.value ?? '');
@@ -835,4 +882,79 @@ function esc(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// Turns a result row's label (e.g. "Forest Plot vs Reference") into a
+// filesystem-safe filename fragment ("forest-plot-vs-reference").
+function slugify(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'chart';
+}
+
+/* ── CHART EXPORT (PNG / JPG) ──────────────────────────────
+   Every chart on the site is a plain inline SVG with no external
+   references (no <image> tags, no @font-face) — the SVG rasterizes
+   fine in its own right, so no canvas-tainting/cross-origin issue
+   applies here. To export: clone the SVG, paint a white background
+   rect behind it (JPEG can't represent transparency, and PNG
+   shouldn't have to rely on whatever background happens to be behind
+   it in the page), serialize it, load it into an <img> via a Blob
+   URL, then draw that onto an offscreen canvas at several times the
+   SVG's native resolution (charts are typically drawn at ~560×200
+   SVG units — rasterizing 1:1 would look soft/pixelated once
+   downloaded and viewed at a normal image size). One caveat: the
+   custom web fonts used in these charts (IBM Plex Mono etc.) may not
+   always carry over into the rasterized image in every browser,
+   since the <img> loads the SVG in its own document context — text
+   will just fall back to a generic monospace font in that case, not
+   fail to export. */
+function exportSVGAsImage(svgEl, filename, format) {
+  const RESOLUTION_SCALE = 3;
+  const viewBox = svgEl.getAttribute('viewBox');
+  const [, , vbWidth, vbHeight] = viewBox
+    ? viewBox.trim().split(/\s+/).map(Number)
+    : [0, 0, svgEl.clientWidth || 560, svgEl.clientHeight || 200];
+
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('width', vbWidth);
+  clone.setAttribute('height', vbHeight);
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('x', '0');
+  bg.setAttribute('y', '0');
+  bg.setAttribute('width', String(vbWidth));
+  bg.setAttribute('height', String(vbHeight));
+  bg.setAttribute('fill', '#ffffff');
+  clone.insertBefore(bg, clone.firstChild);
+
+  const svgString = new XMLSerializer().serializeToString(clone);
+  const svgUrl = URL.createObjectURL(new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' }));
+
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = vbWidth * RESOLUTION_SCALE;
+    canvas.height = vbHeight * RESOLUTION_SCALE;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(svgUrl);
+
+    const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    canvas.toBlob(blob => {
+      if (!blob) { alert('Sorry, exporting this chart failed. Please try taking a screenshot instead.'); return; }
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${filename}.${format === 'jpg' ? 'jpg' : 'png'}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(downloadUrl);
+    }, mime, 0.95);
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(svgUrl);
+    alert('Sorry, exporting this chart failed. Please try taking a screenshot instead.');
+  };
+  img.src = svgUrl;
 }
