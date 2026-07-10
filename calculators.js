@@ -5753,17 +5753,19 @@ const CALCULATORS = [
         { label: reLabel, value: f(transform(pooledRE)), ci: [f(transform(pooledRE - Z * seRE)), f(transform(pooledRE + Z * seRE))], isRatio, highlight: true },
       ];
 
+      let pi = null;
       if (k >= 3) {
         const tCrit = jStat.studentt.inv(0.975, k - 2);
         const piMargin = tCrit * Math.sqrt(tau2 + seRE ** 2);
-        rows.push({ label: '95% Prediction Interval', value: f(transform(pooledRE)), ci: [f(transform(pooledRE - piMargin)), f(transform(pooledRE + piMargin))], isRatio, highlight: true });
+        pi = [pooledRE - piMargin, pooledRE + piMargin];
+        rows.push({ label: '95% Prediction Interval', value: f(transform(pooledRE)), ci: [f(transform(pi[0])), f(transform(pi[1]))], isRatio, highlight: true });
       } else {
         rows.push({ label: 'Note', isText: true, ci: null, isRatio: false, value: 'A prediction interval needs at least 3 studies (df = k − 2 ≥ 1).' });
       }
 
       rows.push({
         label: 'Forest Plot', isSVG: true,
-        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio)
+        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio, { Q, df, pQ, I2, tau2 }, pi, transform)
       });
 
       rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
@@ -8293,7 +8295,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot vs Reference', isSVG: true,
-        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment))
+        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment), transform)
       });
 
       rows.push({ label: 'League Table — All Pairwise Comparisons', isSVG: true, svg: networkLeagueTableSVG(fit, isRatio, nameFor) });
@@ -8583,7 +8585,8 @@ const CALCULATORS = [
           svg: glmmForestPlotSVG(
             raw,
             toPct(muFixed), [toPct(muFixed - Z * seMuFixed), toPct(muFixed + Z * seMuFixed)],
-            toPct(mu), [toPct(mu - Z * seMu), toPct(mu + Z * seMu)]
+            toPct(mu), [toPct(mu - Z * seMu), toPct(mu + Z * seMu)],
+            tau2
           )
         });
 
@@ -8653,7 +8656,7 @@ const CALCULATORS = [
       rows.push({
         label: 'Forest Plot (%)', isSVG: true,
         svg: proportionForestPlotSVG(studies, v => proportionInverse(v, method), w, pooledFE,
-          [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE])
+          [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], tau2)
       });
 
       const correctedNums = studies.map((s, i) => s.corrected ? i + 1 : null).filter(n => n !== null);
@@ -8763,6 +8766,220 @@ const CALCULATORS = [
             ? `${outliers.length} value(s) fall outside Tukey's fences and warrant a closer look, though "outlier" here just means unusual relative to this rule, not necessarily wrong or excludable.`
             : "No values fall outside Tukey's fences."}` },
       ];
+
+      return rows;
+    }
+  },
+
+  /* ── 91. HARTUNG-KNAPP-SIDIK-JONKMAN (HKSJ) METHOD ──────────────────────
+     The standard DerSimonian-Laird random-effects CI (θ̂ ± z·SE) treats
+     τ² as if it were known exactly, which understates uncertainty —
+     especially with few studies, where τ² itself is poorly estimated.
+     HKSJ addresses this two ways at once: (1) a refined variance
+     estimate for θ̂ built from the weighted spread of the studies
+     around it, rather than just 1/Σw*, and (2) a t-distribution with
+     k−1 df (not a normal/z) as the reference distribution — which by
+     itself already widens the interval substantially for small k
+     (e.g. t at df=2 is 4.303 vs z=1.96). Both CIs share the exact
+     same point estimate and τ², so this calculator computes them
+     side by side specifically to make that extra width visible and
+     attributable. Known caveat, surfaced rather than silently
+     patched: if the HKSJ correction factor q ends up below 1 (the
+     studies agree with the random-effects model unusually well),
+     the "improved" HKSJ interval can paradoxically come out
+     narrower than the standard one — documented since Knapp &
+     Hartung's own 2003 paper, and the reason some methodologists use
+     a "modified HKSJ" that floors the HKSJ variance at the standard
+     one. This implements the original/unmodified method, as asked,
+     and just flags the situation when it occurs.               */
+  {
+    id:          'hksj-meta-analysis',
+    name:        'Hartung-Knapp-Sidik-Jonkman (HKSJ) Method',
+    hint:        'Wider, more robust random-effects CI than the standard z-based one',
+    category:    'Bayesian & Meta-Analysis',
+    description: 'Compares the standard (DerSimonian-Laird, normal-based) random-effects confidence interval to the Hartung-Knapp-Sidik-Jonkman adjustment — a refined variance estimate combined with a t-distribution reference — which is typically wider and more robust, especially with few studies or high heterogeneity.',
+
+    formulas: [
+      {
+        label: 'Random-Effects Weights & Pooled Estimate',
+        latex: 'w_i^{*}=\\dfrac{1}{SE_i^2+\\tau^2}, \\qquad \\hat\\theta=\\dfrac{\\sum w_i^{*}y_i}{\\sum w_i^{*}}'
+      },
+      {
+        label: 'DerSimonian–Laird τ² (Same for Both Methods)',
+        latex: '\\tau^2=\\max\\!\\left(0,\\dfrac{Q-df}{C}\\right), \\quad Q=\\sum w_i(y_i-\\hat\\theta_{FE})^2, \\quad w_i=\\dfrac{1}{SE_i^2}'
+      },
+      {
+        label: 'Standard (Normal-Based) 95% CI',
+        latex: '\\hat\\theta \\pm z_{0.975}\\sqrt{\\dfrac{1}{\\sum w_i^{*}}}'
+      },
+      {
+        label: 'HKSJ Correction Factor',
+        latex: 'q=\\dfrac{1}{k-1}\\sum w_i^{*}(y_i-\\hat\\theta)^2'
+      },
+      {
+        label: 'HKSJ Variance & 95% CI',
+        latex: '\\text{Var}_{HKSJ}(\\hat\\theta)=\\dfrac{q}{\\sum w_i^{*}}, \\qquad \\hat\\theta \\pm t_{k-1,\\,0.975}\\sqrt{\\text{Var}_{HKSJ}(\\hat\\theta)}'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Study',
+    groupFields: [
+      { prefix: 'effect', label: 'Effect Estimate' },
+      { prefix: 'se',     label: 'SE' },
+    ],
+    inputs: [
+      { id: 'scale', type: 'select', label: 'Effect Scale', default: 'additive', options: [
+        { value: 'additive', label: 'Additive (mean diff., risk diff., etc.)' },
+        { value: 'ratio',    label: 'Ratio (RR/OR — enter log values)' },
+      ] },
+      { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.40 },
+      { id: 'se1',     label: 'Study 1 SE',               default: 0.15 },
+      { id: 'effect2', label: 'Study 2 Effect Estimate', default: 0.25 },
+      { id: 'se2',     label: 'Study 2 SE',               default: 0.12 },
+      { id: 'effect3', label: 'Study 3 Effect Estimate', default: 0.65 },
+      { id: 'se3',     label: 'Study 3 SE',               default: 0.20 },
+      { id: 'effect4', label: 'Study 4 Effect Estimate (optional)', default: '' },
+      { id: 'se4',     label: 'Study 4 SE (optional)',               default: '' },
+      { id: 'effect5', label: 'Study 5 Effect Estimate (optional)', default: '' },
+      { id: 'se5',     label: 'Study 5 SE (optional)',               default: '' },
+      { id: 'effect6', label: 'Study 6 Effect Estimate (optional)', default: '' },
+      { id: 'se6',     label: 'Study 6 SE (optional)',               default: '' },
+    ],
+
+    example(values) {
+      const { studies, error } = gatherEffectStudies(values);
+      if (error || studies.length < 2 || studies.some(s => s.se <= 0) ||
+          typeof jStat === 'undefined' || !jStat.chisquare || !jStat.studentt)
+        return 'Enter an effect estimate and SE for at least 2 studies to see a worked medical example here.';
+
+      const k = studies.length;
+      const Z = 1.96;
+      const w = studies.map(s => 1 / s.se ** 2);
+      const sumW = w.reduce((s, v) => s + v, 0);
+      const pooledFE = studies.reduce((s, st, i) => s + w[i] * st.effect, 0) / sumW;
+      const Q = studies.reduce((s, st, i) => s + w[i] * (st.effect - pooledFE) ** 2, 0);
+      const df = k - 1;
+      const sumW2 = w.reduce((s, v) => s + v ** 2, 0);
+      const C = sumW - sumW2 / sumW;
+      const tau2 = (df > 0 && C > 0) ? Math.max(0, (Q - df) / C) : 0;
+
+      const wRE = studies.map(s => 1 / (s.se ** 2 + tau2));
+      const sumWRE = wRE.reduce((s, v) => s + v, 0);
+      const pooledRE = studies.reduce((s, st, i) => s + wRE[i] * st.effect, 0) / sumWRE;
+      const seNormal = Math.sqrt(1 / sumWRE);
+
+      const dfHKSJ = k - 1;
+      if (dfHKSJ < 1) return 'Enter an effect estimate and SE for at least 2 studies to see a worked medical example here.';
+      const qSum = studies.reduce((s, st, i) => s + wRE[i] * (st.effect - pooledRE) ** 2, 0);
+      const q = qSum / dfHKSJ;
+      const seHKSJ = Math.sqrt(q / sumWRE);
+      const tCrit = jStat.studentt.inv(0.975, dfHKSJ);
+
+      const widthNormal = 2 * Z * seNormal;
+      const widthHKSJ = 2 * tCrit * seHKSJ;
+      const f = v => +v.toFixed(2);
+
+      return `${k} small trials each estimate the same treatment effect, with enough disagreement between them that a real between-study variance (τ² = ${f(tau2)}) has to be estimated rather than assumed away. The standard random-effects CI treats that τ² as if it were known exactly, but with only ${k} studies it really isn't — the Hartung-Knapp-Sidik-Jonkman method accounts for that extra uncertainty with a t-distribution (df = ${dfHKSJ}) instead of a normal one, here widening the interval to about ${f(widthHKSJ / widthNormal)}× the standard method's width.`;
+    },
+
+    calculate(values) {
+      const { studies, error } = gatherEffectStudies(values);
+      if (error) return [err(error)];
+      if (studies.length < 2) return [err('Enter Effect and SE for at least 2 studies')];
+      if (studies.some(s => s.se <= 0)) return [err('Every study SE must be greater than 0')];
+      if (typeof jStat === 'undefined' || !jStat.chisquare || !jStat.studentt)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const isRatio = values.scale === 'ratio';
+      const transform = v => isRatio ? Math.exp(v) : v;
+
+      const k = studies.length;
+      const Z = 1.96;
+
+      const w = studies.map(s => 1 / s.se ** 2);
+      const sumW = w.reduce((s, v) => s + v, 0);
+      const pooledFE = studies.reduce((s, st, i) => s + w[i] * st.effect, 0) / sumW;
+
+      const Q  = studies.reduce((s, st, i) => s + w[i] * (st.effect - pooledFE) ** 2, 0);
+      const df = k - 1;
+      const pQ = 1 - jStat.chisquare.cdf(Q, df);
+      const I2 = Q > 0 ? Math.max(0, (Q - df) / Q) * 100 : 0;
+      const sumW2 = w.reduce((s, v) => s + v ** 2, 0);
+      const C = sumW - sumW2 / sumW;
+      const tau2 = (df > 0 && C > 0) ? Math.max(0, (Q - df) / C) : 0;
+
+      const wRE = studies.map(s => 1 / (s.se ** 2 + tau2));
+      const sumWRE = wRE.reduce((s, v) => s + v, 0);
+      const pooledRE = studies.reduce((s, st, i) => s + wRE[i] * st.effect, 0) / sumWRE;
+
+      const seNormal = Math.sqrt(1 / sumWRE);
+      const ciNormal = [pooledRE - Z * seNormal, pooledRE + Z * seNormal];
+
+      const dfHKSJ = k - 1;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const rows = [];
+
+      rows.push(
+        { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
+        { label: 'Pooled Estimate (shared by both methods below)', value: f(transform(pooledRE)), ci: null, isRatio },
+        { label: "Cochran's Q", value: f(Q), ci: null, isRatio: false },
+        { label: 'p-value (heterogeneity test)', value: formatPValue(pQ), ci: null, isRatio: false },
+        { label: 'I² (% variance due to heterogeneity)', value: f(I2, 1), ci: null, isRatio: false },
+        { label: 'τ² (DerSimonian–Laird)', value: f(tau2), ci: null, isRatio: false },
+        { label: 'Standard (Normal, z) 95% CI', value: f(transform(pooledRE)),
+          ci: [f(transform(ciNormal[0])), f(transform(ciNormal[1]))], isRatio, highlight: true },
+      );
+
+      let ciHKSJ = null, q = null;
+      if (dfHKSJ >= 1) {
+        const qSum = studies.reduce((s, st, i) => s + wRE[i] * (st.effect - pooledRE) ** 2, 0);
+        q = qSum / dfHKSJ;
+        const varHKSJ = q / sumWRE;
+        const seHKSJ = Math.sqrt(varHKSJ);
+        const tCrit = jStat.studentt.inv(0.975, dfHKSJ);
+        ciHKSJ = [pooledRE - tCrit * seHKSJ, pooledRE + tCrit * seHKSJ];
+
+        rows.push(
+          { label: 'HKSJ Correction Factor (q)', value: f(q), ci: null, isRatio: false },
+          { label: `HKSJ (t, df=${dfHKSJ}) 95% CI`, value: f(transform(pooledRE)),
+            ci: [f(transform(ciHKSJ[0])), f(transform(ciHKSJ[1]))], isRatio, highlight: true },
+        );
+
+        if (q < 1) {
+          rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+            value: `The HKSJ correction factor (q = ${f(q, 3)}) is below 1 here — the studies happen to agree with the random-effects model more closely than typical, a known situation where the "improved" HKSJ interval can paradoxically come out narrower than the standard one despite using a wider (t-distribution) reference. Some methodologists recommend a "modified HKSJ" that floors the HKSJ variance at the standard variance in this case — this calculator reports the original, unmodified HKSJ method.` });
+        }
+
+        // Same published (Higgins, Thompson & Spiegelhalter 2009)
+        // prediction-interval formula as the 'meta-analysis'
+        // calculator, built from the STANDARD (normal-based) SE —
+        // not an HKSJ-specific variant, since whether to instead use
+        // the HKSJ SE here isn't something the methodological
+        // literature has settled, and this calculator would rather
+        // report one well-established formula than invent one.
+        let pi = null;
+        if (k >= 3) {
+          const tCritPI = jStat.studentt.inv(0.975, k - 2);
+          const piMargin = tCritPI * Math.sqrt(tau2 + seNormal ** 2);
+          pi = [pooledRE - piMargin, pooledRE + piMargin];
+          rows.push({ label: '95% Prediction Interval (Standard Formula)', value: f(transform(pooledRE)),
+            ci: [f(transform(pi[0])), f(transform(pi[1]))], isRatio, highlight: true });
+        } else {
+          rows.push({ label: 'Note', isText: true, ci: null, isRatio: false, value: 'A prediction interval needs at least 3 studies (df = k − 2 ≥ 1).' });
+        }
+
+        rows.push({ label: 'Forest Plot — Standard vs HKSJ', isSVG: true,
+          svg: hksjForestPlotSVG(studies, w, pooledRE, ciNormal, ciHKSJ, isRatio, transform, { Q, df, pQ, I2, tau2 }, pi) });
+
+        const widthNormal = transform(ciNormal[1]) - transform(ciNormal[0]);
+        const widthHKSJ = transform(ciHKSJ[1]) - transform(ciHKSJ[0]);
+        rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+          value: `The HKSJ interval is ${f(widthHKSJ / widthNormal, 2)}× as wide as the standard interval here. HKSJ tends to widen the CI most when the number of studies is small or heterogeneity is high — both push its t-distribution's degrees of freedom down and its variance estimate up, better reflecting the genuine extra uncertainty in a random-effects meta-analysis of only ${k} studies than the standard method's assumption that τ² is known exactly.` });
+      } else {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'The HKSJ method needs at least 2 studies (df = k − 1 ≥ 1) to compute a t-based interval.' });
+      }
 
       return rows;
     }
@@ -10132,6 +10349,46 @@ function decisionMatrixHTML(alpha, power) {
   `;
 }
 
+// Compact "Heterogeneity: τ²=…; χ²=… (df=…, P=…); I²=…%" caption,
+// matching the standard annotation printed under a published (e.g.
+// Cochrane/RevMan-style) forest plot. Shared by every forest plot
+// that has a Cochran's Q/I² test to report — NOT the proportion
+// plots, whose pooling doesn't produce a Q/I² the same way, so they
+// use the plainer tau2CaptionSVG below instead.
+function heterogeneityCaptionSVG(cx, y, het) {
+  const { Q, df, pQ, I2, tau2 } = het;
+  return `<text x="${cx}" y="${y}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Heterogeneity: τ² = ${tau2.toFixed(3)}; Q = ${Q.toFixed(2)} (df = ${df}, ${formatPText(pQ)}); I² = ${I2.toFixed(1)}%</text>`;
+}
+
+// Plainer single-statistic caption for the proportion forest plots,
+// which only have τ² to report (no Q/I² the way a two-parameter
+// pooling model does).
+function tau2CaptionSVG(cx, y, tau2) {
+  return `<text x="${cx}" y="${y}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">τ² (between-study variance) = ${tau2.toFixed(3)}</text>`;
+}
+
+// Prediction-interval "whisker": a dashed line with small end caps
+// spanning [piLo, piHi], drawn as its OWN row below the pooled
+// diamonds (not overlaid on one of them) so it reads as a distinct
+// kind of interval — where a new study's true effect is expected to
+// fall, not a confidence interval on the pooled mean — rather than a
+// wider version of the same thing. `toX` is the calling forest
+// plot's own x-scale closure, so this can be shared across plots
+// with different domains. Unlike the point estimates elsewhere on
+// these plots, a PI has no single value to label, so both bounds are
+// shown as "[lo, hi]" beneath the whisker instead.
+function predictionIntervalWhiskerSVG(toX, PL, y, piLo, piHi, transform) {
+  const x1 = toX(piLo).toFixed(1), x2 = toX(piHi).toFixed(1);
+  const fmt = v => (+transform(v).toFixed(2)).toString();
+  const xMid = ((+x1 + +x2) / 2).toFixed(1);
+  return `
+    <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#7B8099">95% PI</text>
+    <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,2"/>
+    <line x1="${x1}" y1="${(y - 5).toFixed(1)}" x2="${x1}" y2="${(y + 5).toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
+    <line x1="${x2}" y1="${(y - 5).toFixed(1)}" x2="${x2}" y2="${(y + 5).toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
+    <text x="${xMid}" y="${(y - 9).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[${fmt(piLo)}, ${fmt(piHi)}]</text>`;
+}
+
 // Forest plot for 'meta-analysis': each study's own 95% CI (blue
 // squares, sized by its fixed-effect weight) plus the fixed-effect
 // and random-effects pooled estimates as diamonds (blue / amber,
@@ -10139,19 +10396,23 @@ function decisionMatrixHTML(alpha, power) {
 // color convention). A dashed line marks the null value — 0 for
 // additive effects, or log(1)=0 for ratio effects (studies/pooled
 // values are already on the log scale in ratio mode, so no
-// positional change is needed, only the null-line's label).
-function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio = false) {
+// positional change is needed, only the null-line's label). The
+// heterogeneity caption sits below the baseline, in an enlarged
+// bottom margin (PB) reserved just for it.
+function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform) {
   const k = studies.length;
   const rowH = 24;
   const W = 560;
-  const PL = 108, PR = 20, PT = 20, PB = 26;
+  const PL = 108, PR = 20, PT = 20, PB = 40;
   const plotW = W - PL - PR;
-  const totalRows = k + 2;
-  const H = PT + totalRows * rowH + PB;
+  const hasPI = Array.isArray(pi);
+  const diamondGap = 21;
+  const dividerY = PT + k * rowH;
+  const H = dividerY + diamondGap + (hasPI ? 3 : 2) * rowH + PB;
   const baseline = H - PB;
 
   const studyCIs = studies.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
-  const allVals = [...studyCIs.flat(), ...ciFE, ...ciRE, 0];
+  const allVals = [...studyCIs.flat(), ...ciFE, ...ciRE, ...(hasPI ? pi : []), 0];
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   const pad = (hi - lo) * 0.12 || 1;
   lo -= pad; hi += pad;
@@ -10161,6 +10422,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
 
   const maxW = Math.max(...weightsFE);
   const sizeFor = w => 4 + 6 * (w / maxW);
+  const fmt = v => (+transform(v).toFixed(2)).toString();
 
   const rows = studies.map((s, i) => {
     const y = PT + i * rowH + rowH / 2;
@@ -10170,7 +10432,8 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
       <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
-      <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>`;
+      <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
+      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${fmt(s.effect)}</text>`;
   }).join('');
 
   const diamond = (ciLo, ciHi, pt, y, label, color) => {
@@ -10178,22 +10441,101 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
     const dh = 6;
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
-      <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>`;
+      <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
+      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${fmt(pt)}</text>`;
   };
 
-  const yFE = PT + k * rowH + rowH / 2;
-  const yRE = PT + (k + 1) * rowH + rowH / 2;
+  const yFE = dividerY + diamondGap + rowH / 2;
+  const yRE = dividerY + diamondGap + rowH + rowH / 2;
   const feDiamond = diamond(ciFE[0], ciFE[1], pooledFE, yFE, 'Fixed-Effect', '#4E6EDB');
   const reDiamond = diamond(ciRE[0], ciRE[1], pooledRE, yRE, 'Random-Effects', '#E07B2C');
+  const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
   ${rows}
-  <line x1="${PL}" y1="${(PT + k * rowH).toFixed(1)}" x2="${W - PR}" y2="${(PT + k * rowH).toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
   ${feDiamond}
   ${reDiamond}
+  ${piRow}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  ${heterogeneityCaptionSVG(W / 2, H - 12, het)}
+</svg>`;
+}
+
+// Forest plot for 'hksj-meta-analysis': each study's own CI (blue
+// squares, sized by fixed-effect weight, same as metaForestPlotSVG)
+// plus the SAME pooled point estimate drawn as two diamonds of
+// different widths — one for the standard normal-based CI, one for
+// the wider Hartung-Knapp-Sidik-Jonkman (t-based) CI — so the extra
+// width HKSJ adds is visually obvious at a glance, anchored to the
+// identical point both methods share.
+function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi) {
+  const k = studies.length;
+  const rowH = 24;
+  const W = 560;
+  const PL = 108, PR = 20, PT = 20, PB = 40;
+  // Same gap used between the divider line and the pooled-estimate
+  // rows as the other forest plots' diamonds (proportionForestPlotSVG,
+  // glmmForestPlotSVG), so every forest plot on the site reads
+  // consistently.
+  const diamondGap = 21;
+  const hasPI = Array.isArray(pi);
+  const dividerY = PT + k * rowH;
+  const H = dividerY + diamondGap + (hasPI ? 3 : 2) * rowH + PB;
+  const baseline = H - PB;
+
+  const studyCIs = studies.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
+  const allVals = [...studyCIs.flat(), ...ciNormal, ...ciHKSJ, ...(hasPI ? pi : []), 0];
+  let lo = Math.min(...allVals), hi = Math.max(...allVals);
+  const pad = (hi - lo) * 0.12 || 1;
+  lo -= pad; hi += pad;
+
+  const toX = v => PL + ((v - lo) / (hi - lo)) * (W - PL - PR);
+  const zeroX = toX(0).toFixed(1);
+
+  const maxW = Math.max(...weightsFE);
+  const sizeFor = w => 4 + 6 * (w / maxW);
+  const fmt = v => (+transform(v).toFixed(2)).toString();
+
+  const rows = studies.map((s, i) => {
+    const y = PT + i * rowH + rowH / 2;
+    const [ciLo, ciHi] = studyCIs[i];
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(s.effect).toFixed(1);
+    const sz = sizeFor(weightsFE[i]);
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
+      <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
+      <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
+      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${fmt(s.effect)}</text>`;
+  }).join('');
+
+  const diamond = (ciLo, ciHi, pt, y, label, color) => {
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(pt).toFixed(1);
+    const dh = 6;
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
+      <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
+      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${fmt(pt)}</text>`;
+  };
+
+  const yNormal = dividerY + diamondGap + rowH / 2;
+  const yHKSJ = dividerY + diamondGap + rowH + rowH / 2;
+  const normalDiamond = diamond(ciNormal[0], ciNormal[1], pooledRE, yNormal, 'Standard (Normal)', '#4E6EDB');
+  const hksjDiamond = diamond(ciHKSJ[0], ciHKSJ[1], pooledRE, yHKSJ, 'HKSJ (t)', '#E07B2C');
+  const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate">
+  <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
+  ${rows}
+  <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
+  ${normalDiamond}
+  ${hksjDiamond}
+  ${piRow}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  ${heterogeneityCaptionSVG(W / 2, H - 12, het)}
 </svg>`;
 }
 
@@ -10208,11 +10550,11 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
 // value back to a proportion in [0,1]; applying it to each CI bound
 // separately (not just the point estimate) is what gives the
 // back-transformed interval its correct, often-asymmetric shape.
-function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, pooledRE, ciRE) {
+function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, pooledRE, ciRE, tau2) {
   const k = studies.length;
   const rowH = 24;
   const W = 560;
-  const PL = 108, PR = 20, PT = 28, PB = 26;
+  const PL = 108, PR = 20, PT = 28, PB = 40;
   // Same gap used between the divider line and the pooled-estimate
   // rows as glmmForestPlotSVG, so both forest plots in this
   // calculator read consistently regardless of which method is
@@ -10279,6 +10621,7 @@ function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, 
   ${feDiamond}
   ${reDiamond}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  ${tau2CaptionSVG(W / 2, H - 12, tau2)}
 </svg>`;
 }
 
@@ -10291,7 +10634,7 @@ function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, 
 // one for the random-effects GLMM (tau^2 estimated by ML) — so the
 // plot mirrors the two pooled estimates now shown in the output
 // table above it.
-function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE) {
+function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, tau2) {
   const k = studies.length;
   const rowH = 24;
   const W = 560;
@@ -10299,7 +10642,7 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE) 
   // "Fixed-Effect GLMM" / "Random-Effects GLMM" are much longer
   // than a typical "Study N" label — at the old width they'd overflow
   // past the SVG's left edge and get clipped.
-  const PL = 140, PR = 20, PT = 20, PB = 26;
+  const PL = 140, PR = 20, PT = 20, PB = 40;
   // Extra clearance between the divider line and the pooled-estimate
   // rows, so each diamond's % value label (drawn just above the
   // diamond) doesn't crowd the line right above it, without pushing
@@ -10363,6 +10706,7 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE) 
   ${feDiamond}
   ${reDiamond}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  ${tau2CaptionSVG(W / 2, H - 12, tau2)}
 </svg>`;
 }
 
@@ -10371,7 +10715,7 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE) 
 // reference treatment (no pooled diamonds here — each row already
 // IS a model-implied pooled estimate, borrowing both direct and
 // indirect evidence from the whole network).
-function networkForestSVG(items, isRatio, referenceLabel) {
+function networkForestSVG(items, isRatio, referenceLabel, transform) {
   const k = items.length;
   const rowH = 24;
   const W = 560;
@@ -10388,6 +10732,7 @@ function networkForestSVG(items, isRatio, referenceLabel) {
 
   const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
   const zeroX = toX(0).toFixed(1);
+  const fmt = v => (+transform(v).toFixed(2)).toString();
 
   const rows = items.map((s, i) => {
     const y = PT + i * rowH + rowH / 2;
@@ -10396,7 +10741,8 @@ function networkForestSVG(items, isRatio, referenceLabel) {
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
       <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
-      <rect x="${(+xc - 4).toFixed(1)}" y="${(y - 4).toFixed(1)}" width="8" height="8" fill="#4E6EDB"/>`;
+      <rect x="${(+xc - 4).toFixed(1)}" y="${(y - 4).toFixed(1)}" width="8" height="8" fill="#4E6EDB"/>
+      <text x="${xc}" y="${(y - 8).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${fmt(s.effect)}</text>`;
   }).join('');
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment">
@@ -11088,6 +11434,7 @@ const CALCULATOR_INDEX = [
   { id: 'bayesian-cri',            name: 'Bayesian Credible Intervals',  category: 'Bayesian & Meta-Analysis',    description: 'Derives Beta-posterior credible intervals for a proportion given prior and observed data.',      status: 'available' },
   { id: 'bayes-factor',            name: 'Bayes Factor',                 category: 'Bayesian & Meta-Analysis',    description: 'Quantifies the relative evidence for H₁ vs H₀ on a continuous scale.',                         status: 'available' },
   { id: 'meta-analysis',           name: 'Meta-Analysis (Q, τ², I², PI)', category: 'Bayesian & Meta-Analysis',  description: 'Pools effect sizes, tests heterogeneity, and computes prediction intervals.',                  status: 'available' },
+  { id: 'hksj-meta-analysis',      name: 'Hartung-Knapp-Sidik-Jonkman (HKSJ) Method', category: 'Bayesian & Meta-Analysis', description: 'Compares the standard normal-based random-effects confidence interval to the Hartung-Knapp-Sidik-Jonkman adjustment, which is typically wider and more robust, especially with few studies or high heterogeneity.', status: 'available' },
   { id: 'meta-analysis-proportions', name: 'Meta-Analysis for Proportions', category: 'Bayesian & Meta-Analysis', description: 'Pools proportions (e.g., prevalence or event rates) across studies from raw event counts and sample sizes, using a variance-stabilizing transformation (or a one-stage GLMM), then tests heterogeneity and computes a prediction interval.', status: 'available' },
   { id: 'network-meta-analysis',   name: 'Network Meta-Analysis (Indirect & Mixed Comparisons)', category: 'Bayesian & Meta-Analysis', description: 'Combines direct and indirect evidence across three or more named treatments into one connected network, producing a network diagram, a full league table, heterogeneity statistics, and a frequentist treatment ranking.', status: 'available' },
 
@@ -11590,7 +11937,12 @@ const WIZARD_TREE = {
       { label: 'Three or more — some pairs were never tested head-to-head',              next: 'networkMetaResult' },
     ]
   },
-  pairwiseMetaResult: { results: [ { id: 'meta-analysis', why: 'Pools effect sizes across studies, tests heterogeneity, and computes a prediction interval.' } ] },
+  pairwiseMetaResult: {
+    results: [
+      { id: 'meta-analysis',      why: 'Pools effect sizes across studies, tests heterogeneity, and computes a prediction interval.' },
+      { id: 'hksj-meta-analysis', why: 'Compares the standard random-effects CI to the more conservative Hartung-Knapp-Sidik-Jonkman adjustment — worth checking whenever you have fewer than about 5-10 studies.' },
+    ]
+  },
   networkMetaResult: { results: [ { id: 'network-meta-analysis', why: 'Combines direct and indirect evidence across the whole treatment network into a league table, heterogeneity/inconsistency statistics, and a treatment ranking.' } ] },
 
 };
@@ -11721,6 +12073,7 @@ const SEARCH_KEYWORDS = {
   'bayesian-cri':   ['credible interval', 'bayesian proportion estimate'],
   'bayes-factor':   ['bayes factor', 'convert a p-value to evidence strength'],
   'meta-analysis':  ['meta-analysis', 'pooled effect size', 'heterogeneity', 'forest plot', 'pool multiple studies'],
+  'hksj-meta-analysis': ['hartung-knapp', 'hartung knapp sidik jonkman', 'hksj', 'knapp-hartung', 'sidik-jonkman', 'refined variance random effects', 't-distribution meta-analysis', 'wider confidence interval meta-analysis'],
   'meta-analysis-proportions': ['meta-analysis for proportions', 'pooled prevalence', 'pooled proportion', 'pooled event rate', 'arcsine transformation', 'freeman-tukey', 'logit transformation proportion', 'prevalence meta-analysis', 'pooling percentages', 'glmm meta-analysis', 'generalized linear mixed model', 'binomial-normal model', 'one-stage meta-analysis', 'logit glmm'],
   'network-meta-analysis': ['network meta-analysis', 'nma', 'indirect comparison', 'mixed treatment comparison', 'bucher method', 'league table', 'multiple treatments comparison', 'p-score', 'sucra', 'ranking treatments', 'network diagram', 'network graph', 'network plot', 'evidence web', 'network geometry'],
 
@@ -12621,6 +12974,16 @@ const NOTATION = {
     { symbol: 't_{k-2,\\,0.975}', meaning: 'Critical t-value used to set the width of the prediction interval, based on the number of studies.' },
     { symbol: 'SE_{RE}', meaning: 'Standard error of the random-effects pooled estimate.' },
     { symbol: 'RR_i, OR_i', meaning: "In Ratio mode, a study's risk ratio or odds ratio, entered as its natural log and exponentiated back after pooling." },
+  ],
+  'hksj-meta-analysis': [
+    { symbol: 'y_i,\\ SE_i', meaning: "A study's own entered Effect Estimate and Standard Error." },
+    { symbol: 'w_i^{*}', meaning: 'Random-effects weight for study i, 1/(SE_i² + τ²) — identical for both methods below, since they share the same τ².' },
+    { symbol: '\\hat\\theta', meaning: 'The pooled estimate — identical for both the Standard and HKSJ intervals; only the width of the interval around it differs.' },
+    { symbol: '\\tau^2', meaning: 'DerSimonian–Laird between-study variance, estimated once and shared by both methods.' },
+    { symbol: 'z_{0.975}', meaning: 'Standard normal critical value (1.96) used by the Standard method — the same value regardless of how many studies are pooled.' },
+    { symbol: 'q', meaning: "HKSJ's correction factor — the weighted spread of the studies around θ̂, divided by k−1; q≈1 means the data fit the random-effects model about as expected." },
+    { symbol: '\\text{Var}_{HKSJ}(\\hat\\theta)', meaning: "HKSJ's refined variance estimate for θ̂, replacing the Standard method's 1/Σw_i^{*}." },
+    { symbol: 't_{k-1,\\,0.975}', meaning: "HKSJ's critical value from a t-distribution with k−1 degrees of freedom — always ≥ z_0.975, and dramatically larger when k is small." },
   ],
   'meta-analysis-proportions': [
     { symbol: 'x_i,\\ n_i', meaning: "Study i's own reported number of events and total sample size." },
