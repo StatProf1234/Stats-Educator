@@ -9824,11 +9824,16 @@ function sdBellCurveSVG(mean, sd, data) {
     return `<line x1="${px}" y1="${PT}" x2="${px}" y2="${baseline}" stroke="#4E6EDB" stroke-width="1" stroke-dasharray="3,3" opacity=".4"/>`;
   }).join('');
 
-  // Percentage labels (68-95-99.7 rule) — inside the shaded bands
+  // Percentage labels (68.27-95.45-99.73 rule) — inside the shaded
+  // bands. The 2-3 SD label sits ABOVE its (very low) curve height
+  // rather than below it, since the curve there is too close to the
+  // baseline to fit a label underneath — yFrac must clear that curve
+  // height (~0.044 at z=2.5) by enough margin that the text doesn't
+  // dip down into the line.
   const pctLabels = [
-    { z: 0.5,  pct: '68.3%',  yFrac: 0.38 },
-    { z: 1.5,  pct: '13.6%',  yFrac: 0.15 },
-    { z: 2.5,  pct: '2.1%',   yFrac: 0.06 },
+    { z: 0.5,  pct: '68.27%', yFrac: 0.38 },
+    { z: 1.5,  pct: '13.59%', yFrac: 0.15 },
+    { z: 2.5,  pct: '2.14%',  yFrac: 0.12 },
   ].flatMap(({ z, pct, yFrac }) => {
     const y = toY(yFrac).toFixed(1);
     return [
@@ -13036,3 +13041,318 @@ const NOTATION = {
   ],
 
 };
+
+/* ── LEARN: CHART-READING GUIDES ───────────────────────────
+   Plain reference articles, independent of any single calculator.
+   Every figure below is a hand-authored illustrative SVG built from
+   fixed literal coordinates (not computed from live calculator
+   output), so a guide page can never break due to a data-shape
+   mismatch with a calculator's internal chart function. */
+
+const GUIDES = [
+
+  {
+    id: 'reading-forest-plots',
+    category: 'Chart Reading',
+    title: 'How to Read a Forest Plot',
+    blurb: 'What the squares, lines, and diamonds mean — plus fixed vs. random effects, weights, and prediction intervals.',
+    dek: `Every forest plot in this app &mdash; Meta-Analysis, HKSJ, GLMM/Proportions, and Network &mdash; draws from the same visual vocabulary. Learn it once here and you can read all of them.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates">
+  <line x1="260.9" y1="16" x2="260.9" y2="197" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="260.9" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">null = 0</text>
+  <text x="90" y="36" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 1</text>
+  <line x1="215.2" y1="33" x2="377.5" y2="33" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="293.8" y="30.5" width="5.1" height="5.1" fill="#4E6EDB"/>
+  <text x="296.3" y="26.5" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.30</text>
+  <text x="90" y="62" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 2</text>
+  <line x1="279.5" y1="59" x2="372.3" y2="59" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="322.2" y="55.3" width="7.4" height="7.4" fill="#4E6EDB"/>
+  <text x="325.9" y="51.3" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.55</text>
+  <text x="90" y="88" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 3</text>
+  <line x1="320.7" y1="85" x2="390.2" y2="85" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="350.5" y="80" width="10" height="10" fill="#4E6EDB"/>
+  <text x="355.5" y="76" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.80</text>
+  <line x1="100" y1="98" x2="540" y2="98" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="90" y="135" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#4E6EDB">Fixed-Effect</text>
+  <polygon points="313.4,132 339.7,126 366.0,132 339.7,138" fill="#4E6EDB"/>
+  <text x="339.7" y="122" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#4E6EDB">0.67</text>
+  <text x="90" y="161" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#E07B2C">Random-Effects</text>
+  <polygon points="291.7,158 333.6,152 375.5,158 333.6,164" fill="#E07B2C"/>
+  <text x="333.6" y="148" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#E07B2C">0.62</text>
+  <text x="90" y="187" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">95% PI</text>
+  <line x1="219.5" y1="184" x2="444.2" y2="184" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="219.5" y1="179" x2="219.5" y2="189" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="444.2" y1="179" x2="444.2" y2="189" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="331.9" y="176" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[-0.35, 1.55]</text>
+  <line x1="100" y1="197" x2="540" y2="197" stroke="#CDD2E0" stroke-width="1.5"/>
+</svg>`,
+    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval.`,
+    legendColumns: [
+      [
+        { colLabel: 'Reading a study row', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Horizontal line: that study's own 95% confidence interval.` },
+        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Dashed vertical line: the null value (0, or a ratio of 1 for RR/OR).` },
+        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="2" y1="5" x2="22" y2="5" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/><line x1="2" y1="2" x2="2" y2="8" stroke="#7B8099" stroke-width="1.5"/><line x1="22" y1="2" x2="22" y2="8" stroke="#7B8099" stroke-width="1.5"/></svg>`, text: `Dashed whisker:<br><strong>95% prediction interval</strong>, the range a new study's true effect would plausibly fall in.` },
+      ],
+      [
+        { colLabel: 'Weight & pooled estimate', swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB', text: `Blue square: <strong>size</strong> shows how much weight that study carries in the pooled result (the square itself marks its point estimate).` },
+        { swatchClass: 'is-diamond', swatchStyle: 'background:#4E6EDB', text: `Blue diamond: <strong>Fixed-Effect</strong>, the pooled estimate assuming one shared true effect; its width is its own 95% CI.` },
+        { swatchClass: 'is-diamond', swatchStyle: 'background:#E07B2C', text: `Amber diamond: <strong>Random-Effects</strong>, the pooled estimate allowing for between-study variation; its width is its own 95% CI.` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'One row per study',
+        html: `<p>Each study gets a square and a line. The square marks that study's own point estimate; the line is its 95% confidence interval. Studies are usually sorted top-to-bottom in the order they were entered, with the pooled result(s) below a divider line.</p>`,
+      },
+      {
+        heading: 'Reading the weights: why the squares differ in size',
+        html: `<p>A study's weight in the pooled estimate is driven by its <strong>precision</strong> &mdash; roughly, the inverse of its variance. A large, tightly-measured study (small standard error) gets a big square and pulls the pooled diamond toward it; a small, noisy study gets a tiny square and barely moves it, even if its own point estimate looks dramatic. Reading square sizes tells you at a glance which studies are actually driving the pooled conclusion.</p>`,
+      },
+      {
+        heading: 'Fixed-Effect vs. Random-Effects: two diamonds, two assumptions',
+        html: `<p><strong>Fixed-Effect</strong> assumes every study is estimating the exact same true effect, so all the variation between studies is treated as sampling noise &mdash; weight comes from precision alone.</p>
+          <p><strong>Random-Effects</strong> assumes each study is estimating its <em>own</em> true effect, drawn from a distribution of true effects across settings, populations, or protocols. It adds the estimated between-study variance (&tau;&sup2;) into every study's weight, which pulls the smaller/noisier studies more nearly level with the large ones.</p>
+          <p>The practical consequence: the Random-Effects diamond is usually wider (less certain) than the Fixed-Effect one, and gives comparatively more say to smaller studies. When heterogeneity is low the two nearly coincide; when it's high, Random-Effects is generally the more defensible summary.</p>`,
+      },
+      {
+        heading: 'The dashed null line',
+        html: `<p>Marks "no effect" &mdash; 0 for a difference, or a ratio of 1 for a risk ratio/odds ratio. A pooled diamond that does not touch this line indicates a statistically significant result at the conventional &alpha; = .05 threshold; one that does touch it does not rule out no effect. It's common, and not a contradiction, for several individual studies' lines to cross the null while the pooled diamond does not &mdash; that's the entire point of pooling evidence.</p>`,
+      },
+      {
+        heading: 'Prediction intervals: a different question than the CI',
+        html: `<p>The confidence interval around the Random-Effects diamond answers "how precisely do we know the <em>average</em> true effect?" The prediction interval answers a different, often more clinically relevant question: "if one more study were run tomorrow, what range would <em>its own</em> true effect plausibly fall in?"</p>
+          <p>Because the PI has to account for the full spread of true effects across settings &mdash; not just uncertainty about their average &mdash; it is always at least as wide as the Random-Effects CI, and it can cross the null line even when that CI does not. That's not an error: it's telling you that while the average effect looks real, any single future study could still turn up null.</p>`,
+      },
+      {
+        heading: 'Heterogeneity captions: Q, τ², I²',
+        html: `<p>Most forest plots in this app caption their heterogeneity statistics directly beneath the plot. <strong>Q</strong> tests whether the studies' point estimates differ more than sampling error alone would explain (a small p-value flags real heterogeneity, though Q has famously low power with few studies). <strong>&tau;&sup2;</strong> is the estimated variance of true effects between studies &mdash; it's what feeds the Random-Effects weights and the prediction interval. <strong>I&sup2;</strong> restates that same variance as a percentage of total variability across studies; a common (debated) rule of thumb reads roughly &lt;25% as low, 25&ndash;75% as moderate, and &gt;75% as considerable heterogeneity.</p>`,
+      },
+    ],
+    related: [
+      { id: 'meta-analysis',      why: 'Pools effect sizes across studies with the Fixed-Effect/Random-Effects forest plot shown above.' },
+      { id: 'hksj-meta-analysis', why: 'Same forest-plot grammar, comparing the standard random-effects CI to the wider Hartung-Knapp-Sidik-Jonkman adjustment.' },
+      { id: 'meta-analysis-proportions', why: 'Same grammar applied to pooled proportions, via Arcsine/Logit/Raw transforms or a one-stage GLMM.' },
+      { id: 'network-meta-analysis', why: 'Extends the same forest-plot grammar to every treatment compared against a common reference.' },
+    ],
+  },
+
+  {
+    id: 'reading-network-diagrams',
+    category: 'Chart Reading',
+    title: 'How to Read a Network Meta-Analysis Diagram & League Table',
+    blurb: 'What the nodes, edges, and league-table cells actually represent, and how direct evidence differs from indirect.',
+    dek: `A network meta-analysis compares three or more treatments at once, even when not every pair has been tested head-to-head. The diagram shows what evidence actually exists; the league table shows what the model estimated from it.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 324" style="width:100%;height:auto;display:block;" role="img" aria-label="Example network diagram with four treatments">
+  <line x1="200" y1="66" x2="80" y2="196" stroke="#B7BEDA" stroke-width="2.75"/>
+  <line x1="200" y1="66" x2="320" y2="196" stroke="#B7BEDA" stroke-width="1.5"/>
+  <line x1="80" y1="196" x2="320" y2="196" stroke="#B7BEDA" stroke-width="4"/>
+  <line x1="80" y1="196" x2="200" y2="296" stroke="#B7BEDA" stroke-width="1.5"/>
+  <line x1="320" y1="196" x2="200" y2="296" stroke="#B7BEDA" stroke-width="2.75"/>
+  <text x="200" y="40" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">reference treatment</text>
+  <circle cx="200" cy="66" r="22" fill="#4E6EDB" stroke="#4E6EDB" stroke-width="1.5"/>
+  <text x="200" y="70" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#fff">A</text>
+  <circle cx="80" cy="196" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
+  <text x="80" y="200" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">B</text>
+  <circle cx="320" cy="196" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
+  <text x="320" y="200" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">C</text>
+  <circle cx="200" cy="296" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
+  <text x="200" y="300" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">D</text>
+</svg>`,
+    figureCaption: `Four treatments; B&ndash;C has the most direct trials (thickest line), while A&ndash;D was never compared head-to-head.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Blue node &mdash; the reference treatment. Every effect in the league table and network forest plot is expressed relative to it.` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#B7BEDA', text: `Line between nodes &mdash; at least one trial directly compared that pair; a <strong>thicker</strong> line means more direct trials made that same comparison.` },
+    ],
+    sections: [
+      {
+        heading: 'Nodes and edges',
+        html: `<p>Each circle is a treatment. A line between two circles means at least one trial directly randomized patients between that pair &mdash; no line means that pair was <em>never</em> compared head-to-head in the available data.</p>`,
+      },
+      {
+        heading: 'Direct vs. indirect evidence',
+        html: `<p>A network meta-analysis can still estimate an effect for a pair with no line between them, by chaining the comparisons that do exist &mdash; e.g., estimating A vs. D by combining A vs. B, B vs. C, and C vs. D trials. This borrowed, chained evidence is called <strong>indirect</strong> evidence, as opposed to the <strong>direct</strong> evidence from trials that compared that exact pair. The model blends both where both exist, which is the whole appeal of a network analysis over separate pairwise meta-analyses.</p>`,
+      },
+      {
+        heading: 'Reading the league table',
+        html: `<p>The diagonal names each treatment (the reference treatment's diagonal cell is highlighted). Every cell above the diagonal compares the treatment named at the <strong>top of its column</strong> against the treatment named at the <strong>start of its row</strong> &mdash; showing the pooled effect estimate with its 95% CI underneath. The cells below the diagonal are left blank, since they'd just be the mirror image of the cell above (same comparison, opposite direction).</p>`,
+      },
+      {
+        heading: 'The treatment forest plot',
+        html: `<p>Alongside the league table, this app also draws a forest plot with one row per treatment, each showing that treatment's effect versus the reference treatment named at the top. It uses the exact same visual grammar as a standard forest plot &mdash; see <a href="#learn/reading-forest-plots">How to Read a Forest Plot</a> for the square/line/null-line conventions.</p>`,
+      },
+    ],
+    related: [
+      { id: 'network-meta-analysis', why: 'Produces the network diagram, league table, and treatment forest plot described above.' },
+    ],
+  },
+
+  {
+    id: 'reading-box-plots',
+    category: 'Chart Reading',
+    title: 'How to Read a Box Plot',
+    blurb: 'What the box, whiskers, and open circles represent, and how the 1.5×IQR outlier rule works.',
+    dek: `A box plot summarizes an entire distribution in five landmarks &mdash; without assuming it's bell-shaped, and without letting a few extreme values distort the picture the way a mean and SD can.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" style="width:100%;height:auto;display:block;" role="img" aria-label="Example box-and-whisker plot">
+  <line x1="73.8" y1="62" x2="145.5" y2="62" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="253.1" y1="62" x2="360.7" y2="62" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="73.8" y1="52" x2="73.8" y2="72" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="360.7" y1="52" x2="360.7" y2="72" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="145.5" y="42" width="107.6" height="40" fill="rgba(78,110,219,.12)" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="190.3" y1="42" x2="190.3" y2="82" stroke="#4E6EDB" stroke-width="2.5"/>
+  <circle cx="477.2" cy="62" r="4" fill="none" stroke="#E0527C" stroke-width="1.5"/>
+  <text x="142.5" y="34" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q1 = 10</text>
+  <text x="256.1" y="34" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q3 = 22</text>
+  <text x="190.3" y="98" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Median = 15</text>
+  <text x="73.8" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">lower fence</text>
+  <text x="360.7" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">upper fence</text>
+  <text x="477.2" y="80" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E0527C">outlier</text>
+</svg>`,
+    figureCaption: `IQR = Q3 &minus; Q1 = 12; fences sit 1.5&times;IQR beyond the box; one point falls outside the upper fence.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:rgba(78,110,219,.25);border:1.5px solid #4E6EDB;', text: `Box: <strong>interquartile range</strong>, the middle 50% of the data from Q1 to Q3 (height = Q3 &minus; Q1).` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB;height:4px;', text: `Thick line inside the box: the <strong>median</strong> (Q2), not the mean.` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Whiskers: extend to the most extreme data point that is still <em>within</em> the fences.` },
+      { swatchClass: 'is-square', swatchStyle: 'background:transparent;border:1.5px solid #E0527C;border-radius:50%;', text: `Open circle: a flagged <strong>outlier</strong> beyond 1.5&times;IQR from the box.` },
+    ],
+    sections: [
+      {
+        heading: 'The box: the middle 50% of your data',
+        html: `<p>The box spans the first quartile (Q1, the 25th percentile) to the third quartile (Q3, the 75th percentile). Exactly half of the data values fall inside it, by definition &mdash; regardless of whether the underlying distribution is symmetric, skewed, or nothing like a bell curve.</p>`,
+      },
+      {
+        heading: 'The line inside: the median, not the mean',
+        html: `<p>The thick line marks the median &mdash; the middle value when the data are sorted. Unlike the mean, the median isn't pulled around by a handful of extreme values, which is exactly why box plots pair it with quartiles rather than a mean and SD.</p>`,
+      },
+      {
+        heading: 'Whiskers and fences: how far is "typical"',
+        html: `<p>Tukey's rule places a <strong>lower fence</strong> at Q1 &minus; 1.5&times;IQR and an <strong>upper fence</strong> at Q3 + 1.5&times;IQR. The whiskers themselves don't extend all the way to the fences &mdash; they stop at the most extreme data point that still falls <em>within</em> the fences, so a whisker's exact length depends on where your real data happen to land.</p>`,
+      },
+      {
+        heading: 'Outliers: the open circles',
+        html: `<p>Any value beyond a fence is plotted as its own open circle rather than folded into the whisker. Being flagged as an outlier by the 1.5&times;IQR rule is a statistical convention, not proof of a data-entry error or a subject who "doesn't belong" &mdash; it's a prompt to look at that value more closely, not an instruction to delete it.</p>`,
+      },
+    ],
+    related: [
+      { id: 'interquartile-range', why: 'Computes Q1, median, Q3, and the IQR from raw data, and draws the box plot shown above.' },
+    ],
+  },
+
+  {
+    id: 'reading-bland-altman-plots',
+    category: 'Chart Reading',
+    title: 'How to Read a Bland-Altman Plot',
+    blurb: 'Why this plot is about agreement, not correlation, and how to read the bias line and limits of agreement.',
+    dek: `Two measurement methods can correlate almost perfectly and still disagree badly in absolute terms. A Bland-Altman plot is built specifically to catch that.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 230" style="width:100%;height:auto;display:block;" role="img" aria-label="Example Bland-Altman plot">
+  <line x1="44" y1="186" x2="544" y2="186" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="189" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">-20</text>
+  <line x1="44" y1="143.5" x2="544" y2="143.5" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="146.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">-10</text>
+  <line x1="44" y1="58.5" x2="544" y2="58.5" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="61.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">10</text>
+  <line x1="44" y1="16" x2="544" y2="16" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="19" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">20</text>
+  <line x1="44" y1="101" x2="544" y2="101" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="48" y="113" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0 (no difference)</text>
+  <line x1="44" y1="160.5" x2="544" y2="160.5" stroke="#E07B2C" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="44" y1="24.5" x2="544" y2="24.5" stroke="#E07B2C" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="44" y1="92.5" x2="544" y2="92.5" stroke="#1A1A2E" stroke-width="1.5"/>
+  <circle cx="119" cy="84" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="169" cy="113.75" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="219" cy="75.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="254" cy="96.75" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="294" cy="135" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="334" cy="58.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="369" cy="88.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="419" cy="122.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="469" cy="92.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="504" cy="37.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <text x="540" y="88.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Mean = +2.0</text>
+  <text x="540" y="20.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">+1.96 SD</text>
+  <text x="540" y="156.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">-1.96 SD</text>
+  <text x="44" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0</text>
+  <text x="169" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">25</text>
+  <text x="294" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">50</text>
+  <text x="419" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">75</text>
+  <text x="544" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">100</text>
+  <text x="294" y="222" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">mean of the two measurements</text>
+  <text x="12" y="101" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099" transform="rotate(-90 12 101)">difference (A - B)</text>
+</svg>`,
+    figureCaption: `Ten paired measurements: a bias of +2.0, with limits of agreement from &minus;14 to +18.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Each dot &mdash; one paired measurement, plotted as (average of the two methods, difference between them).` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Solid line &mdash; the mean difference (bias) between the two methods.` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#E07B2C" stroke-width="2" stroke-dasharray="5,3"/></svg>`, text: `Dashed amber lines &mdash; limits of agreement: bias &plusmn; 1.96&times;SD of the differences.` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Thin dashed line &mdash; zero, i.e. perfect agreement.` },
+    ],
+    sections: [
+      {
+        heading: "What's plotted: agreement, not correlation",
+        html: `<p>The x-axis is the <em>average</em> of the two methods for each subject (the best available estimate of their true value, since neither method is assumed perfect); the y-axis is the <em>difference</em> between the two methods for that same subject. Two methods can have a correlation of 0.99 and still disagree by a clinically important amount &mdash; correlation measures whether values move together, not whether they agree in absolute terms. That's precisely the failure mode this plot is designed to expose.</p>`,
+      },
+      {
+        heading: 'The bias line',
+        html: `<p>The solid line marks the mean difference across all subjects &mdash; the average systematic offset of one method relative to the other. A bias line far from zero means one method is consistently reading higher or lower than the other, even if no single pair of readings looks alarming.</p>`,
+      },
+      {
+        heading: 'Limits of agreement: are they narrow enough to matter?',
+        html: `<p>The dashed amber lines sit at the bias &plusmn; 1.96&times;SD of the differences &mdash; the range within which about 95% of future differences between the two methods are expected to fall, assuming differences are roughly normally distributed. Whether that range is "narrow enough" is a clinical judgment, not a statistical one: this plot doesn't have a built-in pass/fail threshold, unlike the equivalence-zone plot.</p>`,
+      },
+      {
+        heading: 'Spotting patterns: proportional bias and funnels',
+        html: `<p>Look for two failure patterns beyond a simple offset: a <strong>trend</strong> (points drifting from negative to positive difference as the mean increases, meaning agreement isn't constant across the measurement range), and a <strong>funnel</strong> (the scatter fanning out wider at one end, meaning the two methods disagree more at higher or lower values). Either pattern means a single bias-and-limits summary doesn't tell the whole story.</p>`,
+      },
+    ],
+    related: [
+      { id: 'bland-altman', why: 'Computes the bias and limits of agreement, and draws the plot shown above.' },
+    ],
+  },
+
+  {
+    id: 'reading-equivalence-plots',
+    category: 'Chart Reading',
+    title: 'How to Read an Equivalence / Non-Inferiority Zone Plot',
+    blurb: 'The one rule that decides equivalence, and why a non-significant p-value is not the same thing.',
+    dek: `Equivalence and non-inferiority testing (TOST) ask a different question than a standard hypothesis test: not "is there a difference?" but "is the difference small enough not to matter?"`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 190" style="width:100%;height:auto;display:block;" role="img" aria-label="Example equivalence zone plot comparing two studies">
+  <rect x="106.7" y="24" width="288.9" height="142" fill="#4E6EDB" opacity=".08"/>
+  <line x1="20" y1="166" x2="540" y2="166" stroke="#CDD2E0" stroke-width="1.5"/>
+  <line x1="251.1" y1="24" x2="251.1" y2="166" stroke="#CDD2E0" stroke-width="1"/>
+  <line x1="106.7" y1="24" x2="106.7" y2="166" stroke="#4E6EDB" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="395.6" y1="24" x2="395.6" y2="166" stroke="#4E6EDB" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="106.7" y="16" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4E6EDB">-&Delta;</text>
+  <text x="395.6" y="16" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4E6EDB">+&Delta;</text>
+  <text x="251.1" y="182" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0</text>
+  <text x="28" y="45" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Study A: equivalence shown</text>
+  <line x1="193.3" y1="59" x2="366.7" y2="59" stroke="#1A1A2E" stroke-width="2"/>
+  <circle cx="280" cy="59" r="5" fill="#E07B2C" stroke="#1A1A2E" stroke-width="1"/>
+  <text x="28" y="117" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Study B: equivalence NOT shown</text>
+  <line x1="222.2" y1="131" x2="453.3" y2="131" stroke="#1A1A2E" stroke-width="2"/>
+  <circle cx="337.8" cy="131" r="5" fill="#E07B2C" stroke="#1A1A2E" stroke-width="1"/>
+</svg>`,
+    figureCaption: `Same margins, two outcomes: Study A's CI fits entirely inside the zone; Study B's spills past +&Delta;.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;opacity:.35;', text: `Shaded band &mdash; the equivalence/non-inferiority zone: differences considered too small to matter clinically.` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#4E6EDB" stroke-width="2" stroke-dasharray="4,3"/></svg>`, text: `Dashed vertical lines &mdash; the margin(s) that define the edges of that zone.` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Thick line with a dot &mdash; the point estimate and its 95% confidence interval.` },
+    ],
+    sections: [
+      {
+        heading: 'The rule: does the whole CI fit inside the shaded zone?',
+        html: `<p>Equivalence (or non-inferiority) is demonstrated only when the <strong>entire</strong> confidence interval &mdash; not just the point estimate &mdash; falls within the shaded zone. In the figure above, Study A's CI is fully inside the zone: equivalence is shown. Study B's point estimate looks similar, but its CI extends past +&Delta;, so equivalence is not established &mdash; the data can't rule out a difference as large as the margin.</p>`,
+      },
+      {
+        heading: 'One-sided vs. two-sided margins',
+        html: `<p><strong>Equivalence</strong> uses two margins (&minus;&Delta; to +&Delta;): the treatment must be shown to be neither meaningfully worse nor meaningfully better. <strong>Non-inferiority</strong> uses a single margin on the side that would matter (e.g., only "not meaningfully worse"), so the zone extends open-ended toward the other side of the plot &mdash; being better than the comparator is never a problem for non-inferiority.</p>`,
+      },
+      {
+        heading: "Why a regular p-value doesn't answer this question",
+        html: `<p>A standard hypothesis test's null hypothesis is "no difference" &mdash; failing to reject it (a non-significant p-value) means the data are <em>consistent with</em> no difference, not that a meaningful difference has been <em>ruled out</em>. An underpowered study will produce a non-significant p-value almost by default. TOST flips the logic: the null hypothesis becomes "the difference is at least as large as the margin," and equivalence is only concluded when that null is actively rejected on both sides &mdash; which is exactly what "the whole CI fits in the zone" is checking.</p>`,
+      },
+    ],
+    related: [
+      { id: 'equivalence-test', why: 'Runs the two one-sided tests (TOST) procedure and draws the zone plot shown above.' },
+    ],
+  },
+
+];

@@ -61,6 +61,12 @@ function route() {
     renderWizard(hash === 'wizard' ? [] : hash.slice('wizard/'.length).split('/'));
     return;
   }
+  if (hash === 'learn' || hash.startsWith('learn/')) {
+    if (hash === 'learn') { renderLearnHub(); return; }
+    const guide = GUIDES.find(g => g.id === hash.slice('learn/'.length));
+    guide ? renderGuide(guide) : renderLearnHub();
+    return;
+  }
   const calc = CALCULATORS.find(c => c.id === hash);
   calc ? renderCalculator(calc) : renderHome();
 }
@@ -356,6 +362,99 @@ function renderWizard(path) {
     `;
   }
 
+  document.getElementById('main').scrollTop = 0;
+}
+
+/* ── LEARN: CHART-READING GUIDES ────────────────────────── */
+
+// Hub page listing every guide in GUIDES (calculators.js), grouped by
+// category. Reuses the .home-card grid so a second "Concepts" category
+// (fixed vs random effects, heterogeneity, etc.) can be added later
+// without any new CSS.
+function renderLearnHub() {
+  const groups = {};
+  for (const g of GUIDES) {
+    (groups[g.category] = groups[g.category] || []).push(g);
+  }
+
+  const sections = Object.entries(groups).map(([cat, guides]) => {
+    const cards = guides.map(g => `
+      <a class="home-card" href="#learn/${g.id}">
+        <div class="home-card-name">${esc(g.title)}</div>
+        <div class="home-card-desc">${esc(g.blurb)}</div>
+      </a>`).join('');
+    return `
+      <h2 class="guide-section-title">${esc(cat)}</h2>
+      <div class="home-cards">${cards}</div>`;
+  }).join('');
+
+  view().innerHTML = `
+    <div class="home-eyebrow">Statistical Calculator Library</div>
+    <h1 class="home-title">Learn</h1>
+    <p class="home-desc">Short guides to reading the charts these calculators produce — what each shape, line, and color means, and how to interpret it.</p>
+    ${sections}
+  `;
+  document.getElementById('main').scrollTop = 0;
+}
+
+// Renders a single guide: figure + legend, then prose sections, then
+// links to the calculator(s) it applies to.
+function renderGuide(guide) {
+  // A legend item is either a flat CSS shape (swatchClass/swatchStyle —
+  // squares, diamonds, solid lines, all renderable as a styled <span>)
+  // or a tiny inline SVG (swatchSvg — used for dashed lines, since CSS
+  // border-style:dashed renders inconsistently short/solid-looking at
+  // this size, but an SVG stroke-dasharray always looks right).
+  // The text is wrapped in its own <span> so it's a single flex item —
+  // without it, `.guide-legend li`'s display:flex splits any <strong>/
+  // <em>/<br> inside the text into separate flex items, each shoved
+  // apart by the li's `gap`, which both breaks intentional <br> line
+  // breaks and forces stray extra space around bolded words.
+  const legendItem = item => `
+    <li>${item.swatchSvg
+      ? `<span class="guide-swatch-svg">${item.swatchSvg}</span>`
+      : `<span class="guide-swatch ${item.swatchClass}" style="${item.swatchStyle}"></span>`
+    }<span class="guide-legend-text">${item.text}</span></li>`;
+
+  const legendHtml = guide.legendColumns
+    ? `<div class="guide-legend-columns">${guide.legendColumns.map(col => `
+        <div class="guide-legend-col">
+          ${col[0] && col[0].colLabel ? `<div class="block-label">${esc(col[0].colLabel)}</div>` : ''}
+          <ul class="guide-legend">${col.map(legendItem).join('')}</ul>
+        </div>`).join('')}</div>`
+    : guide.legend ? `<ul class="guide-legend">${guide.legend.map(legendItem).join('')}</ul>` : '';
+
+  const sectionsHtml = (guide.sections || []).map(s => `
+    <h2 class="guide-section-title">${esc(s.heading)}</h2>
+    <div class="guide-body">${s.html}</div>
+  `).join('');
+
+  const relatedHtml = (guide.related || []).map(r => {
+    const calc = CALCULATORS.find(c => c.id === r.id);
+    if (!calc) return '';
+    return `
+      <a class="wizard-result-card" href="#${calc.id}">
+        <div class="wizard-result-name">${esc(calc.name)}</div>
+        <div class="wizard-result-hint">${esc(calc.hint)}</div>
+        <div class="wizard-result-why">${esc(r.why)}</div>
+      </a>`;
+  }).join('');
+
+  view().innerHTML = `
+    <div class="calc-eyebrow"><a class="calc-back" href="#learn">← All Guides</a></div>
+    <h1 class="calc-title">${esc(guide.title)}</h1>
+    <p class="calc-desc">${guide.dek}</p>
+    <div class="formula-block">
+      ${guide.figure}
+      ${guide.figureCaption ? `<div class="guide-figure-caption">${guide.figureCaption}</div>` : ''}
+      ${legendHtml}
+    </div>
+    ${sectionsHtml}
+    ${relatedHtml ? `
+      <h2 class="guide-section-title">Related Calculators</h2>
+      <div class="wizard-results">${relatedHtml}</div>
+    ` : ''}
+  `;
   document.getElementById('main').scrollTop = 0;
 }
 
