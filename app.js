@@ -377,23 +377,46 @@ function renderLearnHub() {
     (groups[g.category] = groups[g.category] || []).push(g);
   }
 
-  const sections = Object.entries(groups).map(([cat, guides]) => {
+  const catEntries = Object.entries(groups);
+
+  // Quick-nav pills up top — jumps down to a category's own section via
+  // scrollIntoView rather than a real href="#...", since a plain anchor
+  // hash would be caught by the app's own hash-based router (route())
+  // and treated as an attempt to navigate to a calculator/guide, not a
+  // same-page scroll.
+  const jumpNav = catEntries.length > 1 ? `
+    <div class="learn-jump-nav">
+      ${catEntries.map(([cat, guides]) => `
+        <button type="button" class="learn-jump-pill" data-target="learn-cat-${slugify(cat)}">${esc(cat)} <span class="guide-section-count">${guides.length}</span></button>
+      `).join('')}
+    </div>` : '';
+
+  const sections = catEntries.map(([cat, guides]) => {
     const cards = guides.map(g => `
       <a class="home-card" href="#learn/${g.id}">
         <div class="home-card-name">${esc(g.title)}</div>
         <div class="home-card-desc">${esc(g.blurb)}</div>
       </a>`).join('');
     return `
-      <h2 class="guide-section-title">${esc(cat)}</h2>
-      <div class="home-cards">${cards}</div>`;
+      <div id="learn-cat-${slugify(cat)}">
+        <h2 class="guide-section-title">${esc(cat)} <span class="guide-section-count">${guides.length} guide${guides.length === 1 ? '' : 's'}</span></h2>
+        <div class="home-cards">${cards}</div>
+      </div>`;
   }).join('');
 
   view().innerHTML = `
     <div class="home-eyebrow">Statistical Calculator Library</div>
     <h1 class="home-title">Learn</h1>
-    <p class="home-desc">Short guides to reading the charts these calculators produce — what each shape, line, and color means, and how to interpret it.</p>
+    <p class="home-desc">Reference guides for using this site well — how to read the charts these calculators produce, and how to recognize the kind of data you're working with.</p>
+    ${jumpNav}
     ${sections}
   `;
+
+  document.querySelectorAll('.learn-jump-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
   document.getElementById('main').scrollTop = 0;
 }
 
@@ -444,11 +467,12 @@ function renderGuide(guide) {
     <div class="calc-eyebrow"><a class="calc-back" href="#learn">← All Guides</a></div>
     <h1 class="calc-title">${esc(guide.title)}</h1>
     <p class="calc-desc">${guide.dek}</p>
+    ${guide.figure ? `
     <div class="formula-block">
       ${guide.figure}
       ${guide.figureCaption ? `<div class="guide-figure-caption">${guide.figureCaption}</div>` : ''}
       ${legendHtml}
-    </div>
+    </div>` : ''}
     ${sectionsHtml}
     ${relatedHtml ? `
       <h2 class="guide-section-title">Related Calculators</h2>

@@ -6879,7 +6879,7 @@ const CALCULATORS = [
 
     formulas: [
       {
-        label: 'Fixed-Effect Pooled OR/RR',
+        label: 'Fixed-Effect Pooled Estimate',
         latex: '\\ln\\widehat\\theta = \\dfrac{\\sum w_i \\ln\\theta_i}{\\sum w_i}, \\quad w_i = \\dfrac{1}{SE_i^2}'
       },
       {
@@ -6895,21 +6895,25 @@ const CALCULATORS = [
     inputLayout: 'groups',
     groupTerm: 'Study',
     groupFields: [
-      { prefix: 'effect', label: 'OR/RR' },
+      { prefix: 'effect', label: 'Effect Estimate' },
       { prefix: 'se',     label: 'SE(log)' },
     ],
     inputs: [
-      { id: 'effect1', label: 'Study 1 OR/RR',   default: 0.90 },
+      { id: 'measure', type: 'select', label: 'Association Measure', default: 'OR', options: [
+        { value: 'OR', label: 'Odds Ratio (OR)' },
+        { value: 'RR', label: 'Risk Ratio (RR)' },
+      ] },
+      { id: 'effect1', label: 'Study 1 Effect Estimate',   default: 0.90 },
       { id: 'se1',     label: 'Study 1 SE(log)', default: 0.15 },
-      { id: 'effect2', label: 'Study 2 OR/RR',   default: 0.80 },
+      { id: 'effect2', label: 'Study 2 Effect Estimate',   default: 0.80 },
       { id: 'se2',     label: 'Study 2 SE(log)', default: 0.12 },
-      { id: 'effect3', label: 'Study 3 OR/RR',   default: 0.50 },
+      { id: 'effect3', label: 'Study 3 Effect Estimate',   default: 0.50 },
       { id: 'se3',     label: 'Study 3 SE(log)', default: 0.18 },
-      { id: 'effect4', label: 'Study 4 OR/RR (optional)',   default: 0.85 },
+      { id: 'effect4', label: 'Study 4 Effect Estimate (optional)',   default: 0.85 },
       { id: 'se4',     label: 'Study 4 SE(log) (optional)', default: 0.10 },
-      { id: 'effect5', label: 'Study 5 OR/RR (optional)',   default: 0.65 },
+      { id: 'effect5', label: 'Study 5 Effect Estimate (optional)',   default: 0.65 },
       { id: 'se5',     label: 'Study 5 SE(log) (optional)', default: 0.20 },
-      { id: 'effect6', label: 'Study 6 OR/RR (optional)',   default: 0.60 },
+      { id: 'effect6', label: 'Study 6 Effect Estimate (optional)',   default: 0.60 },
       { id: 'se6',     label: 'Study 6 SE(log) (optional)', default: 0.10 },
     ],
 
@@ -6917,7 +6921,8 @@ const CALCULATORS = [
       const { studies, error } = gatherEffectStudies(values);
       if (error || studies.length < 2 || studies.some(s => s.effect <= 0) || studies.some(s => s.se <= 0) ||
           typeof jStat === 'undefined' || !jStat.chisquare || !jStat.studentt)
-        return 'Enter OR/RR and SE for at least 2 studies to see a worked medical example here.';
+        return 'Enter an effect estimate and SE for at least 2 studies to see a worked medical example here.';
+      const measure = values.measure === 'RR' ? 'RR' : 'OR';
       const k = studies.length;
       const logEst = studies.map(s => Math.log(s.effect));
       const w = studies.map(s => 1 / s.se ** 2);
@@ -6934,18 +6939,20 @@ const CALCULATORS = [
       const pooled = Math.exp(pooledLog);
       const piLo = Math.exp(pooledLog - tCrit * predSE), piHi = Math.exp(pooledLog + tCrit * predSE);
       const f = v => +v.toFixed(2);
-      return `${k} independent case-control studies each report an OR for the same exposure-disease link. The pooled estimate is OR = ${f(pooled)} — but its CI only describes uncertainty in the average effect. The 95% prediction interval [${f(piLo)}, ${f(piHi)}] instead answers a different, often more useful question: if a new, similar study were run tomorrow, what range would its true effect plausibly fall in, given how much these ${k} studies already disagree with each other?`;
+      const studyLabel = measure === 'RR' ? 'cohort studies each report a risk ratio' : 'case-control studies each report an odds ratio';
+      return `${k} independent ${studyLabel} for the same exposure-disease link. The pooled estimate is ${measure} = ${f(pooled)} — but its CI only describes uncertainty in the average effect. The 95% prediction interval [${f(piLo)}, ${f(piHi)}] instead answers a different, often more useful question: if a new, similar study were run tomorrow, what range would its true effect plausibly fall in, given how much these ${k} studies already disagree with each other?`;
     },
 
     calculate(values) {
       const { studies, error } = gatherEffectStudies(values);
       if (error) return [err(error)];
-      if (studies.length < 2) return [err('Enter OR/RR and SE for at least 2 studies')];
-      if (studies.some(s => s.effect <= 0)) return [err('Every OR/RR must be greater than 0')];
+      if (studies.length < 2) return [err('Enter an effect estimate and SE for at least 2 studies')];
+      if (studies.some(s => s.effect <= 0)) return [err('Every effect estimate must be greater than 0')];
       if (studies.some(s => s.se <= 0)) return [err('Every study SE must be greater than 0')];
       if (typeof jStat === 'undefined' || !jStat.chisquare || !jStat.studentt)
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
+      const measure = values.measure === 'RR' ? 'RR' : 'OR';
       const k = studies.length;
       const logEst = studies.map(s => Math.log(s.effect));
       const w = studies.map(s => 1 / s.se ** 2);
@@ -6971,7 +6978,7 @@ const CALCULATORS = [
 
       return [
         { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
-        { label: 'Pooled OR/RR (fixed-effect)', value: f(Math.exp(pooledLog)), ci: [f(Math.exp(ciLog[0])), f(Math.exp(ciLog[1]))], isRatio: true, highlight: true },
+        { label: `Pooled ${measure} (fixed-effect)`, value: f(Math.exp(pooledLog)), ci: [f(Math.exp(ciLog[0])), f(Math.exp(ciLog[1]))], isRatio: true, highlight: true },
         { label: "Cochran's Q", value: f(Q), ci: null, isRatio: false },
         { label: 'Degrees of Freedom (df)', value: df, ci: null, isRatio: false },
         { label: 'p-value (heterogeneity test)', value: formatPValue(pQ), ci: null, isRatio: false },
@@ -6979,7 +6986,7 @@ const CALCULATORS = [
         { label: 'τ² (log scale)', value: f(tau2), ci: null, isRatio: false },
         { label: '95% Prediction Interval', value: f(Math.exp(pooledLog)), ci: [f(Math.exp(piLog[0])), f(Math.exp(piLog[1]))], isRatio: true, highlight: true },
         { label: 'Note', isText: true, ci: null, isRatio: false,
-          value: 'The prediction interval reflects where a new study\'s true effect is likely to fall, and is always at least as wide as the confidence interval on the pooled estimate.' },
+          value: `Every study above is treated as reporting an ${measure} — enter all ${k} values on that same measure (never mix OR and RR across studies in one run, since they're different quantities and pooling them together would produce a meaningless result). The prediction interval reflects where a new study's true effect is likely to fall, and is always at least as wide as the confidence interval on the pooled estimate.` },
       ];
     }
   },
@@ -8985,6 +8992,159 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 92. META-ANALYSIS FOR CORRELATIONS ───────────────────────────────────
+     Pools correlation coefficients across studies on the Fisher z scale
+     (the standard approach, since raw r has a variance that depends on
+     r itself, while z's variance depends only on n), using the same
+     inverse-variance / DerSimonian-Laird / Higgins-PI machinery as the
+     main Meta-Analysis calculator — then back-transforms every reported
+     value (tanh) to r for display. Reuses metaForestPlotSVG exactly the
+     way the ratio-scale calculators do: pool on the transformed scale,
+     display on the natural one.                                        */
+  {
+    id:          'meta-analysis-correlations',
+    name:        'Meta-Analysis for Correlations',
+    hint:        'Fisher z pooling · Q, τ², I², PI',
+    category:    'Bayesian & Meta-Analysis',
+    description: 'Pools correlation coefficients across studies using the Fisher z transformation, tests heterogeneity, and computes a prediction interval for the true correlation.',
+
+    formulas: [
+      {
+        label: 'Fisher z Transformation',
+        latex: 'z_i = \\tfrac{1}{2}\\ln\\!\\left(\\dfrac{1+r_i}{1-r_i}\\right), \\qquad SE(z_i) = \\dfrac{1}{\\sqrt{n_i-3}}'
+      },
+      {
+        label: 'Fixed-Effect Pooled z',
+        latex: '\\hat z_{FE} = \\dfrac{\\sum w_i z_i}{\\sum w_i}, \\quad w_i=\\dfrac{1}{SE_i^2}=n_i-3'
+      },
+      {
+        label: "Cochran's Q & I²",
+        latex: 'Q=\\sum w_i(z_i-\\hat z_{FE})^2 \\qquad I^2=\\max\\!\\left(0,\\dfrac{Q-df}{Q}\\right)\\times100\\%'
+      },
+      {
+        label: 'DerSimonian–Laird τ² & Random-Effects Estimate',
+        latex: '\\tau^2=\\max\\!\\left(0,\\dfrac{Q-df}{C}\\right) \\qquad \\hat z_{RE}=\\dfrac{\\sum w_i^{*}z_i}{\\sum w_i^{*}}, \\quad w_i^{*}=\\dfrac{1}{SE_i^2+\\tau^2}'
+      },
+      {
+        label: 'Prediction Interval (Higgins et al., 2009)',
+        latex: 'PI_z=\\hat z_{RE}\\pm t_{k-2,\\,0.975}\\sqrt{\\tau^2+SE_{RE}^2}'
+      },
+      {
+        label: 'Back-Transformation to r',
+        latex: 'r = \\tanh(z) = \\dfrac{e^{2z}-1}{e^{2z}+1}'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Study',
+    groupFields: [
+      { prefix: 'r', label: 'Correlation (r)' },
+      { prefix: 'n', label: 'Sample Size (n)' },
+    ],
+    inputs: [
+      { id: 'r1', label: 'Study 1 Correlation (r)', default: 0.42 },
+      { id: 'n1', label: 'Study 1 Sample Size (n)',  default: 120 },
+      { id: 'r2', label: 'Study 2 Correlation (r)', default: 0.35 },
+      { id: 'n2', label: 'Study 2 Sample Size (n)',  default: 85 },
+      { id: 'r3', label: 'Study 3 Correlation (r)', default: 0.50 },
+      { id: 'n3', label: 'Study 3 Sample Size (n)',  default: 200 },
+      { id: 'r4', label: 'Study 4 Correlation (r) (optional)', default: '' },
+      { id: 'n4', label: 'Study 4 Sample Size (n) (optional)', default: '' },
+      { id: 'r5', label: 'Study 5 Correlation (r) (optional)', default: '' },
+      { id: 'n5', label: 'Study 5 Sample Size (n) (optional)', default: '' },
+      { id: 'r6', label: 'Study 6 Correlation (r) (optional)', default: '' },
+      { id: 'n6', label: 'Study 6 Sample Size (n) (optional)', default: '' },
+    ],
+
+    example(values) {
+      const { studies, error } = gatherCorrelationStudies(values);
+      if (error || studies.length < 2 || typeof jStat === 'undefined' || !jStat.chisquare)
+        return 'Enter a correlation coefficient (r) and sample size (n) for at least 2 studies to see a worked medical example here.';
+      const k = studies.length;
+      const z = studies.map(s => Math.atanh(s.r));
+      const se = studies.map(s => 1 / Math.sqrt(s.n - 3));
+      const w = se.map(s => 1 / s ** 2);
+      const sumW = w.reduce((s, v) => s + v, 0);
+      const pooledFEz = z.reduce((s, v, i) => s + w[i] * v, 0) / sumW;
+      const Q = z.reduce((s, v, i) => s + w[i] * (v - pooledFEz) ** 2, 0);
+      const df = k - 1;
+      const I2 = Q > 0 ? Math.max(0, (Q - df) / Q) * 100 : 0;
+      const heterogeneity = I2 < 25 ? 'low' : I2 < 75 ? 'moderate' : 'high';
+      const f = v => +v.toFixed(2);
+      const pooledR = Math.tanh(pooledFEz);
+      const tail = heterogeneity === 'high'
+        ? 'the studies disagree substantially about the strength of the relationship, so a single pooled r may oversimplify real differences between samples'
+        : 'the studies are reasonably consistent with each other, supporting the pooled estimate';
+      return `${k} independent studies each report a correlation coefficient between the same two variables, measured in samples of different sizes. Pooling on the Fisher z scale gives a fixed-effect estimate of r = ${f(pooledR)} — but I² = ${f(I2)}% shows ${heterogeneity} heterogeneity across the ${k} studies, meaning ${tail}.`;
+    },
+
+    calculate(values) {
+      const { studies: rawStudies, error } = gatherCorrelationStudies(values);
+      if (error) return [err(error)];
+      if (rawStudies.length < 2) return [err('Enter a correlation (r) and sample size (n) for at least 2 studies')];
+      if (typeof jStat === 'undefined' || !jStat.chisquare)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const Z = 1.96;
+      const studies = rawStudies.map(s => ({ label: s.label, effect: Math.atanh(s.r), se: 1 / Math.sqrt(s.n - 3) }));
+      const k = studies.length;
+
+      const w = studies.map(s => 1 / s.se ** 2);
+      const sumW = w.reduce((s, v) => s + v, 0);
+      const pooledFE = studies.reduce((s, st, i) => s + w[i] * st.effect, 0) / sumW;
+      const seFE = Math.sqrt(1 / sumW);
+
+      const Q  = studies.reduce((s, st, i) => s + w[i] * (st.effect - pooledFE) ** 2, 0);
+      const df = k - 1;
+      const pQ = 1 - jStat.chisquare.cdf(Q, df);
+      const I2 = Q > 0 ? Math.max(0, (Q - df) / Q) * 100 : 0;
+
+      const sumW2 = w.reduce((s, v) => s + v ** 2, 0);
+      const C = sumW - sumW2 / sumW;
+      const tau2 = (df > 0 && C > 0) ? Math.max(0, (Q - df) / C) : 0;
+
+      const wStar = studies.map(s => 1 / (s.se ** 2 + tau2));
+      const sumWStar = wStar.reduce((s, v) => s + v, 0);
+      const pooledRE = studies.reduce((s, st, i) => s + wStar[i] * st.effect, 0) / sumWStar;
+      const seRE = Math.sqrt(1 / sumWStar);
+
+      const transform = z => Math.tanh(z);
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const heterogeneity = I2 < 25 ? 'low' : I2 < 75 ? 'moderate' : 'high';
+
+      const rows = [
+        { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
+        { label: 'Fixed-Effect Pooled r', value: f(transform(pooledFE)), ci: [f(transform(pooledFE - Z * seFE)), f(transform(pooledFE + Z * seFE))], isRatio: false, highlight: true },
+        { label: "Cochran's Q (z scale)", value: f(Q), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom (df)', value: df, ci: null, isRatio: false },
+        { label: 'p-value (heterogeneity test)', value: formatPValue(pQ), ci: null, isRatio: false },
+        { label: 'I² (% variance due to heterogeneity)', value: f(I2, 1), ci: null, isRatio: false, highlight: true },
+        { label: 'τ² (DerSimonian–Laird, z scale)', value: f(tau2), ci: null, isRatio: false },
+        { label: 'Random-Effects Pooled r', value: f(transform(pooledRE)), ci: [f(transform(pooledRE - Z * seRE)), f(transform(pooledRE + Z * seRE))], isRatio: false, highlight: true },
+      ];
+
+      let pi = null;
+      if (k >= 3) {
+        const tCrit = jStat.studentt.inv(0.975, k - 2);
+        const piMargin = tCrit * Math.sqrt(tau2 + seRE ** 2);
+        pi = [pooledRE - piMargin, pooledRE + piMargin];
+        rows.push({ label: '95% Prediction Interval', value: f(transform(pooledRE)), ci: [f(transform(pi[0])), f(transform(pi[1]))], isRatio: false, highlight: true });
+      } else {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false, value: 'A prediction interval needs at least 3 studies (df = k − 2 ≥ 1).' });
+      }
+
+      rows.push({
+        label: 'Forest Plot', isSVG: true,
+        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], false, { Q, df, pQ, I2, tau2 }, pi, transform)
+      });
+
+      rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `${heterogeneity[0].toUpperCase()}${heterogeneity.slice(1)} heterogeneity (I² = ${f(I2, 1)}%); Cochran's Q test is ${pQ < 0.05 ? 'significant' : 'not significant'} (${formatPText(pQ)}). Pooling was done on the Fisher z scale and back-transformed to r for every value shown above.` });
+
+      return rows;
+    }
+  },
+
 ];
 
 /* ── HELPERS ─────────────────────────────────────────────────────────── */
@@ -9189,6 +9349,27 @@ function gatherEffectStudies(values, maxStudies = 6) {
     const all = provided(e) && provided(se);
     if (all) studies.push({ label: `Study ${i}`, effect: e, se });
     else if (any) return { error: `Study ${i}: enter both Effect and SE, or leave both blank` };
+  }
+  return { studies };
+}
+
+// Reads r{1..6}/n{1..6} pairs for 'meta-analysis-correlations', same
+// blank-slot convention as gatherEffectStudies() — validates each
+// provided study's r is a proper correlation and n is large enough
+// for the Fisher SE (1/sqrt(n-3)) to be defined.
+function gatherCorrelationStudies(values, maxStudies = 6) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const studies = [];
+  for (let i = 1; i <= maxStudies; i++) {
+    const r = values['r' + i], n = values['n' + i];
+    const any = provided(r) || provided(n);
+    const all = provided(r) && provided(n);
+    if (all) {
+      if (r <= -1 || r >= 1) return { error: `Study ${i}: r must be strictly between -1 and 1` };
+      if (n <= 3) return { error: `Study ${i}: n must be greater than 3 (Fisher's SE requires n − 3 > 0)` };
+      studies.push({ label: `Study ${i}`, r, n });
+    }
+    else if (any) return { error: `Study ${i}: enter both r and n, or leave both blank` };
   }
   return { studies };
 }
@@ -11442,6 +11623,7 @@ const CALCULATOR_INDEX = [
   { id: 'hksj-meta-analysis',      name: 'Hartung-Knapp-Sidik-Jonkman (HKSJ) Method', category: 'Bayesian & Meta-Analysis', description: 'Compares the standard normal-based random-effects confidence interval to the Hartung-Knapp-Sidik-Jonkman adjustment, which is typically wider and more robust, especially with few studies or high heterogeneity.', status: 'available' },
   { id: 'meta-analysis-proportions', name: 'Meta-Analysis for Proportions', category: 'Bayesian & Meta-Analysis', description: 'Pools proportions (e.g., prevalence or event rates) across studies from raw event counts and sample sizes, using a variance-stabilizing transformation (or a one-stage GLMM), then tests heterogeneity and computes a prediction interval.', status: 'available' },
   { id: 'network-meta-analysis',   name: 'Network Meta-Analysis (Indirect & Mixed Comparisons)', category: 'Bayesian & Meta-Analysis', description: 'Combines direct and indirect evidence across three or more named treatments into one connected network, producing a network diagram, a full league table, heterogeneity statistics, and a frequentist treatment ranking.', status: 'available' },
+  { id: 'meta-analysis-correlations', name: 'Meta-Analysis for Correlations', category: 'Bayesian & Meta-Analysis', description: 'Pools correlation coefficients across studies using the Fisher z transformation, tests heterogeneity, and computes a prediction interval for the true correlation.', status: 'available' },
 
   // ── 13. SURVIVAL ANALYSIS ─────────────────────────────────────────────
   { id: 'kaplan-meier',            name: 'Kaplan-Meier Survival Curve',  category: 'Survival Analysis',           description: 'Estimates the probability of surviving past each time point from time-to-event data with censoring, plotting a step curve and reporting median survival time.', status: 'available' },
@@ -11931,9 +12113,11 @@ const WIZARD_TREE = {
     options: [
       { label: 'A single proportion or rate per study (e.g., % of patients with an outcome)', next: 'proportionMetaResult' },
       { label: 'A comparison between groups/treatments per study (mean difference, OR, RR, etc.)', next: 'comparisonMetaGoal' },
+      { label: 'A correlation coefficient per study (association between two continuous variables)', next: 'correlationMetaResult' },
     ]
   },
   proportionMetaResult: { results: [ { id: 'meta-analysis-proportions', why: 'Pools raw event counts and totals into an overall proportion, using a variance-stabilizing transform so studies with 0% or 100% events are handled cleanly.' } ] },
+  correlationMetaResult: { results: [ { id: 'meta-analysis-correlations', why: 'Pools correlation coefficients on the Fisher z scale, tests heterogeneity, and computes a prediction interval for the true correlation.' } ] },
 
   comparisonMetaGoal: {
     question: 'How many treatments/interventions are involved?',
@@ -12081,6 +12265,7 @@ const SEARCH_KEYWORDS = {
   'hksj-meta-analysis': ['hartung-knapp', 'hartung knapp sidik jonkman', 'hksj', 'knapp-hartung', 'sidik-jonkman', 'refined variance random effects', 't-distribution meta-analysis', 'wider confidence interval meta-analysis'],
   'meta-analysis-proportions': ['meta-analysis for proportions', 'pooled prevalence', 'pooled proportion', 'pooled event rate', 'arcsine transformation', 'freeman-tukey', 'logit transformation proportion', 'prevalence meta-analysis', 'pooling percentages', 'glmm meta-analysis', 'generalized linear mixed model', 'binomial-normal model', 'one-stage meta-analysis', 'logit glmm'],
   'network-meta-analysis': ['network meta-analysis', 'nma', 'indirect comparison', 'mixed treatment comparison', 'bucher method', 'league table', 'multiple treatments comparison', 'p-score', 'sucra', 'ranking treatments', 'network diagram', 'network graph', 'network plot', 'evidence web', 'network geometry'],
+  'meta-analysis-correlations': ['meta-analysis for correlations', 'pooled correlation', 'pooled r', 'fisher z transformation', 'pooling correlation coefficients', 'combine correlations across studies', 'correlation meta-analysis prediction interval'],
 
   // Survival Analysis
   'kaplan-meier':  ['kaplan-meier curve', 'survival curve', 'time to event data', 'censored data'],
@@ -13019,6 +13204,17 @@ const NOTATION = {
     { symbol: 'P_i', meaning: "Treatment i's P-score — the average probability it beats each other treatment, given the fitted effects and their uncertainty." },
     { symbol: '\\Phi', meaning: 'Standard normal CDF, converting a standardized treatment difference into a probability of being better.' },
   ],
+  'meta-analysis-correlations': [
+    { symbol: 'r_i,\\ n_i', meaning: "Study i's own entered correlation coefficient and sample size." },
+    { symbol: 'z_i', meaning: "Study i's Fisher z-transformed correlation — stabilizes the variance so it depends only on n_i, not on r_i itself." },
+    { symbol: 'SE_i', meaning: "Study i's standard error on the z scale, 1/√(n_i−3)." },
+    { symbol: 'w_i', meaning: 'Fixed-effect weight for study i on the z scale, equal to 1/SE_i² = n_i − 3.' },
+    { symbol: 'Q', meaning: "Cochran's Q on the z scale — tests heterogeneity across studies' correlations." },
+    { symbol: '\\tau^2', meaning: 'DerSimonian–Laird between-study variance on the z scale, used in the random-effects model.' },
+    { symbol: '\\hat z_{FE},\\ \\hat z_{RE}', meaning: 'Fixed-effect and random-effects pooled estimates on the z scale, back-transformed to r for reporting.' },
+    { symbol: '\\hat r', meaning: 'The back-transformed pooled correlation, tanh(ẑ).' },
+    { symbol: 'PI_z', meaning: "The 95% prediction interval for a new study's true correlation, computed on the z scale then back-transformed to r." },
+  ],
 
   // Survival Analysis
   'kaplan-meier': [
@@ -13352,6 +13548,234 @@ const GUIDES = [
     ],
     related: [
       { id: 'equivalence-test', why: 'Runs the two one-sided tests (TOST) procedure and draws the zone plot shown above.' },
+    ],
+  },
+
+  {
+    id: 'data-nominal',
+    category: 'Data Types',
+    title: 'Nominal Data',
+    blurb: 'Categories with no inherent order — the base case for categorical data, and the tests built for it.',
+    dek: `Nominal data sorts observations into named categories where no category outranks another. It's the most basic level of measurement, and the floor every categorical test in this app is built on.`,
+    sections: [
+      {
+        heading: 'Definition',
+        html: `<p>A nominal variable assigns each observation to one of several mutually exclusive, unordered categories. "Unordered" is the key word: there's no meaningful sense in which one category is higher, better, or "more" than another &mdash; they're just different labels.</p>`,
+      },
+      {
+        heading: 'Key features',
+        html: `<p>Categories must be exhaustive (every observation fits somewhere) and mutually exclusive (no observation fits two places). The only things you can meaningfully compute are counts and proportions &mdash; a mean, median, or SD of a nominal variable is meaningless, even when the categories happen to be coded as numbers (e.g., 1 = male, 2 = female is still nominal; averaging "1.6" means nothing).</p>
+          <p>When a nominal variable happens to have exactly two categories, it becomes <strong>binary data</strong> &mdash; common enough in medicine that it gets its own guide, since it unlocks proportion-specific tools like risk ratios and odds ratios.</p>`,
+      },
+      {
+        heading: 'Examples',
+        html: `<p>Blood type (A, B, AB, O); marital status; surgical complication type; ethnicity; which of several treatment arms a patient was assigned to; primary tumor site.</p>`,
+      },
+      {
+        heading: 'Appropriate statistics (in this app)',
+        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
+      },
+    ],
+    related: [
+      { id: 'chi-square-2x2', why: 'Tests association between two nominal variables in a 2×2 table.' },
+      { id: 'fishers-exact', why: 'Exact alternative to Chi-Square for small-sample 2×2 tables.' },
+      { id: 'cramers-v', why: 'Strength of association for nominal tables larger than 2×2.' },
+      { id: 'cohens-kappa', why: 'Chance-corrected agreement between two raters on categorical classifications.' },
+      { id: 'mcnemars-test', why: 'Tests paired/matched nominal data, such as before-and-after classification of the same subjects.' },
+    ],
+  },
+
+  {
+    id: 'data-ordinal',
+    category: 'Data Types',
+    title: 'Ordinal Data',
+    blurb: 'Categories with a meaningful order, but no fixed distance between them.',
+    dek: `Ordinal data ranks observations from lowest to highest, but the gap between adjacent ranks isn't guaranteed to be equal &mdash; the jump from "mild" to "moderate" pain isn't necessarily the same size as "moderate" to "severe."`,
+    sections: [
+      {
+        heading: 'Definition',
+        html: `<p>An ordinal variable's categories have a real, meaningful order, but the intervals between them aren't necessarily equal, and often aren't even defined numerically at all.</p>`,
+      },
+      {
+        heading: 'Key features',
+        html: `<p>Because the spacing between categories is undefined, arithmetic operations like the mean are questionable &mdash; a "3" isn't necessarily exactly twice a "1.5" of anything. The <strong>median</strong> and percentiles remain valid, since they only rely on order, not distance. This is why ordinal data is usually analyzed with rank-based (non-parametric) methods rather than the mean/SD-based methods used for continuous data.</p>`,
+      },
+      {
+        heading: 'Examples',
+        html: `<p>Cancer stage (I&ndash;IV); ASA physical status classification; a 5-point Likert satisfaction scale; tumor grade; a categorical pain rating (none/mild/moderate/severe).</p>`,
+      },
+      {
+        heading: 'Appropriate statistics (in this app)',
+        html: `<p>Comparing two independent groups: <strong>Mann-Whitney U Test</strong>. Comparing two paired/matched groups: <strong>Wilcoxon Signed-Rank Test</strong>. Comparing three or more independent groups: <strong>Kruskal-Wallis Test</strong>. Comparing three or more paired/repeated groups: <strong>Friedman Test</strong>. Association between two ordinal variables: <strong>Spearman's Rank Correlation</strong> or <strong>Kendall's &tau;</strong>. Agreement between two raters' ordinal ratings, weighting near-misses less than large disagreements: <strong>Weighted Kappa</strong>.</p>`,
+      },
+    ],
+    related: [
+      { id: 'mann-whitney', why: 'Compares an ordinal (or non-normal continuous) outcome between two independent groups.' },
+      { id: 'wilcoxon-signed-rank', why: 'Paired-sample counterpart to the Mann-Whitney U Test.' },
+      { id: 'kruskal-wallis', why: 'Extends the same idea to three or more independent groups.' },
+      { id: 'spearman-rho', why: "Measures monotonic association between two ranked/ordinal variables." },
+      { id: 'weighted-kappa', why: 'Inter-rater agreement for ordinal ratings, penalizing large disagreements more than near-misses.' },
+    ],
+  },
+
+  {
+    id: 'data-binary',
+    category: 'Data Types',
+    title: 'Binary / Dichotomous Data',
+    blurb: 'The two-category special case that shows up constantly in medicine — and unlocks its own set of tools (risk ratios, odds ratios, proportions).',
+    dek: `Binary data is nominal data with exactly two categories &mdash; common enough in medicine (alive/dead, cured/not, exposed/unexposed) that it gets its own toolkit, built around proportions rather than raw counts.`,
+    sections: [
+      {
+        heading: 'Definition',
+        html: `<p>A binary (dichotomous) variable has exactly two possible values &mdash; often coded as "event occurred" vs. "event didn't occur." It's technically a special case of nominal data, but the two-category structure unlocks a whole family of methods that don't apply to nominal data with three or more categories.</p>`,
+      },
+      {
+        heading: 'Key features',
+        html: `<p>A binary variable is fully summarized by a single number: the <strong>proportion</strong> (p) of observations in one of the two categories. That proportion has its own standard error formula, distinct from the SEM used for continuous data. Comparing two binary variables' proportions can be expressed several different ways &mdash; a risk difference, a risk ratio, or an odds ratio &mdash; and these can tell very different clinical stories even from the identical underlying data.</p>`,
+      },
+      {
+        heading: 'Examples',
+        html: `<p>Mortality (alive/dead); disease status (positive/negative); treatment response (responder/non-responder); presence of a specific complication (yes/no); smoking status (smoker/non-smoker).</p>`,
+      },
+      {
+        heading: 'Appropriate statistics (in this app)',
+        html: `<p>Describing one proportion: <strong>Standard Error of a Proportion</strong>, <strong>Confidence Interval for a Proportion</strong>. Testing one proportion against a hypothesized value: <strong>z-Test Proportions (1-Sample)</strong>. Comparing two independent proportions: <strong>z-Test Proportions (2-Sample)</strong>, <strong>Chi-Square 2&times;2</strong>, or <strong>Fisher's Exact Test</strong> for small samples. Quantifying that comparison clinically: <strong>Measures of Association</strong> (risk difference, RR, OR). Predicting a binary outcome from other variables: <strong>Logistic Regression</strong>. Comparing paired binary measurements (e.g. before/after on the same subjects): <strong>McNemar's Test</strong>.</p>`,
+      },
+    ],
+    related: [
+      { id: 'se-proportion', why: 'Standard error of a single sample proportion — the building block for every test below.' },
+      { id: 'z-test-prop-2samp', why: 'Tests whether two independent proportions differ.' },
+      { id: 'measures-of-association', why: 'Expresses the difference between two proportions as AR, RR, or OR with 95% CIs.' },
+      { id: 'logistic-regression', why: 'Models a binary outcome as a function of one or more predictors.' },
+      { id: 'mcnemars-test', why: 'Compares paired binary measurements on the same subjects (e.g. before vs. after).' },
+    ],
+  },
+
+  {
+    id: 'data-discrete-count',
+    category: 'Data Types',
+    title: 'Discrete Count Data',
+    blurb: 'Whole-number counts of events, often over time or exposure — why they need Poisson-style models instead of a plain mean and SD.',
+    dek: `Count data tallies how many times something happened &mdash; falls, relapses, ED visits &mdash; and its lopsided, non-negative shape is exactly why it needs its own distributions rather than a normal-curve approximation.`,
+    sections: [
+      {
+        heading: 'Definition',
+        html: `<p>Discrete count data records the number of times an event occurs, usually over a fixed period of time or amount of exposure &mdash; always a non-negative whole number (0, 1, 2, ...).</p>`,
+      },
+      {
+        heading: 'Key features',
+        html: `<p>Counts are frequently right-skewed: most subjects have zero or a low count, a few have much higher counts, and there's a hard floor at zero. Critically, the <strong>variance often scales with the mean</strong> rather than staying constant &mdash; the opposite of the constant-variance assumption behind the normal distribution &mdash; which is exactly why count data gets modeled with the Poisson (or, when the variance grows faster than the mean, negative binomial) distribution instead of a t-test or ANOVA.</p>`,
+      },
+      {
+        heading: 'Examples',
+        html: `<p>Number of seizures per month; number of postoperative complications; number of hospital readmissions in a year; number of new caries lesions per patient at annual exam; number of falls among nursing home residents.</p>`,
+      },
+      {
+        heading: 'Appropriate statistics (in this app)',
+        html: `<p>Modeling the probability of observing a given count: <strong>Poisson & Negative Binomial</strong>. When counts are expressed relative to exposure time (e.g. events per 100 patient-years): <strong>Incidence Rate & Rate Ratio</strong>, with <strong>Standard Error of a Rate</strong> and <strong>Standard Error of a Rate Ratio</strong> quantifying the precision of each.</p>`,
+      },
+    ],
+    related: [
+      { id: 'poisson-negbinom', why: 'Computes Poisson and negative binomial probabilities for a given count.' },
+      { id: 'incidence-rate', why: 'Converts counts and person-time into an incidence rate and rate ratio.' },
+      { id: 'se-rate', why: 'Standard error of a single incidence rate.' },
+      { id: 'se-rate-ratio', why: 'Standard error of the ratio of two incidence rates.' },
+    ],
+  },
+
+  {
+    id: 'data-continuous',
+    category: 'Data Types',
+    title: 'Continuous Data (Interval & Ratio)',
+    blurb: 'The most flexible level of measurement, and the one behind t-tests, ANOVA, correlation, and regression.',
+    dek: `Continuous data can take any value along a range, including fractions &mdash; and splits into two flavors, interval and ratio, depending on whether zero means "none" or is just an arbitrary reference point.`,
+    sections: [
+      {
+        heading: 'Definition',
+        html: `<p><strong>Interval</strong> data is measured on a continuum with equal spacing between units, but an arbitrary zero point &mdash; 0&deg;C doesn't mean "no temperature." <strong>Ratio</strong> data adds a true, meaningful zero, where zero really does mean "none" &mdash; 0 kg means no weight at all. Both are grouped together here because, in practice, this distinction rarely changes which statistical test you'd reach for.</p>`,
+      },
+      {
+        heading: 'Key features',
+        html: `<p>Continuous data supports the full range of arithmetic &mdash; means, standard deviations, and differences are all meaningful &mdash; which is why it supports the widest range of statistical tests of any data type. The interval/ratio distinction mainly matters for specific operations that need a true zero, like computing a percentage change or a ratio of two values (a ratio of two Celsius temperatures is meaningless; a ratio of two weights is fine).</p>`,
+      },
+      {
+        heading: 'Examples',
+        html: `<p>Ratio: blood pressure, weight, height, hemoglobin A1c, time. Interval: body temperature in &deg;C or &deg;F, calendar year, standardized test scores.</p>`,
+      },
+      {
+        heading: 'Appropriate statistics (in this app)',
+        html: `<p>Comparing a sample mean to a known value: <strong>1-Sample t-Test</strong>. Comparing two independent groups: <strong>Unpaired t-Test (Welch's)</strong>. Comparing two paired/matched measurements: <strong>Paired t-Test</strong>. Comparing three or more groups: <strong>1-Way ANOVA</strong> (independent groups) or <strong>Repeated Measures ANOVA</strong> (same subjects). Relationship between two continuous variables: <strong>Pearson's Correlation</strong>, <strong>Simple</strong> or <strong>Multiple Linear Regression</strong>. Standardized effect size for a mean difference: <strong>Cohen's d</strong>.</p>`,
+      },
+    ],
+    related: [
+      { id: 'unpaired-t-test', why: 'Compares means between two independent continuous samples.' },
+      { id: 'paired-t-test', why: 'Compares means between two paired/matched continuous measurements.' },
+      { id: 'anova-1way', why: 'Extends the two-group comparison to three or more independent groups.' },
+      { id: 'pearson-r', why: 'Measures the linear relationship between two continuous variables.' },
+      { id: 'simple-regression', why: 'Fits a line predicting one continuous variable from another.' },
+      { id: 'cohens-d', why: 'Standardized effect size for the difference between two means.' },
+    ],
+  },
+
+  {
+    id: 'data-paired-independent',
+    category: 'Data Types',
+    title: 'Paired/Matched vs. Independent Samples',
+    blurb: 'Not a data type — a study-design distinction that determines which half of nearly every test family you need.',
+    dek: `This isn't about what kind of data you have, but how it was collected &mdash; and getting it wrong (using an independent-samples test on paired data, or vice versa) gives you the wrong answer even when everything else about the analysis is correct.`,
+    sections: [
+      {
+        heading: 'Definition',
+        html: `<p><strong>Paired</strong> (or matched) data links two measurements to the same underlying unit &mdash; the same patient measured before and after, or two subjects deliberately matched on age/sex/disease severity. <strong>Independent</strong> data comes from two separate groups of unrelated subjects, with no such link between any specific pair of observations.</p>`,
+      },
+      {
+        heading: 'Key features',
+        html: `<p>Pairing removes between-subject variability from the comparison &mdash; each subject serves as their own control &mdash; which generally gives more statistical power than an independent-groups design of the same size. But this only works if the analysis actually uses the pairing: a paired test looks at the <em>differences within each pair</em>, while an independent test only ever looks at the two groups' overall summaries. Running the wrong one doesn't just lose power &mdash; it can produce an invalid p-value.</p>`,
+      },
+      {
+        heading: 'Examples',
+        html: `<p>Paired: blood pressure in the same patients before and after a drug; a matched case-control study. Independent: blood pressure compared between a drug group and a placebo group made up of different patients.</p>`,
+      },
+      {
+        heading: 'Appropriate statistics (in this app)',
+        html: `<p>Continuous outcome: <strong>Paired t-Test</strong> vs. <strong>Unpaired t-Test (Welch's)</strong>. Ordinal or non-normal outcome: <strong>Wilcoxon Signed-Rank Test</strong> vs. <strong>Mann-Whitney U Test</strong>. Binary/nominal outcome: <strong>McNemar's Test</strong> vs. <strong>Chi-Square 2&times;2</strong>. Three or more groups: <strong>Repeated Measures ANOVA</strong>/<strong>Friedman Test</strong> vs. <strong>1-Way ANOVA</strong>/<strong>Kruskal-Wallis Test</strong>.</p>`,
+      },
+    ],
+    related: [
+      { id: 'paired-t-test', why: 'The paired-design counterpart to the unpaired t-test, for continuous outcomes.' },
+      { id: 'unpaired-t-test', why: 'The independent-groups counterpart to the paired t-test.' },
+      { id: 'wilcoxon-signed-rank', why: 'Paired-design counterpart to the Mann-Whitney U Test, for ordinal/non-normal outcomes.' },
+      { id: 'mcnemars-test', why: 'Paired-design counterpart to Chi-Square 2×2, for binary/nominal outcomes.' },
+    ],
+  },
+
+  {
+    id: 'data-time-to-event',
+    category: 'Data Types',
+    title: 'Time-to-Event (Survival) Data',
+    blurb: 'Data with a censoring problem: some subjects never experience the event during follow-up, and that has to be handled, not ignored.',
+    dek: `Time-to-event data tracks how long until something happens &mdash; relapse, death, healing &mdash; but the defining wrinkle is censoring: some subjects leave the study, or the study ends, before the event ever occurs for them.`,
+    sections: [
+      {
+        heading: 'Definition',
+        html: `<p>Time-to-event (survival) data measures the duration until a defined event occurs. What sets it apart from ordinary continuous data is <strong>censoring</strong>: for some subjects, the event hadn't happened by the time follow-up ended, so their true time-to-event is only known to be "at least this long," not exact.</p>`,
+      },
+      {
+        heading: 'Key features',
+        html: `<p>A censored observation is not the same as a missing one &mdash; it still carries real information (the subject was event-free for at least that long), and simply discarding censored subjects or averaging only the observed times introduces bias. This is why survival data needs purpose-built methods that account for censoring directly, rather than a plain mean/SD or an ordinary t-test.</p>`,
+      },
+      {
+        heading: 'Examples',
+        html: `<p>Time to relapse after chemotherapy; time to dental implant failure; time to wound healing after a procedure; time to hospital readmission; time to loss of a filling.</p>`,
+      },
+      {
+        heading: 'Appropriate statistics (in this app)',
+        html: `<p>Estimating the probability of remaining event-free over time, accounting for censoring: <strong>Kaplan-Meier Survival Curve</strong>. Comparing survival between two groups: <strong>Log-Rank Test</strong>.</p>`,
+      },
+    ],
+    related: [
+      { id: 'kaplan-meier', why: 'Estimates the survival curve and median survival time from censored time-to-event data.' },
+      { id: 'log-rank-test', why: 'Tests whether survival differs between two groups.' },
     ],
   },
 
