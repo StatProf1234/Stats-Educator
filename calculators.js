@@ -14576,6 +14576,74 @@ const GUIDES = [
   },
 
   {
+    id: 'reading-kaplan-meier-cox',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read Kaplan-Meier Curves & Cox Proportional Hazards Output',
+    blurb: 'What the step-drops and censoring ticks mean, how the median survival time is read off the curve, and how the Cox hazard ratio quantifies what the Log-Rank Test only tells you yes/no.',
+    dek: `A Kaplan-Meier curve shows how a group's event-free probability changes over time despite incomplete follow-up on some subjects. The Log-Rank Test asks whether two such curves differ; Cox regression puts a number on how much.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 220" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example Kaplan-Meier survival curve">
+  <line x1="40" y1="16" x2="544" y2="16" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="34" y="19" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">1.00</text>
+  <line x1="40" y1="58.5" x2="544" y2="58.5" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="34" y="61.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.75</text>
+  <line x1="40" y1="101" x2="544" y2="101" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="34" y="104" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.50</text>
+  <line x1="40" y1="143.5" x2="544" y2="143.5" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="34" y="146.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.25</text>
+  <line x1="40" y1="186" x2="544" y2="186" stroke="#CDD2E0" stroke-width="1.5"/>
+  <text x="34" y="189" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.00</text>
+  <line x1="371.2" y1="101" x2="371.2" y2="186" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <line x1="40" y1="101" x2="371.2" y2="101" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <polyline points="40,16 126.4,16 126.4,33 169.6,33 184,33 184,58.5 270.4,58.5 284.8,58.5 371.2,58.5 371.2,126.5 400,126.5 500.8,126.5 544,126.5" fill="none" stroke="#4E6EDB" stroke-width="2.2"/>
+  <line x1="169.6" y1="28" x2="169.6" y2="38" stroke="#E07B2C" stroke-width="1.5"/>
+  <line x1="284.8" y1="53.5" x2="284.8" y2="63.5" stroke="#E07B2C" stroke-width="1.5"/>
+  <line x1="400" y1="121.5" x2="400" y2="131.5" stroke="#E07B2C" stroke-width="1.5"/>
+  <line x1="500.8" y1="121.5" x2="500.8" y2="131.5" stroke="#E07B2C" stroke-width="1.5"/>
+  <circle cx="371.2" cy="101" r="3.2" fill="#E0527C"/>
+  <text x="378" y="98" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="600" fill="#E0527C">median = 23</text>
+  <text x="0" y="14" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#7B8099">Ŝ(t)</text>
+  <text x="292" y="212" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#7B8099">time</text>
+</svg>`,
+    figureCaption: `Three event-driven step-downs, four censoring ticks, and the median survival time where the curve first crosses 0.50.`,
+    legend: [
+      { swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB;height:3px;', text: `Blue step curve &mdash; <strong>Ŝ(t)</strong>, the estimated probability of still being event-free at time t. It only ever steps <em>down</em>, and only at a time an event actually occurred.` },
+      { swatchSvg: `<svg width="12" height="12" viewBox="0 0 12 12"><line x1="6" y1="1" x2="6" y2="11" stroke="#E07B2C" stroke-width="1.5"/></svg>`, text: `Orange tick &mdash; a <strong>censored</strong> subject at that time (lost to follow-up, or the study ended) &mdash; leaves a mark on the curve but causes no drop.` },
+      { swatchSvg: `<svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.2" fill="#E0527C"/></svg>`, text: `Dashed guide lines meeting at a point &mdash; the <strong>median survival time</strong>: the first time Ŝ(t) is at or below 0.50.` },
+    ],
+    sections: [
+      {
+        heading: 'What Ŝ(t) actually tracks',
+        html: `<p>The curve starts at Ŝ(t) = 1 (everyone event-free at time zero) and only ever moves downward, never up. Each drop happens at an observed event time and has size d<sub>i</sub>/n<sub>i</sub> &mdash; the number of events at that time, divided by the number of subjects still at risk (the <strong>risk set</strong>) at that moment. That's why drops get visually larger later in follow-up even for the same number of events: the risk set has shrunk (from earlier events <em>and</em> censoring), so each remaining event represents a bigger fraction of who's left.</p>`,
+      },
+      {
+        heading: 'Steps vs. ticks: the two things that can happen at a given time',
+        html: `<p>An <strong>event</strong> (the thing being measured &mdash; death, relapse, failure) causes a step down. <strong>Censoring</strong> &mdash; a subject who left the study, or reached the end of follow-up, before the event ever happened to them &mdash; leaves a tick mark on the curve at that time but causes no drop at all. This is the entire reason Kaplan-Meier exists rather than just averaging observed times directly: a censored subject's true event time is unknown, only bounded ("at least this long"), and simply discarding them or treating their last-known time as their event time would bias the curve. Kaplan-Meier keeps them in the risk set for every time point up to their censoring time, then removes them from the risk set (without counting an event) exactly at that time.</p>`,
+      },
+      {
+        heading: 'Median survival time, and why it sometimes reads "Not reached"',
+        html: `<p>Median survival is simply the first time at which Ŝ(t) drops to 0.50 or below &mdash; read directly off the step, not interpolated between points. If the curve never reaches 0.50 within the observed follow-up (more than half the group is still event-free at the last time point, whether that subject had an event or was censored), the median is undefined and this app reports it as <strong>"Not reached"</strong> rather than guessing at a number the data can't actually support. This is normal, especially with a lot of censoring or a short follow-up window, and is itself informative: it tells you most of the group made it to the end of the study without the event.</p>`,
+      },
+      {
+        heading: 'Comparing two curves: the Log-Rank Test',
+        html: `<p>The <strong>Log-Rank Test</strong> overlays two Kaplan-Meier curves (same visual grammar as above, one color per group) and tests whether they differ. Critically, it does not just compare the curves at one time point or eyeball the visual gap &mdash; it compares the observed vs. expected number of events in one group, summed across <em>every</em> distinct event time in the combined data, given how many of each group remain at risk at that moment. Two curves can look visually separated at some point in the middle of follow-up and still not differ significantly overall (if that gap doesn't hold up across enough event times), and conversely can cross once or twice and still be significantly different in total.</p>`,
+      },
+      {
+        heading: 'From "do they differ" to "by how much": the Cox hazard ratio',
+        html: `<p>The Log-Rank Test only answers yes/no. <strong>Cox Proportional Hazards</strong> regression puts a number on the difference: the hazard ratio, HR = e<sup>β</sup>, is how many times higher (or lower) one group's instantaneous event rate is compared to the other's, at any given moment &mdash; assuming that ratio stays constant over the whole follow-up period (the <strong>proportional hazards assumption</strong>). Because HR is a ratio measure, this app reports it with the same forest-plot-style row used for RR/OR elsewhere &mdash; see <a href="#learn/reading-forest-plots">How to Read a Forest Plot</a> for how to read that log-scale confidence interval and its null = 1 reference line.</p>`,
+      },
+      {
+        heading: 'A visual check on the proportional-hazards assumption',
+        html: `<p>Cox regression's HR is only a faithful one-number summary if the two curves stay a roughly constant "distance apart" (on the hazard scale) throughout follow-up. Two Kaplan-Meier curves that cross once and stay separated afterward are consistent with that assumption; curves that cross back and forth repeatedly, or start together and only diverge late, are a visual warning sign that a single hazard ratio may be averaging over two genuinely different time-varying relationships &mdash; worth noting even though this app's Cox calculator, like a standard univariate Cox fit, doesn't test that assumption directly.</p>`,
+      },
+    ],
+    related: [
+      { id: 'kaplan-meier', why: 'Draws the single-group step curve, censoring ticks, and median survival time described above.' },
+      { id: 'log-rank-test', why: 'Overlays two Kaplan-Meier curves and tests whether they differ.' },
+      { id: 'cox-ph', why: 'Quantifies that difference as a hazard ratio with a 95% CI, shown as a forest-plot row.' },
+    ],
+  },
+
+  {
     id: 'appraisal-effect-measures',
     category: 'Critical Appraisal of the Literature',
     title: 'Understanding Effect Measures: Relative Risk, Odds Ratio, and Absolute Effects',
