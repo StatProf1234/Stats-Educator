@@ -84,6 +84,14 @@ const expandedCategories = new Set();
 // ones a user has manually collapsed.
 const collapsedHomeCategories = new Set();
 
+// Same idea again, but for the Learn hub's three category sections
+// (Data Types / Reading and Understanding Graphs / Critical Appraisal
+// of the Literature) — tracked separately from collapsedHomeCategories,
+// and inverted: the Learn hub defaults CLOSED (like the sidebar's
+// expandedCategories) rather than open (like the Full Calculator
+// Index), so this Set holds categories the user has explicitly opened.
+const expandedLearnCategories = new Set();
+
 function applyActiveState() {
   const id = location.hash.slice(1);
   document.querySelectorAll('.nav-item').forEach(el => {
@@ -397,9 +405,18 @@ function renderLearnHub() {
         <div class="home-card-name">${esc(g.title)}</div>
         <div class="home-card-desc">${esc(g.blurb)}</div>
       </a>`).join('');
+
+    const isOpen = expandedLearnCategories.has(cat);
+
     return `
-      <div id="learn-cat-${slugify(cat)}">
-        <h2 class="guide-section-title">${esc(cat)} <span class="guide-section-count">${guides.length} guide${guides.length === 1 ? '' : 's'}</span></h2>
+      <div class="home-section${isOpen ? '' : ' collapsed'}" data-cat="${esc(cat)}" id="learn-cat-${slugify(cat)}">
+        <h2 class="home-section-heading">
+          <button type="button" class="home-section-header${isOpen ? ' open' : ''}" aria-expanded="${isOpen}">
+            <span class="home-section-chevron">▸</span>
+            <span class="home-section-title">${esc(cat)}</span>
+            <span class="home-section-count">${guides.length} guide${guides.length === 1 ? '' : 's'}</span>
+          </button>
+        </h2>
         <div class="home-cards">${cards}</div>
       </div>`;
   }).join('');
@@ -407,16 +424,35 @@ function renderLearnHub() {
   view().innerHTML = `
     <div class="home-eyebrow">Statistical Calculator Library</div>
     <h1 class="home-title">Learn</h1>
-    <p class="home-desc">Reference guides for using this site well — how to read the charts these calculators produce, and how to recognize the kind of data you're working with.</p>
+    <p class="home-desc">Reference guides for using this site well — how to recognize the kind of data you're working with, how to read the charts these calculators produce, and how to critically appraise the studies you're applying them to.</p>
     ${jumpNav}
     ${sections}
   `;
 
   document.querySelectorAll('.learn-jump-pill').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.getElementById(btn.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const target = document.getElementById(btn.dataset.target);
+      // Expand the section first if it's currently collapsed — scrolling
+      // to a collapsed section would just land on its header with no
+      // cards visible underneath, defeating the point of the jump link.
+      const header = target?.querySelector('.home-section-header');
+      if (header && !header.classList.contains('open')) header.click();
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
+
+  document.querySelectorAll('.home-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const section = header.closest('.home-section');
+      const cat = section.dataset.cat;
+      const nowOpen = !header.classList.contains('open');
+      nowOpen ? expandedLearnCategories.add(cat) : expandedLearnCategories.delete(cat);
+      header.classList.toggle('open', nowOpen);
+      header.setAttribute('aria-expanded', String(nowOpen));
+      section.classList.toggle('collapsed', !nowOpen);
+    });
+  });
+
   document.getElementById('main').scrollTop = 0;
 }
 
@@ -448,8 +484,10 @@ function renderGuide(guide) {
     : guide.legend ? `<ul class="guide-legend">${guide.legend.map(legendItem).join('')}</ul>` : '';
 
   const sectionsHtml = (guide.sections || []).map(s => `
-    <h2 class="guide-section-title">${esc(s.heading)}</h2>
-    <div class="guide-body">${s.html}</div>
+    <details class="guide-accordion-item">
+      <summary class="guide-accordion-header">${esc(s.heading)}</summary>
+      <div class="guide-body guide-accordion-body">${s.html}</div>
+    </details>
   `).join('');
 
   const relatedHtml = (guide.related || []).map(r => {
@@ -473,7 +511,7 @@ function renderGuide(guide) {
       ${guide.figureCaption ? `<div class="guide-figure-caption">${guide.figureCaption}</div>` : ''}
       ${legendHtml}
     </div>` : ''}
-    ${sectionsHtml}
+    <div class="guide-accordion">${sectionsHtml}</div>
     ${relatedHtml ? `
       <h2 class="guide-section-title">Related Calculators</h2>
       <div class="wizard-results">${relatedHtml}</div>

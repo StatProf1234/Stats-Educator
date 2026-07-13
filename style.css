@@ -78,6 +78,14 @@ body {
 }
 .sidebar-brand:hover .brand-name { color: #FFFFFF; }
 
+.sidebar-footer {
+  margin-top: auto;
+  padding: 14px 16px;
+  border-top: 1px solid var(--sidebar-border);
+  font-size: 11px;
+  color: var(--sidebar-muted);
+}
+
 .brand-abbr {
   display: block;
   font-family: var(--font-display);
@@ -874,6 +882,68 @@ body {
 
 .guide-section-title .guide-section-count {
   margin-left: 4px;
+}
+
+/* ── GUIDE SECTION ACCORDION ────────────────────────── */
+/* Each guide's prose sections collapse behind their heading, using
+   native <details>/<summary> — same technique as .example-block
+   below, just sized up to full section-heading typography instead
+   of the small uppercase "Medical Example" label. No JS needed:
+   the browser handles open/closed state and toggling for free. */
+
+.guide-accordion {
+  margin-top: 28px;
+}
+
+.guide-accordion-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.guide-accordion-item:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.guide-accordion-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 4px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color .12s;
+}
+
+.guide-accordion-header::-webkit-details-marker { display: none; }
+
+.guide-accordion-header::before {
+  content: '▸';
+  display: inline-block;
+  flex: 0 0 auto;
+  font-size: 14px;
+  color: var(--accent);
+  transition: transform .15s;
+}
+
+.guide-accordion-item[open] .guide-accordion-header::before {
+  transform: rotate(90deg);
+}
+
+.guide-accordion-header:hover {
+  color: var(--accent);
+}
+
+.guide-accordion-body {
+  padding: 0 4px 22px 24px;
+}
+
+.guide-accordion-body p:last-child {
+  margin-bottom: 0;
 }
 
 .guide-figure-caption {

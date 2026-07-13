@@ -2602,6 +2602,95 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 29b. LEVENE'S TEST (BROWN-FORSYTHE) ────────────────────────────────
+     Tests the equal-variance assumption behind 1-Way ANOVA and the
+     pooled-variance t-test — i.e. it's a PRECONDITION check, not a
+     test of the means themselves. Uses the Brown-Forsythe variant
+     (absolute deviations from each group's MEDIAN, not its mean),
+     which is the standard robust default since it holds up much
+     better than the original Levene formulation when the underlying
+     data is skewed. Mechanically: transform each observation to
+     z_ij = |x_ij − median_i|, then simply run a 1-way ANOVA F-test on
+     the z's instead of the raw values — a large F means the groups'
+     spreads (not their centers) differ.                             */
+  {
+    id:          'levenes-test',
+    name:        "Levene's Test (Brown-Forsythe)",
+    hint:        'W = F-statistic on |xᵢⱼ − medianᵢ|',
+    category:    'ANOVA',
+    description: "Tests whether two or more groups have equal variances — the assumption behind ANOVA and the pooled-variance t-test.",
+
+    formulas: [
+      {
+        label: 'Absolute Deviations from Group Median',
+        latex: 'z_{ij} = |x_{ij} - \\widetilde{x}_i|'
+      },
+      {
+        label: "Levene's Statistic (as a 1-way ANOVA F-test on zᵢⱼ)",
+        latex: 'W = \\dfrac{MS_B(z)}{MS_W(z)} \\sim F_{k-1,\\,N-k}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'group1', type: 'textarea', label: 'Group 1 Data (comma-separated)', default: '12,14,13,15,12,14' },
+      { id: 'group2', type: 'textarea', label: 'Group 2 Data (comma-separated)', default: '18,10,22,8,20,11' },
+      { id: 'group3', type: 'textarea', label: 'Group 3 Data (optional)',        default: '13,14,13,14,13,14' },
+      { id: 'group4', type: 'textarea', label: 'Group 4 Data (optional)',        default: '' },
+      { id: 'group5', type: 'textarea', label: 'Group 5 Data (optional)',        default: '' },
+      { id: 'group6', type: 'textarea', label: 'Group 6 Data (optional)',        default: '' },
+    ],
+
+    example(values) {
+      const { groups, error } = gatherDataGroups(values);
+      if (error || groups.length < 2 || groups.some(g => g.values.length < 2) ||
+          typeof jStat === 'undefined' || !jStat.centralF)
+        return 'Enter data for at least 2 groups (each with at least 2 values) to see a worked medical example here.';
+      const { k, N, dfB, dfW, F } = leveneStats(groups);
+      if (dfW < 1) return 'Enter larger group sizes to see a worked medical example here.';
+      const pValue = 1 - jStat.centralF.cdf(F, dfB, dfW);
+      const f = v => +v.toFixed(2);
+      const tail = pValue < 0.05
+        ? 'their variances differ significantly — a standard (pooled-variance) ANOVA or t-test would not be appropriate here; consider Welch\'s correction instead'
+        : 'no significant difference in spread was detected, so the equal-variance assumption behind a standard ANOVA/t-test looks reasonable';
+      return `Before comparing mean pain scores across ${k} treatment groups (N = ${N}) with a standard ANOVA, Levene's test first checks whether the groups are even similarly variable to begin with — since ANOVA assumes equal variances across groups. W = ${f(F)}, ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate(values) {
+      const { groups, error } = gatherDataGroups(values);
+      if (error) return [err(error)];
+      if (groups.length < 2) return [err('Enter data for at least 2 groups')];
+      if (groups.some(g => g.values.length < 2)) return [err('Each group needs at least 2 values')];
+      if (typeof jStat === 'undefined' || !jStat.centralF)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const { k, N, dfB, dfW, ssb, ssw, msb, msw, F, medians } = leveneStats(groups);
+      if (dfW < 1) return [err('Not enough data — within-groups degrees of freedom must be at least 1 (increase group sizes)')];
+
+      const pValue = 1 - jStat.centralF.cdf(F, dfB, dfW);
+      const isSignificant = pValue < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Number of Groups (k)',  value: k, ci: null, isRatio: false },
+        { label: 'Total Sample Size (N)', value: N, ci: null, isRatio: false },
+      ];
+      groups.forEach((g, i) => rows.push({ label: `${g.label} Median (n = ${g.values.length})`, value: f(medians[i], 3), ci: null, isRatio: false }));
+      rows.push(
+        { label: 'SS Between (of |x−median|)', value: f(ssb), ci: null, isRatio: false },
+        { label: 'SS Within (of |x−median|)',  value: f(ssw), ci: null, isRatio: false },
+        { label: "Levene's Statistic (W)",     value: f(F),   ci: null, isRatio: false, highlight: true },
+        { label: 'df (Between, Within)', isText: true, ci: null, isRatio: false, value: `${dfB}, ${dfW}` },
+        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? 'Reject H₀ — variances differ significantly across groups; a standard pooled-variance ANOVA/t-test is not appropriate here (consider Welch\'s correction or a non-parametric test instead)'
+            : 'Fail to reject H₀ — no significant difference in variances; the equal-variance assumption behind a standard ANOVA/t-test is reasonable' },
+      );
+      return rows;
+    }
+  },
+
   /* ── 30. DIAGNOSTIC TEST ACCURACY (2×2) ─────────────────────────────────
      Full diagnostic accuracy calculator from a Test-result × Disease-
      status 2×2 table: Se, Sp, PPV, NPV, LR+, LR−, and accuracy, each
@@ -3523,6 +3612,102 @@ const CALCULATORS = [
         { label: 'Two-Sided Exact p-value',   value: formatPValue(pTwoSided), ci: null, isRatio: false, highlight: true },
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant ? 'Reject H₀ — significant association between the row and column variables' : 'Fail to reject H₀ — no significant association' },
+      ];
+    }
+  },
+
+  /* ── 104. FRAGILITY INDEX ──────────────────────────────────────────────
+     Walsh et al. (2014, J Clin Epidemiol). Starting from a statistically
+     significant 2×2 result, repeatedly converts one non-event to an
+     event — in the group with fewer events — recomputing Fisher's exact
+     test after each change, until significance is lost. The number of
+     patients it took is the Fragility Index; FI ÷ N is the Fragility
+     Quotient. Reuses the same hypergeometric/Fisher's-exact machinery
+     as the 'fishers-exact' calculator (see fisherExactTwoSidedP).      */
+  {
+    id:          'fragility-index',
+    name:        'Fragility Index',
+    hint:        "Events flipped until Fisher's exact p ≥ 0.05",
+    category:    'Chi-Square & Categorical',
+    description: "Counts how many patients' outcomes would need to change before a statistically significant 2×2 result stops being significant, using Fisher's exact test — along with the Fragility Quotient (FI ÷ N).",
+
+    tableLabels: { rowPos: 'Group 1', rowNeg: 'Group 2', colPos: 'Event', colNeg: 'No Event' },
+
+    formulas: [
+      {
+        label: "Two-Sided Exact P-Value (Fisher's Exact Test)",
+        latex: 'p = \\sum_{\\text{tables }T\\,:\\,P(T)\\,\\le\\,P(\\text{observed})} P(T)'
+      },
+      {
+        label: 'Fragility Index (Walsh et al., 2014)',
+        latex: '\\text{FI} = \\min\\{k : p_k \\ge 0.05\\}\\text{, converting one non-event to an event, one at a time, in the group with fewer events}'
+      },
+      {
+        label: 'Fragility Quotient',
+        latex: 'FQ = \\dfrac{\\text{FI}}{N}'
+      }
+    ],
+
+    inputLayout: '2x2',
+    inputs: [
+      { id: 'a', label: 'a', desc: 'Group 1 · Events',    default: 10 },
+      { id: 'b', label: 'b', desc: 'Group 1 · No Events', default: 90 },
+      { id: 'c', label: 'c', desc: 'Group 2 · Events',    default: 22 },
+      { id: 'd', label: 'd', desc: 'Group 2 · No Events', default: 78 },
+    ],
+
+    example({ a, b, c, d }) {
+      a = Math.round(a); b = Math.round(b); c = Math.round(c); d = Math.round(d);
+      if ([a, b, c, d].some(v => !isFinite(v) || v < 0) || (a + b) <= 0 || (c + d) <= 0 ||
+          typeof jStat === 'undefined' || !jStat.gammaln)
+        return 'Enter all four cells of a 2×2 table to see a worked medical example here.';
+      const p0 = fisherExactTwoSidedP(a, b, c, d);
+      if (!(p0 < 0.05))
+        return `This table gives Fisher's exact p = ${formatPValue(p0)}, which is already not significant — the Fragility Index (as usually defined) only applies to a result that starts out statistically significant.`;
+      const result = computeFragilityIndex(a, b, c, d);
+      if (!result.ok) return result.error;
+      const { fi, fq, modGroupLabel } = result;
+      return `A trial reports ${a} events out of ${a + b} in Group 1 vs ${c} events out of ${c + d} in Group 2 (Fisher's exact p = ${formatPValue(p0)}). Converting just ${fi} patient${fi === 1 ? "'s" : "s'"} outcome${fi === 1 ? '' : 's'} from a non-event to an event in ${modGroupLabel} would be enough to push p past 0.05 — a Fragility Index of ${fi} (Fragility Quotient = ${fq.toFixed(4)}).`;
+    },
+
+    calculate({ a, b, c, d }) {
+      a = Math.round(a); b = Math.round(b); c = Math.round(c); d = Math.round(d);
+      if ([a, b, c, d].some(v => !isFinite(v) || v < 0)) return [err('All four cells must be zero or greater')];
+      const row1 = a + b, row2 = c + d, N = row1 + row2;
+      if (row1 <= 0 || row2 <= 0) return [err('Each group (row) must have at least one patient')];
+      if (typeof jStat === 'undefined' || !jStat.gammaln)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const p0 = fisherExactTwoSidedP(a, b, c, d);
+      if (!(p0 < 0.05)) {
+        return [
+          { label: "Fisher's Exact P-Value (as entered)", value: formatPValue(p0), ci: null, isRatio: false, highlight: true },
+          { label: 'Note', isText: true, ci: null, isRatio: false,
+            value: 'This table is not statistically significant to begin with (p ≥ 0.05). The Fragility Index, as originally defined by Walsh et al. (2014), measures how many outcomes would need to flip to turn a significant result non-significant — it does not apply to an already-non-significant result. (A related idea, the "reverse fragility index," asks the opposite question for non-significant results, but is not what this calculator computes.)' },
+        ];
+      }
+
+      const result = computeFragilityIndex(a, b, c, d);
+      if (!result.ok) {
+        return [
+          { label: "Fisher's Exact P-Value (as entered)", value: formatPValue(p0), ci: null, isRatio: false, highlight: true },
+          { label: 'Note', isText: true, ci: null, isRatio: false, value: result.error },
+        ];
+      }
+
+      const { fi, fq, finalP, modGroup, modGroupLabel } = result;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const fragilityNote = 'There is no single universally agreed cutoff for what counts as "fragile" — but the smaller the Fragility Index and Fragility Quotient, the more this result\u2019s statistical significance rests on the outcome of just a handful of patients, which is worth weighing directly against the sample size and the plausibility of a few patients\u2019 outcomes going the other way.';
+
+      return [
+        { label: "Fisher's Exact P-Value (as entered)", value: formatPValue(p0), ci: null, isRatio: false, highlight: true },
+        { label: 'Fragility Index (FI)', value: fi, ci: null, isRatio: false, highlight: true },
+        { label: 'Fragility Quotient (FI ÷ N)', value: f(fq), ci: null, isRatio: false, highlight: true },
+        { label: `P-Value After ${fi} Flip${fi === 1 ? '' : 's'} (in ${modGroupLabel})`, value: formatPValue(finalP), ci: null, isRatio: false },
+        { label: 'Total Patients (N)', value: N, ci: null, isRatio: false },
+        { label: 'Interpretation', isText: true, ci: null, isRatio: false,
+          value: `Converting just ${fi} patient${fi === 1 ? "'s" : "s'"} outcome${fi === 1 ? '' : 's'} from a non-event to an event in ${modGroupLabel} \u2014 out of ${N} patients total \u2014 would be enough to move this result from statistically significant to not significant. ${fragilityNote}` },
       ];
     }
   },
@@ -6141,6 +6326,133 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 65b. FLEISS' KAPPA ─────────────────────────────────────────────────
+     Chance-corrected agreement for THREE OR MORE raters on unordered
+     categories — the multi-rater extension of Cohen's Kappa (which
+     only handles exactly two raters). Input is a subjects×categories
+     matrix of RATER COUNTS (n_ij = how many raters assigned subject i
+     to category j), not raw ratings, since that's the sufficient
+     statistic and lets any number of raters be used without naming
+     them individually. Every subject must be rated by the same total
+     number of raters n (each row must sum to the same total). Uses
+     the standard large-sample SE from Fleiss, Levin & Paik (2003).   */
+  {
+    id:          'fleiss-kappa',
+    name:        "Fleiss' Kappa",
+    hint:        'κ = (P̄−P̄ₑ)/(1−P̄ₑ)',
+    category:    'Effect Sizes & Agreement',
+    description: 'Chance-corrected agreement among three or more raters on unordered categories.',
+
+    formulas: [
+      {
+        label: 'Per-Subject & Overall Observed Agreement',
+        latex: 'P_i = \\dfrac{\\sum_j n_{ij}^2 - n}{n(n-1)} \\qquad \\bar{P} = \\dfrac{1}{N}\\sum_i P_i'
+      },
+      {
+        label: "Fleiss' Kappa",
+        latex: '\\kappa = \\dfrac{\\bar{P}-\\bar{P}_e}{1-\\bar{P}_e}, \\quad \\bar{P}_e = \\sum_j p_j^2, \\quad p_j = \\dfrac{1}{Nn}\\sum_i n_{ij}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'data', type: 'textarea',
+        label: 'Rater Counts — one row per subject, one column per category (each cell = number of raters who chose that category; every row must sum to the same total number of raters)',
+        default: '5,0,0\n4,1,0\n0,4,1\n0,0,5\n3,2,0\n1,3,1\n0,1,4\n5,0,0\n2,3,0\n0,2,3'
+      },
+    ],
+
+    example({ data }) {
+      const matrix = parseMatrix(data);
+      const N = matrix.length;
+      if (N < 2 || matrix.some(row => row.some(v => !isFinite(v) || v < 0)))
+        return 'Enter non-negative rater counts for at least 2 subjects to see a worked medical example here.';
+      const k = matrix[0].length;
+      if (k < 2 || matrix.some(row => row.length !== k))
+        return 'Enter the same number of categories (columns) for every subject to see a worked medical example here.';
+      const rowSums = matrix.map(row => row.reduce((s, v) => s + v, 0));
+      const n = rowSums[0];
+      if (n < 2 || rowSums.some(s => s !== n))
+        return 'Every subject must be rated by the same total number of raters (row totals must match) to see a worked medical example here.';
+      const colSums = Array.from({ length: k }, (_, j) => matrix.reduce((s, row) => s + row[j], 0));
+      const pj = colSums.map(c => c / (N * n));
+      const Pi = matrix.map(row => (row.reduce((s, v) => s + v * v, 0) - n) / (n * (n - 1)));
+      const Pbar = Pi.reduce((s, v) => s + v, 0) / N;
+      const Pe = pj.reduce((s, p) => s + p * p, 0);
+      if (Pe >= 1) return 'Enter counts spread across more than one category to see a worked medical example here.';
+      const kappa = (Pbar - Pe) / (1 - Pe);
+      const bands = [[-Infinity, 'poor'], [0, 'slight'], [0.20, 'fair'], [0.40, 'moderate'], [0.60, 'substantial'], [0.80, 'almost perfect']];
+      const landisKoch = bands.slice().reverse().find(([threshold]) => kappa >= threshold)[1];
+      const f = v => +v.toFixed(3);
+      return `${n} examiners each independently classify ${N} radiographs into ${k} caries-severity categories. Averaged observed agreement across all patients is P̄ = ${f(Pbar)}, versus P̄ₑ = ${f(Pe)} expected by chance alone from how often each category was used overall. κ = ${f(kappa)} corrects for that chance overlap across all ${n} examiners at once — Landis & Koch would call this "${landisKoch}" agreement.`;
+    },
+
+    calculate({ data }) {
+      const matrix = parseMatrix(data);
+      const N = matrix.length;
+      if (N < 2) return [err('Enter at least 2 subjects (rows)')];
+      if (matrix.some(row => row.some(v => !isFinite(v) || v < 0))) return [err('All rater counts must be zero or greater')];
+      const k = matrix[0].length;
+      if (k < 2) return [err('Enter at least 2 categories (columns)')];
+      if (matrix.some(row => row.length !== k)) return [err('Every subject (row) must have the same number of category columns')];
+
+      const rowSums = matrix.map(row => row.reduce((s, v) => s + v, 0));
+      const n = rowSums[0];
+      if (n < 2) return [err('Each subject needs at least 2 raters (row total must be ≥ 2)')];
+      if (rowSums.some(s => s !== n)) return [err('Every subject must be rated by the same total number of raters — row totals must all match')];
+
+      const colSums = Array.from({ length: k }, (_, j) => matrix.reduce((s, row) => s + row[j], 0));
+      const pj = colSums.map(c => c / (N * n));
+      const Pi = matrix.map(row => (row.reduce((s, v) => s + v * v, 0) - n) / (n * (n - 1)));
+      const Pbar = Pi.reduce((s, v) => s + v, 0) / N;
+      const Pe = pj.reduce((s, p) => s + p * p, 0);
+      if (Pe >= 1) return [err('Cannot compute κ — expected agreement is 100% (all ratings fall in one category)')];
+
+      const kappa = (Pbar - Pe) / (1 - Pe);
+
+      // Large-sample SE (Fleiss, Levin & Paik, 2003), using qj = 1 - pj:
+      // SE(κ) = sqrt(2/(N·n·(n-1))) · sqrt(A² − B) / A, A = Σ pⱼqⱼ, B = Σ pⱼqⱼ(qⱼ−pⱼ)
+      const qj = pj.map(p => 1 - p);
+      const A = pj.reduce((s, p, j) => s + p * qj[j], 0);
+      const B = pj.reduce((s, p, j) => s + p * qj[j] * (qj[j] - p), 0);
+      const seKappa = A > 0 ? Math.sqrt(2 / (N * n * (n - 1))) * Math.sqrt(Math.max(0, A * A - B)) / A : NaN;
+
+      const hasNormal = typeof jStat !== 'undefined' && jStat.normal;
+      const z = hasNormal && seKappa > 0 ? kappa / seKappa : NaN;
+      const pValue = hasNormal && isFinite(z) ? 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1)) : NaN;
+
+      const bands = [
+        [-Infinity, 'poor'],
+        [0,    'slight'],
+        [0.20, 'fair'],
+        [0.40, 'moderate'],
+        [0.60, 'substantial'],
+        [0.80, 'almost perfect'],
+      ];
+      const landisKoch = bands.slice().reverse().find(([threshold]) => kappa >= threshold)[1];
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Number of Subjects (N)', value: N, ci: null, isRatio: false },
+        { label: 'Raters per Subject (n)', value: n, ci: null, isRatio: false },
+        { label: 'Number of Categories (k)', value: k, ci: null, isRatio: false },
+        { label: 'Mean Observed Agreement (P̄)', value: f(Pbar), ci: null, isRatio: false },
+        { label: 'Expected Agreement (P̄ₑ)', value: f(Pe), ci: null, isRatio: false },
+        { label: "Fleiss' Kappa (κ)", value: f(kappa),
+          ci: isFinite(seKappa) ? [f(kappa - 1.96 * seKappa), f(kappa + 1.96 * seKappa)] : null,
+          isRatio: false, highlight: true },
+      ];
+      if (isFinite(seKappa)) rows.push({ label: 'SE(κ) — large-sample approximation', value: f(seKappa), ci: null, isRatio: false });
+      if (isFinite(pValue)) rows.push({ label: 'p-value (H₀: κ = 0)', value: formatPValue(pValue), ci: null, isRatio: false });
+      rows.push({ label: 'Interpretation (Landis & Koch, 1977)', isText: true, ci: null, isRatio: false,
+        value: `${landisKoch[0].toUpperCase()}${landisKoch.slice(1)} agreement (κ = ${f(kappa)}) across all ${n} raters.` });
+
+      return rows;
+    }
+  },
+
   /* ── 66. INTRACLASS CORRELATION (ICC) ──────────────────────────────────
      One-way random-effects ICC — ICC(1,1) in Shrout & Fleiss (1979)
      notation — from a subjects × raters/occasions matrix, via a
@@ -8084,6 +8396,125 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 86b. COX PROPORTIONAL HAZARDS (TWO-GROUP HAZARD RATIO) ─────────────
+     Univariate Cox regression on a single binary group indicator —
+     the natural companion to the Log-Rank Test above (same input
+     shape, same default dataset): log-rank tells you WHETHER two
+     survival curves differ, Cox PH tells you BY HOW MUCH, as a
+     hazard ratio with a confidence interval. Fit by Newton-Raphson
+     maximum partial likelihood with Breslow's method for tied event
+     times (see fitCoxPHTwoGroup / coxScoreInfo). HR > 1 means Group 1
+     has a higher instantaneous event rate than Group 2 at every
+     moment, under the proportional-hazards assumption that this
+     ratio stays constant over time — worth a visual check against
+     the Kaplan-Meier curves below (roughly parallel curves support
+     the assumption; curves that cross suggest it may not hold).    */
+  {
+    id:          'cox-ph',
+    name:        'Cox Proportional Hazards (Hazard Ratio)',
+    hint:        'HR = exp(β), fit by Newton-Raphson partial likelihood',
+    category:    'Survival Analysis',
+    description: 'Estimates the hazard ratio between two groups from time-to-event data with censoring, via a univariate Cox regression.',
+
+    formulas: [
+      {
+        label: 'Cox Partial Likelihood (Breslow ties)',
+        latex: 'L(\\beta) = \\prod_i \\dfrac{\\exp(x_{(i)}\\beta)^{d_i}}{\\left(\\sum_{j \\in R_i}\\exp(x_j\\beta)\\right)^{d_i}}'
+      },
+      {
+        label: 'Hazard Ratio & Wald 95% CI',
+        latex: 'HR = e^{\\hat\\beta}, \\quad 95\\%\\ CI = e^{\\hat\\beta \\pm 1.96\\cdot SE(\\hat\\beta)}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'group1', type: 'textarea',
+        label: 'Group 1 — time, event (1=event, 0=censored), one row per subject',
+        default: '6,1\n6,1\n6,1\n6,0\n7,1\n9,0\n10,1\n10,0\n11,0\n13,1\n16,1\n17,0\n19,0\n20,0\n22,1\n23,1\n25,0\n32,0\n32,0\n34,0\n35,0'
+      },
+      {
+        id: 'group2', type: 'textarea',
+        label: 'Group 2 — time, event (1=event, 0=censored), one row per subject',
+        default: '1,1\n1,1\n2,1\n2,1\n3,1\n4,1\n4,1\n5,1\n5,1\n8,1\n8,1\n8,1\n8,1\n11,1\n11,1\n12,1\n12,1\n15,1\n17,1\n22,1\n23,1'
+      },
+    ],
+
+    example({ group1, group2 }) {
+      const m1 = parseMatrix(group1), m2 = parseMatrix(group2);
+      const all = [...m1, ...m2];
+      if (m1.length < 2 || m2.length < 2 || all.some(row => row.length !== 2) ||
+          all.some(([t, e]) => !isFinite(t) || t <= 0 || !isFinite(e) || (e !== 0 && e !== 1)) ||
+          typeof jStat === 'undefined' || !jStat.normal)
+        return 'Enter time-to-event data (time, event) for at least 2 subjects in each group to see a worked medical example here.';
+      const g1 = m1.map(([time, event]) => ({ time, event }));
+      const g2 = m2.map(([time, event]) => ({ time, event }));
+      const fit = fitCoxPHTwoGroup(g1, g2);
+      if (!isFinite(fit.se)) return 'Enter data with events in both groups to see a worked medical example here.';
+      const HR = Math.exp(fit.beta);
+      const z = fit.beta / fit.se;
+      const pValue = 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1));
+      const f = v => +v.toFixed(2);
+      const tail = pValue < 0.05
+        ? `patients in Group 1 have a significantly ${HR > 1 ? 'higher' : 'lower'} instantaneous relapse rate than Group 2 at any given moment`
+        : 'no significant difference in relapse rate was detected between the groups';
+      return `Same ${fit.n1 + fit.n2} leukemia patients as the Log-Rank Test, but instead of just asking whether the two survival curves differ, Cox regression estimates by how much: HR = ${f(HR)} means Group 1's instantaneous relapse rate is ${f(HR)}× Group 2's at every point in time (assuming that ratio stays constant), ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate({ group1, group2 }) {
+      const m1 = parseMatrix(group1), m2 = parseMatrix(group2);
+      if (m1.length < 2 || m2.length < 2) return [err('Enter at least 2 subjects in each group')];
+      const all = [...m1, ...m2];
+      if (all.some(row => row.length !== 2))
+        return [err('Every row must have exactly 2 values: time, event (1=event, 0=censored)')];
+      if (all.some(([t, e]) => !isFinite(t) || t <= 0 || !isFinite(e) || (e !== 0 && e !== 1)))
+        return [err('Time must be greater than 0, and event must be 0 (censored) or 1 (event)')];
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const g1 = m1.map(([time, event]) => ({ time, event }));
+      const g2 = m2.map(([time, event]) => ({ time, event }));
+      if (g1.every(r => r.event === 0) || g2.every(r => r.event === 0))
+        return [err('Each group needs at least one event (not all censored) to estimate a hazard ratio')];
+
+      const km1 = kaplanMeierEstimate(g1);
+      const km2 = kaplanMeierEstimate(g2);
+      const fit = fitCoxPHTwoGroup(g1, g2);
+      if (!isFinite(fit.se))
+        return [err('Could not estimate a stable hazard ratio from this data — check that both groups have events spread across more than a single tied time')];
+
+      const HR = Math.exp(fit.beta);
+      const ciLo = Math.exp(fit.beta - 1.96 * fit.se);
+      const ciHi = Math.exp(fit.beta + 1.96 * fit.se);
+      const z = fit.beta / fit.se;
+      const pValue = 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1));
+      const isSignificant = pValue < 0.05;
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const medianText = km => km.median === null ? 'not reached' : km.median;
+
+      return [
+        { label: 'Group 1 — N / Events / Median Survival', isText: true, ci: null, isRatio: false,
+          value: `${fit.n1} / ${g1.filter(r => r.event === 1).length} / ${medianText(km1)}` },
+        { label: 'Group 2 — N / Events / Median Survival', isText: true, ci: null, isRatio: false,
+          value: `${fit.n2} / ${g2.filter(r => r.event === 1).length} / ${medianText(km2)}` },
+        { label: 'β (log Hazard Ratio)', value: f(fit.beta), ci: null, isRatio: false },
+        { label: 'SE(β)', value: f(fit.se), ci: null, isRatio: false },
+        { label: 'Hazard Ratio (Group 1 vs Group 2)', value: f(HR), ci: [f(ciLo), f(ciHi)], isRatio: true, highlight: true },
+        { label: 'Wald z', value: f(z), ci: null, isRatio: false },
+        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? `Reject H₀ — Group 1's hazard is significantly ${HR > 1 ? 'higher' : 'lower'} than Group 2's (HR = ${f(HR, 2)}, 95% CI [${f(ciLo, 2)}, ${f(ciHi, 2)}])`
+            : `Fail to reject H₀ — no significant difference in hazard between groups (HR = ${f(HR, 2)}, 95% CI [${f(ciLo, 2)}, ${f(ciHi, 2)}] crosses 1)` },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'This assumes proportional hazards — that the ratio between the two groups\' hazards stays constant over time. Check this visually: roughly parallel Kaplan-Meier curves below support the assumption; curves that cross suggest it may not hold, in which case the hazard ratio above would be a rough average over time rather than a constant, true effect.' },
+        { label: 'Survival Curves', isSVG: true, svg: kaplanMeierTwoGroupSVG(km1, km2, 'Group 1', 'Group 2') },
+      ];
+    }
+  },
+
   /* ── 87. NETWORK META-ANALYSIS ───────────────────────────────────────────
      Frequentist, contrast-based network meta-analysis (Lu & Ades /
      Rücker graph-theoretical model) for two-arm trials: up to 15
@@ -9145,7 +9576,180 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 103. TEST FOR INTERACTION BETWEEN TWO EFFECTS ─────────────────────
+     Altman & Bland (2003, BMJ) z-test comparing two independent effect
+     estimates (e.g. two subgroups), on either the log scale (for ratio
+     measures — RR, OR, HR) or the raw scale (additive measures — mean
+     difference, risk difference). Directly operationalizes the point
+     made in the "Subgroup Analyses and Interaction Tests" guide: two
+     effects can be "significant" and "not significant" individually
+     with no significant difference between them at all.              */
+  {
+    id:          'interaction-test',
+    name:        'Test for Interaction Between Two Effects',
+    hint:        'z = (y₁ − y₂) / √(SE₁² + SE₂²)',
+    category:    'Epidemiology & Risk',
+    description: 'Tests whether two subgroup effect estimates (e.g. RR, OR, HR, or a mean difference) differ significantly from each other, rather than just comparing their individual significance.',
+
+    formulas: [
+      {
+        label: 'Effect on analysis scale',
+        latex: 'y_i = \\ln(\\text{RR}_i)\\text{, }\\ln(\\text{OR}_i)\\text{, or }\\ln(\\text{HR}_i)\\text{ (ratio scale) — or the raw estimate (additive scale)}'
+      },
+      {
+        label: 'Standard error from a confidence interval',
+        latex: 'SE_i = \\dfrac{U_i - L_i}{2\\,z_{crit}} \\quad (U_i, L_i\\text{ on the analysis scale})'
+      },
+      {
+        label: "Each subgroup's own significance (vs. no effect)",
+        latex: 'z_i = \\dfrac{y_i}{SE_i}'
+      },
+      {
+        label: 'Reconstructed CI from the effect estimate (consistency check)',
+        latex: 'L_i\' = e^{\\,y_i - z_{crit}SE_i}, \\quad U_i\' = e^{\\,y_i + z_{crit}SE_i} \\quad \\text{(no exponential for additive scale)}'
+      },
+      {
+        label: 'Test for interaction (Altman & Bland, 2003)',
+        latex: 'z = \\dfrac{y_1 - y_2}{\\sqrt{SE_1^2 + SE_2^2}}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'scale', type: 'select', label: 'Effect Scale', default: 'ratio', options: [
+        { value: 'ratio',    label: 'Ratio (RR, OR, or HR)' },
+        { value: 'additive', label: 'Additive (mean difference, risk difference, etc.)' },
+      ] },
+      { id: 'effect1', label: 'Subgroup 1 — Effect Estimate',   default: 0.70 },
+      { id: 'effect2', label: 'Subgroup 2 — Effect Estimate',   default: 0.85 },
+      { id: 'lower1',  label: 'Subgroup 1 — CI Lower Bound',    default: 0.55 },
+      { id: 'lower2',  label: 'Subgroup 2 — CI Lower Bound',    default: 0.65 },
+      { id: 'upper1',  label: 'Subgroup 1 — CI Upper Bound',    default: 0.90 },
+      { id: 'upper2',  label: 'Subgroup 2 — CI Upper Bound',    default: 1.10 },
+      { id: 'confidenceLevel', label: 'Confidence Level of Inputs (%)', default: 95 },
+    ],
+
+    example({ scale, confidenceLevel, effect1, lower1, upper1, effect2, lower2, upper2 }) {
+      const provided = v => v !== '' && v != null && isFinite(v);
+      if (![effect1, lower1, upper1, effect2, lower2, upper2].every(provided))
+        return 'Enter an effect estimate and CI for both subgroups to see a worked medical example here.';
+      const isRatio = scale !== 'additive';
+      if (isRatio && (effect1 <= 0 || lower1 <= 0 || effect2 <= 0 || lower2 <= 0))
+        return 'Ratio-scale effects and CI bounds must be greater than 0.';
+      if (upper1 <= lower1 || upper2 <= lower2)
+        return 'Each CI upper bound must be greater than its lower bound.';
+
+      const zFromConfidence = level => {
+        if (Math.abs(level - 90)   < 2.5) return 1.645;
+        if (Math.abs(level - 99)   < 2.5) return 2.576;
+        if (Math.abs(level - 99.9) < 0.5) return 3.291;
+        return 1.96;
+      };
+      const zCrit = zFromConfidence(provided(confidenceLevel) ? confidenceLevel : 95);
+      const t = v => isRatio ? Math.log(v) : v;
+
+      const y1 = t(effect1), y2 = t(effect2);
+      const se1 = (t(upper1) - t(lower1)) / (2 * zCrit);
+      const se2 = (t(upper2) - t(lower2)) / (2 * zCrit);
+      const p1 = normalTwoTailedP(y1 / se1);
+      const p2 = normalTwoTailedP(y2 / se2);
+      const z = (y1 - y2) / Math.sqrt(se1 ** 2 + se2 ** 2);
+      const p = normalTwoTailedP(z);
+      const f = v => +v.toFixed(2);
+      const label = isRatio ? 'an RR/OR/HR' : 'a treatment effect';
+
+      const sigWord = pv => pv < 0.05 ? 'significant' : 'not significant';
+      const verdict = p < 0.05
+        ? `a significant interaction (${formatPText(p)}) — real evidence the effect differs by subgroup`
+        : `no significant interaction (${formatPText(p)}) — despite one subgroup's own result being ${sigWord(p1)} and the other ${sigWord(p2)}, there isn't clear evidence the effect actually differs between them`;
+
+      return `A trial reports ${label} of ${f(effect1)} in subgroup 1 (${formatPText(p1)}) and ${f(effect2)} in subgroup 2 (${formatPText(p2)}) — one result "significant," one not, at first glance. Testing whether these two estimates actually differ from each other gives z = ${f(z)}, ${verdict}.`;
+    },
+
+    calculate({ scale, confidenceLevel, effect1, lower1, upper1, effect2, lower2, upper2 }) {
+      const provided = v => v !== '' && v != null && isFinite(v);
+      if (![effect1, lower1, upper1, effect2, lower2, upper2].every(provided))
+        return [err('Enter an effect estimate and both CI bounds for each subgroup')];
+
+      const isRatio = scale !== 'additive';
+      if (isRatio && (effect1 <= 0 || lower1 <= 0 || upper1 <= 0 || effect2 <= 0 || lower2 <= 0 || upper2 <= 0))
+        return [err('Ratio-scale effects and CI bounds must all be greater than 0')];
+      if (upper1 <= lower1) return [err('Subgroup 1: CI upper bound must be greater than the lower bound')];
+      if (upper2 <= lower2) return [err('Subgroup 2: CI upper bound must be greater than the lower bound')];
+
+      const zFromConfidence = level => {
+        if (Math.abs(level - 90)   < 2.5) return 1.645;
+        if (Math.abs(level - 99)   < 2.5) return 2.576;
+        if (Math.abs(level - 99.9) < 0.5) return 3.291;
+        return 1.96;
+      };
+      const level = provided(confidenceLevel) ? confidenceLevel : 95;
+      const zCrit = zFromConfidence(level);
+
+      const t = v => isRatio ? Math.log(v) : v;
+      const y1 = t(effect1), y2 = t(effect2);
+      const se1 = (t(upper1) - t(lower1)) / (2 * zCrit);
+      const se2 = (t(upper2) - t(lower2)) / (2 * zCrit);
+
+      if (se1 <= 0 || se2 <= 0) return [err('Derived standard error must be greater than 0 — check the CI bounds entered')];
+
+      const p1 = normalTwoTailedP(y1 / se1);
+      const p2 = normalTwoTailedP(y2 / se2);
+      const z = (y1 - y2) / Math.sqrt(se1 ** 2 + se2 ** 2);
+      const p = normalTwoTailedP(z);
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      // Consistency check: a real 95% CI is always symmetric (on the analysis
+      // scale) around its own point estimate. If the entered effect estimate
+      // sits meaningfully off-center from the entered CI, the two numbers
+      // likely weren't copied from the same reported result — show the user
+      // concretely what CI *would* match the effect estimate they entered,
+      // rather than just asserting "these don't match."
+      const untransform = v => isRatio ? Math.exp(v) : v;
+      const checkConsistency = (label, y, se, lower, upper) => {
+        const recLower = untransform(y - zCrit * se);
+        const recUpper = untransform(y + zCrit * se);
+        const relDiff = Math.max(Math.abs(recLower - lower) / Math.abs(lower), Math.abs(recUpper - upper) / Math.abs(upper));
+        if (relDiff < 0.05) return null; // close enough — likely just rounding in the source
+        const fc = v => +v.toFixed(2);
+        return `Note: a 95% CI properly centered on the ${label} effect estimate you entered (${fc(untransform(y))}) with this precision would be approximately ${fc(recLower)}\u2013${fc(recUpper)} — not the ${fc(lower)}\u2013${fc(upper)} entered. If these numbers come from a published study, double-check both values were taken from the same reported result.`;
+      };
+      const note1 = checkConsistency('subgroup 1', y1, se1, lower1, upper1);
+      const note2 = checkConsistency('subgroup 2', y2, se2, lower2, upper2);
+
+      const scaleNote = isRatio
+        ? 'Effects and CI bounds were log-transformed before comparison, since ratio measures (RR/OR/HR) are compared on the log scale.'
+        : 'Effects and CI bounds were used on their original (additive) scale.';
+
+      const sigWord = pv => pv < 0.05 ? 'significant' : 'not significant';
+      const oppositeSides = (p1 < 0.05) !== (p2 < 0.05);
+
+      const interpretation = p < 0.05
+        ? `Significant interaction (${formatPText(p)}) — this is real statistical evidence that the effect differs between the two subgroups, not just a difference in which side of p < 0.05 each subgroup happened to land on.`
+        : (oppositeSides
+            ? `Not significant (${formatPText(p)}) — this is exactly the classic pattern the Subgroup Analyses guide warns about: subgroup 1 is ${sigWord(p1)} on its own (${formatPText(p1)}) and subgroup 2 is ${sigWord(p2)} on its own (${formatPText(p2)}), but the interaction test finds no significant difference between them. The honest conclusion is "no clear evidence this effect varies by subgroup," not "it works in one and not the other."`
+            : `Not significant (${formatPText(p)}) — no clear evidence the effect actually differs between the two subgroups. ${scaleNote}`);
+
+      const rows = [
+        { label: `Subgroup 1 SE (${isRatio ? 'log scale' : 'analysis scale'})`, value: f(se1), ci: null, isRatio: false },
+        { label: 'Subgroup 1 p-value (vs. no effect)', value: formatPValue(p1), ci: null, isRatio: false },
+        { label: `Subgroup 2 SE (${isRatio ? 'log scale' : 'analysis scale'})`, value: f(se2), ci: null, isRatio: false },
+        { label: 'Subgroup 2 p-value (vs. no effect)', value: formatPValue(p2), ci: null, isRatio: false },
+        { label: 'Interaction z-statistic', value: f(z, 3), ci: null, isRatio: false, highlight: true },
+        { label: 'Interaction p-value', value: formatPValue(p), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation', isText: true, ci: null, isRatio: false, value: interpretation },
+      ];
+
+      if (note1) rows.push({ label: 'Check Subgroup 1 Inputs', isText: true, ci: null, isRatio: false, value: note1 });
+      if (note2) rows.push({ label: 'Check Subgroup 2 Inputs', isText: true, ci: null, isRatio: false, value: note2 });
+
+      return rows;
+    }
+  },
+
 ];
+
+
 
 /* ── HELPERS ─────────────────────────────────────────────────────────── */
 
@@ -9222,6 +9826,81 @@ function normalPowerTwoTailed(delta, sigma, n, alpha) {
 function logChoose(n, k) {
   if (k < 0 || k > n) return -Infinity;
   return jStat.gammaln(n + 1) - jStat.gammaln(k + 1) - jStat.gammaln(n - k + 1);
+}
+
+// Two-sided Fisher's exact test p-value for a 2×2 table [[a,b],[c,d]],
+// via the same "sum probabilities ≤ observed" method used inline in
+// the 'fishers-exact' calculator — pulled out as a standalone helper
+// here since the Fragility Index calculator needs to call it many
+// times in a loop, once per candidate table.
+function fisherExactTwoSidedP(a, b, c, d) {
+  const row1 = a + b, row2 = c + d, col1 = a + c, N = row1 + row2;
+  if (row1 <= 0 || row2 <= 0 || col1 <= 0 || (N - col1) <= 0) return NaN;
+  const logDenom = logChoose(N, col1);
+  const lo = Math.max(0, col1 - row2);
+  const hi = Math.min(row1, col1);
+  const probs = [];
+  for (let x = lo; x <= hi; x++) probs.push(Math.exp(logChoose(row1, x) + logChoose(row2, col1 - x) - logDenom));
+  const sumProbs = probs.reduce((s, v) => s + v, 0);
+  const pObs = probs[a - lo];
+  const threshold = pObs * (1 + 1e-7);
+  let pTwoSided = 0;
+  for (let i = 0; i < probs.length; i++) if (probs[i] <= threshold) pTwoSided += probs[i];
+  return Math.min(pTwoSided / sumProbs, 1);
+}
+
+// Fragility Index (Walsh et al., 2014): starting from a table [[a,b],[c,d]]
+// with a, b, c, d = Group1 events, Group1 non-events, Group2 events,
+// Group2 non-events, and an already-significant Fisher's exact p-value,
+// repeatedly convert one non-event to an event — in the group with
+// fewer events, since that's the direction that narrows the gap between
+// the two groups' event rates — until p ≥ 0.05. If that group runs out
+// of non-events to convert before significance is lost, continue by
+// converting events to non-events in the *other* (larger-event) group,
+// which moves the two rates apart in the other group but still narrows
+// the raw event-count gap driving the test statistic; this fallback is
+// an extension beyond Walsh's original worked examples (which didn't
+// need it), included so the function always terminates on a real table
+// rather than looping past the available patients.
+function computeFragilityIndex(a, b, c, d) {
+  let events1 = a, nonEvents1 = b, events2 = c, nonEvents2 = d;
+  const n1 = a + b, n2 = c + d;
+  let steps = 0;
+  const maxSteps = n1 + n2 + 5; // safety cap on actual modification steps
+  let modGroup = events1 <= events2 ? 1 : 2;
+  const startingGroup = modGroup;
+  let switchedGroups = false;
+
+  let p = fisherExactTwoSidedP(events1, nonEvents1, events2, nonEvents2);
+
+  while (p < 0.05 && steps < maxSteps) {
+    const canModGroup1 = nonEvents1 > 0; // room to convert a non-event to an event in Group 1
+    const canModGroup2 = events2 > 0;    // room to convert an event to a non-event in Group 2
+
+    if (!canModGroup1 && !canModGroup2) {
+      // Both groups are fully exhausted in their respective directions —
+      // there is nowhere left to move, regardless of how many more
+      // "steps" the safety cap would still allow. Stop immediately
+      // rather than spinning on switch checks that never advance.
+      return { ok: false, error: 'This result stayed statistically significant even after every possible outcome in both groups was flipped — an unusually robust (or unusually small/extreme) table. The Fragility Index could not be computed within the available patients.' };
+    }
+    if (modGroup === 1 && !canModGroup1) { modGroup = 2; switchedGroups = true; }
+    else if (modGroup === 2 && !canModGroup2) { modGroup = 1; switchedGroups = true; }
+
+    if (modGroup === 1) { events1 += 1; nonEvents1 -= 1; }
+    else { events2 -= 1; nonEvents2 += 1; }
+
+    steps += 1;
+    p = fisherExactTwoSidedP(events1, nonEvents1, events2, nonEvents2);
+  }
+
+  if (!(p >= 0.05)) {
+    return { ok: false, error: 'This result stayed statistically significant even after every possible outcome in both groups was flipped — an unusually robust (or unusually small/extreme) table. The Fragility Index could not be computed within the available patients.' };
+  }
+
+  const modGroupLabel = switchedGroups ? 'both groups' : (startingGroup === 1 ? 'Group 1' : 'Group 2');
+
+  return { ok: true, fi: steps, fq: steps / (n1 + n2), finalP: p, modGroup, modGroupLabel };
 }
 
 /* ── NON-PARAMETRIC TEST HELPERS ─────────────────────────────────────────
@@ -9794,6 +10473,34 @@ function kruskalWallisStats(groups) {
   const H = tieCorrection > 0 ? Hraw / tieCorrection : Hraw;
 
   return { N, k, H, df: k - 1, groupStats, tieSum, tieCorrection };
+}
+
+// Levene's test (Brown-Forsythe variant): transform each group's raw
+// values to absolute deviations from its own MEDIAN, then run a
+// plain 1-way ANOVA F-test on those transformed values — a large F
+// means the groups' spreads differ, not their centers. Using the
+// median (rather than the mean, as in the original Levene 1960
+// formulation) is what makes this the more robust Brown-Forsythe
+// variant, standard practice when the underlying data may be skewed.
+function leveneStats(groups) {
+  const k = groups.length;
+  const z = groups.map(g => {
+    const sorted = g.values.slice().sort((a, b) => a - b);
+    const med = medianOfSorted(sorted);
+    return g.values.map(v => Math.abs(v - med));
+  });
+  const medians = groups.map((g, i) => {
+    const sorted = g.values.slice().sort((a, b) => a - b);
+    return medianOfSorted(sorted);
+  });
+  const N = z.reduce((s, arr) => s + arr.length, 0);
+  const grandMean = z.reduce((s, arr) => s + arr.reduce((s2, v) => s2 + v, 0), 0) / N;
+  const groupMeans = z.map(arr => arr.reduce((s, v) => s + v, 0) / arr.length);
+  const ssb = z.reduce((s, arr, i) => s + arr.length * (groupMeans[i] - grandMean) ** 2, 0);
+  const ssw = z.reduce((s, arr, i) => s + arr.reduce((s2, v) => s2 + (v - groupMeans[i]) ** 2, 0), 0);
+  const dfB = k - 1, dfW = N - k;
+  const msb = ssb / dfB, msw = ssw / dfW;
+  return { k, N, dfB, dfW, ssb, ssw, msb, msw, F: msb / msw, medians };
 }
 
 // Holm step-down p-value adjustment for multiple comparisons, matching
@@ -11370,6 +12077,58 @@ function logRankTest(group1, group2) {
   return { O1, E1, V, chi2, n1: group1.length, n2: group2.length };
 }
 
+// Univariate Cox Proportional Hazards model for a single binary
+// covariate x (1 = Group 1, 0 = Group 2), fit by Newton-Raphson
+// maximum partial likelihood with Breslow's method for ties. Because
+// x is 0/1, exp(x*beta) collapses to either 1 or exp(beta), which is
+// what makes the score/information sums below so simple: at every
+// distinct EVENT time t, only the current risk set's composition
+// (how many x=1 vs x=0 subjects remain) and the number of events at
+// that exact time matter — subjects censored before an event time
+// have already dropped out of every risk set from then on, so
+// censoring is handled automatically just by risk-set membership.
+function coxScoreInfo(records, eventTimes, beta) {
+  const ex1 = Math.exp(beta); // exp(x*beta) for x=1; exp(x*beta)=1 for x=0
+  let U = 0, I = 0;
+  for (const t of eventTimes) {
+    const riskSet = records.filter(r => r.time >= t);
+    const eventsAtT = riskSet.filter(r => r.event === 1 && r.time === t);
+    const d = eventsAtT.length;
+    if (d === 0) continue;
+    const sumXEvents = eventsAtT.reduce((s, r) => s + r.x, 0);
+    const nX1 = riskSet.filter(r => r.x === 1).length;
+    const nX0 = riskSet.length - nX1;
+    const sumExp  = nX1 * ex1 + nX0;
+    const sumXExp = nX1 * ex1;
+    const xbar = sumExp > 0 ? sumXExp / sumExp : 0;
+    U += sumXEvents - d * xbar;
+    I += d * xbar * (1 - xbar);
+  }
+  return { U, I };
+}
+
+function fitCoxPHTwoGroup(group1, group2) {
+  const records = [
+    ...group1.map(r => ({ time: r.time, event: r.event, x: 1 })),
+    ...group2.map(r => ({ time: r.time, event: r.event, x: 0 })),
+  ];
+  const eventTimes = [...new Set(records.filter(r => r.event === 1).map(r => r.time))].sort((a, b) => a - b);
+  const totalEvents = records.filter(r => r.event === 1).length;
+
+  let beta = 0;
+  for (let iter = 0; iter < 50; iter++) {
+    const { U, I } = coxScoreInfo(records, eventTimes, beta);
+    if (I === 0) break;
+    const step = U / I;
+    beta += step;
+    if (Math.abs(step) < 1e-10) break;
+  }
+  const { I: infoFinal } = coxScoreInfo(records, eventTimes, beta);
+  const se = infoFinal > 0 ? 1 / Math.sqrt(infoFinal) : NaN;
+
+  return { beta, se, n1: group1.length, n2: group2.length, totalEvents, nEventTimes: eventTimes.length };
+}
+
 // Renders a single Kaplan-Meier step curve (from kaplanMeierEstimate())
 // with censoring tick marks at each censored observation.
 function kaplanMeierCurveSVG(km) {
@@ -11541,6 +12300,7 @@ const CALCULATOR_INDEX = [
   { id: 'chi-square-2x2',       name: 'Chi-Square 2×2',                  category: 'Chi-Square & Categorical',    description: 'Chi-square test of independence for a 2×2 contingency table, plus RR, OR, and design-aware interpretation.', status: 'available' },
   { id: 'chi-square-gof',       name: 'Chi-Square Goodness-of-Fit',      category: 'Chi-Square & Categorical',    description: 'Tests whether observed frequencies match expected frequencies.',                               status: 'available' },
   { id: 'fishers-exact',        name: "Fisher's Exact Test",             category: 'Chi-Square & Categorical',    description: 'Exact test of association for small-sample 2×2 tables.',                                     status: 'available' },
+  { id: 'fragility-index',     name: 'Fragility Index',                 category: 'Chi-Square & Categorical',    description: "Counts how many patients' outcomes would need to change before a statistically significant 2×2 result stops being significant.", status: 'available' },
   { id: 'mcnemars-test',        name: "McNemar's Test",                  category: 'Chi-Square & Categorical',    description: 'Tests marginal homogeneity in paired nominal data (before/after or matched pairs).',           status: 'available' },
   { id: 'cochrans-q',           name: "Cochran's Q Test",                category: 'Chi-Square & Categorical',    description: 'Non-parametric test for differences among three or more matched proportions.',                status: 'available' },
 
@@ -11557,6 +12317,7 @@ const CALCULATOR_INDEX = [
   { id: 'anova-2way',           name: '2-Way ANOVA with Replication',    category: 'ANOVA',                       description: 'Tests main effects and interaction for two factors with multiple observations per cell.',      status: 'available' },
   { id: 'anova-multifactor',    name: 'Multi-Factor ANOVA',              category: 'ANOVA',                       description: 'Extends one-way ANOVA to designs with more than two independent factors.',                    status: 'available' },
   { id: 'tukeys-hsd',           name: "Tukey's HSD Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons controlling family-wise error rate after ANOVA.',               status: 'available' },
+  { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: 'Tests whether two or more groups have equal variances — the assumption behind ANOVA and the pooled-variance t-test.', status: 'available' },
   { id: 'repeated-measures-anova', name: 'Repeated Measures ANOVA',      category: 'ANOVA',                       description: 'Analyzes data from designs where the same subjects are measured under multiple conditions.',   status: 'available' },
 
   // ── 7. CORRELATION & REGRESSION ──────────────────────────────────────
@@ -11575,6 +12336,7 @@ const CALCULATOR_INDEX = [
   { id: 'phi-coefficient',      name: 'Phi Coefficient (2×2)',           category: 'Effect Sizes & Agreement',    description: 'Measures the association between two binary variables in a 2×2 table.',                        status: 'available' },
   { id: 'cohens-kappa',         name: "Cohen's Kappa",                   category: 'Effect Sizes & Agreement',    description: 'Measures inter-rater agreement for categorical data, corrected for chance.',                    status: 'available' },
   { id: 'weighted-kappa',       name: 'Weighted Kappa',                  category: 'Effect Sizes & Agreement',    description: "Extends Cohen's kappa to ordinal ratings, weighting disagreements by their distance.",          status: 'available' },
+  { id: 'fleiss-kappa',         name: "Fleiss' Kappa",                   category: 'Effect Sizes & Agreement',    description: 'Chance-corrected agreement among three or more raters on unordered categories.',                status: 'available' },
   { id: 'icc',                  name: 'Intraclass Correlation (ICC)',     category: 'Effect Sizes & Agreement',    description: 'Assesses reliability and agreement for continuous measurements across raters or occasions.',     status: 'available' },
   { id: 'bland-altman',         name: 'Bland-Altman Limits of Agreement', category: 'Effect Sizes & Agreement',    description: 'Assesses agreement between two measurement methods from paired data, plotting the mean-difference (Bland-Altman) plot with limits of agreement.', status: 'available' },
   { id: 'eta-squared',          name: 'Eta-Squared',                     category: 'Effect Sizes & Agreement',    description: 'Effect size for ANOVA, expressing the proportion of total variance explained by a factor.',     status: 'available' },
@@ -11606,6 +12368,7 @@ const CALCULATOR_INDEX = [
   { id: 'incidence-rate',          name: 'Incidence Rate & Rate Ratio',  category: 'Epidemiology & Risk',         description: 'Calculates incidence rates, rate ratio, and their confidence intervals from person-time data.', status: 'available' },
   { id: 'ipw-ate',                 name: 'IPW & ATE',                    category: 'Epidemiology & Risk',         description: 'Inverse probability weighting and average treatment effect for observational studies.',        status: 'available' },
   { id: 'assoc-pred-intervals',    name: 'Measures of Association — Prediction Intervals', category: 'Epidemiology & Risk', description: 'Extends OR and RR estimates with prediction intervals for future studies.',        status: 'available' },
+  { id: 'interaction-test',        name: 'Test for Interaction Between Two Effects', category: 'Epidemiology & Risk', description: 'Tests whether two subgroup effect estimates (RR, OR, HR, or a mean difference) differ significantly from each other.', status: 'available' },
 
   // ── 11. DIAGNOSTIC TESTING ────────────────────────────────────────────
   { id: 'sensitivity-specificity', name: 'Sensitivity, Specificity & LR', category: 'Diagnostic Testing',        description: 'Calculates sensitivity, specificity, and positive/negative likelihood ratios from a 2×2 table.', status: 'available'  },
@@ -11628,6 +12391,7 @@ const CALCULATOR_INDEX = [
   // ── 13. SURVIVAL ANALYSIS ─────────────────────────────────────────────
   { id: 'kaplan-meier',            name: 'Kaplan-Meier Survival Curve',  category: 'Survival Analysis',           description: 'Estimates the probability of surviving past each time point from time-to-event data with censoring, plotting a step curve and reporting median survival time.', status: 'available' },
   { id: 'log-rank-test',           name: 'Log-Rank Test',                category: 'Survival Analysis',           description: 'Compares survival distributions between two groups using the log-rank test, from time-to-event data with censoring.', status: 'available' },
+  { id: 'cox-ph',                  name: 'Cox Proportional Hazards (Hazard Ratio)', category: 'Survival Analysis', description: 'Estimates the hazard ratio between two groups from time-to-event data with censoring, via a univariate Cox regression.', status: 'available' },
 
 ];
 
@@ -11662,6 +12426,13 @@ const WIZARD_TREE = {
       { label: 'Analyze time-to-event (survival) data',                              next: 'survivalGoal' },
       { label: 'Update a probability with new evidence (Bayesian)',                  next: 'bayesGoal' },
       { label: 'Pool results across multiple studies (meta-analysis)',               next: 'metaResult' },
+      { label: 'Check how fragile a significant trial result is',                    next: 'fragilityResult' },
+    ]
+  },
+
+  fragilityResult: {
+    results: [
+      { id: 'fragility-index', why: "Counts how many patients' outcomes would need to flip before a statistically significant 2×2 result stops being significant." },
     ]
   },
 
@@ -11809,6 +12580,7 @@ const WIZARD_TREE = {
   anova1wayResult: {
     results: [
       { id: 'anova-1way',  why: 'Tests for a difference in means across 3+ independent groups.' },
+      { id: 'levenes-test', why: "Check this first if you're unsure the groups have equal variances — a precondition for a standard ANOVA." },
       { id: 'tukeys-hsd',  why: 'Run this after a significant ANOVA to find which specific pairs of groups differ.' },
       { id: 'eta-squared', why: 'Effect size for the ANOVA — how much of the variance the factor actually explains.' },
     ]
@@ -11943,11 +12715,19 @@ const WIZARD_TREE = {
   categoricalAgreement: {
     question: 'Are the categories ordered (ordinal) or unordered (nominal)?',
     options: [
-      { label: 'Unordered (nominal) categories',                       next: 'kappaResult' },
+      { label: 'Unordered (nominal) categories',                       next: 'nominalAgreementRaters' },
       { label: 'Ordered (ordinal) categories, e.g. mild/moderate/severe', next: 'weightedKappaResult' },
     ]
   },
+  nominalAgreementRaters: {
+    question: 'Exactly two raters, or three or more?',
+    options: [
+      { label: 'Exactly two raters',      next: 'kappaResult' },
+      { label: 'Three or more raters',    next: 'fleissResult' },
+    ]
+  },
   kappaResult:         { results: [ { id: 'cohens-kappa',   why: 'Chance-corrected agreement between two raters on unordered categories.' } ] },
+  fleissResult:        { results: [ { id: 'fleiss-kappa',   why: 'Chance-corrected agreement among three or more raters on unordered categories.' } ] },
   weightedKappaResult: { results: [ { id: 'weighted-kappa', why: "Like Cohen's kappa, but penalizes larger disagreements more on an ordinal scale." } ] },
 
   continuousAgreement: {
@@ -11994,6 +12774,12 @@ const WIZARD_TREE = {
       { label: 'A relative risk and exposure prevalence (attributable risk)',            next: 'attribGoal' },
       { label: 'Observational data I want to adjust for confounding (propensity scores)', next: 'ipwResult' },
       { label: "Multiple studies' OR/RR estimates to pool",                              next: 'predIntResult' },
+      { label: 'Two subgroup effect estimates I want to compare (interaction test)',      next: 'interactionTestResult' },
+    ]
+  },
+  interactionTestResult: {
+    results: [
+      { id: 'interaction-test', why: 'Tests whether two subgroup effect estimates actually differ from each other, rather than just comparing their individual significance.' },
     ]
   },
   epi2x2Result: {
@@ -12094,7 +12880,12 @@ const WIZARD_TREE = {
     ]
   },
   kmResult:      { results: [ { id: 'kaplan-meier', why: 'Estimates the survival curve from time-to-event data with censoring.' } ] },
-  logRankResult: { results: [ { id: 'log-rank-test', why: "Tests whether two groups' survival curves differ significantly." } ] },
+  logRankResult: {
+    results: [
+      { id: 'log-rank-test', why: "Tests whether two groups' survival curves differ significantly." },
+      { id: 'cox-ph',        why: 'Estimates the size of that difference as a hazard ratio with a 95% CI — log-rank only tells you significance, not magnitude.' },
+    ]
+  },
 
   bayesGoal: {
     question: 'What do you want to do?',
@@ -12183,6 +12974,7 @@ const SEARCH_KEYWORDS = {
   'chi-square-2x2': ['chi-square test', '2x2 table', 'test of independence', 'categorical association', 'two by two table'],
   'chi-square-gof':  ['goodness of fit', 'observed vs expected frequencies', 'chi-square gof'],
   'fishers-exact':   ["fisher's exact test", 'small cell counts', '2x2 table exact test', 'expected count below 5'],
+  'fragility-index': ['fragility index', 'fragility quotient', 'how robust is this result', 'reverse fragility index', 'walsh'],
   'mcnemars-test':   ["mcnemar's test", 'paired categorical data', 'before and after yes no', 'matched binary outcome'],
   'cochrans-q':      ["cochran's q test", 'three or more matched binary measurements', 'repeated binary outcome'],
 
@@ -12248,6 +13040,7 @@ const SEARCH_KEYWORDS = {
   'incidence-rate':          ['incidence rate', 'rate ratio', 'person-time data'],
   'ipw-ate':                 ['inverse probability weighting', 'propensity score', 'average treatment effect', 'adjust for confounding'],
   'assoc-pred-intervals':    ['prediction interval for odds ratio', 'pool multiple studies or rr'],
+  'interaction-test':        ['interaction test', 'subgroup analysis', 'effect modification', 'compare two subgroups', 'test for interaction', 'table 2 fallacy'],
 
   // Diagnostic Testing
   'sensitivity-specificity': ['sensitivity', 'specificity', 'likelihood ratios', 'diagnostic test properties'],
@@ -13248,310 +14041,6 @@ const NOTATION = {
 const GUIDES = [
 
   {
-    id: 'reading-forest-plots',
-    category: 'Chart Reading',
-    title: 'How to Read a Forest Plot',
-    blurb: 'What the squares, lines, and diamonds mean — plus fixed vs. random effects, weights, and prediction intervals.',
-    dek: `Every forest plot in this app &mdash; Meta-Analysis, HKSJ, GLMM/Proportions, and Network &mdash; draws from the same visual vocabulary. Learn it once here and you can read all of them.`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates">
-  <line x1="260.9" y1="16" x2="260.9" y2="197" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
-  <text x="260.9" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">null = 0</text>
-  <text x="90" y="36" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 1</text>
-  <line x1="215.2" y1="33" x2="377.5" y2="33" stroke="#4E6EDB" stroke-width="1.5"/>
-  <rect x="293.8" y="30.5" width="5.1" height="5.1" fill="#4E6EDB"/>
-  <text x="296.3" y="26.5" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.30</text>
-  <text x="90" y="62" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 2</text>
-  <line x1="279.5" y1="59" x2="372.3" y2="59" stroke="#4E6EDB" stroke-width="1.5"/>
-  <rect x="322.2" y="55.3" width="7.4" height="7.4" fill="#4E6EDB"/>
-  <text x="325.9" y="51.3" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.55</text>
-  <text x="90" y="88" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 3</text>
-  <line x1="320.7" y1="85" x2="390.2" y2="85" stroke="#4E6EDB" stroke-width="1.5"/>
-  <rect x="350.5" y="80" width="10" height="10" fill="#4E6EDB"/>
-  <text x="355.5" y="76" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.80</text>
-  <line x1="100" y1="98" x2="540" y2="98" stroke="#7B8099" stroke-width="1.5"/>
-  <text x="90" y="135" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#4E6EDB">Fixed-Effect</text>
-  <polygon points="313.4,132 339.7,126 366.0,132 339.7,138" fill="#4E6EDB"/>
-  <text x="339.7" y="122" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#4E6EDB">0.67</text>
-  <text x="90" y="161" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#E07B2C">Random-Effects</text>
-  <polygon points="291.7,158 333.6,152 375.5,158 333.6,164" fill="#E07B2C"/>
-  <text x="333.6" y="148" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#E07B2C">0.62</text>
-  <text x="90" y="187" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">95% PI</text>
-  <line x1="219.5" y1="184" x2="444.2" y2="184" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <line x1="219.5" y1="179" x2="219.5" y2="189" stroke="#7B8099" stroke-width="1.5"/>
-  <line x1="444.2" y1="179" x2="444.2" y2="189" stroke="#7B8099" stroke-width="1.5"/>
-  <text x="331.9" y="176" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[-0.35, 1.55]</text>
-  <line x1="100" y1="197" x2="540" y2="197" stroke="#CDD2E0" stroke-width="1.5"/>
-</svg>`,
-    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval.`,
-    legendColumns: [
-      [
-        { colLabel: 'Reading a study row', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Horizontal line: that study's own 95% confidence interval.` },
-        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Dashed vertical line: the null value (0, or a ratio of 1 for RR/OR).` },
-        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="2" y1="5" x2="22" y2="5" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/><line x1="2" y1="2" x2="2" y2="8" stroke="#7B8099" stroke-width="1.5"/><line x1="22" y1="2" x2="22" y2="8" stroke="#7B8099" stroke-width="1.5"/></svg>`, text: `Dashed whisker:<br><strong>95% prediction interval</strong>, the range a new study's true effect would plausibly fall in.` },
-      ],
-      [
-        { colLabel: 'Weight & pooled estimate', swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB', text: `Blue square: <strong>size</strong> shows how much weight that study carries in the pooled result (the square itself marks its point estimate).` },
-        { swatchClass: 'is-diamond', swatchStyle: 'background:#4E6EDB', text: `Blue diamond: <strong>Fixed-Effect</strong>, the pooled estimate assuming one shared true effect; its width is its own 95% CI.` },
-        { swatchClass: 'is-diamond', swatchStyle: 'background:#E07B2C', text: `Amber diamond: <strong>Random-Effects</strong>, the pooled estimate allowing for between-study variation; its width is its own 95% CI.` },
-      ],
-    ],
-    sections: [
-      {
-        heading: 'One row per study',
-        html: `<p>Each study gets a square and a line. The square marks that study's own point estimate; the line is its 95% confidence interval. Studies are usually sorted top-to-bottom in the order they were entered, with the pooled result(s) below a divider line.</p>`,
-      },
-      {
-        heading: 'Reading the weights: why the squares differ in size',
-        html: `<p>A study's weight in the pooled estimate is driven by its <strong>precision</strong> &mdash; roughly, the inverse of its variance. A large, tightly-measured study (small standard error) gets a big square and pulls the pooled diamond toward it; a small, noisy study gets a tiny square and barely moves it, even if its own point estimate looks dramatic. Reading square sizes tells you at a glance which studies are actually driving the pooled conclusion.</p>`,
-      },
-      {
-        heading: 'Fixed-Effect vs. Random-Effects: two diamonds, two assumptions',
-        html: `<p><strong>Fixed-Effect</strong> assumes every study is estimating the exact same true effect, so all the variation between studies is treated as sampling noise &mdash; weight comes from precision alone.</p>
-          <p><strong>Random-Effects</strong> assumes each study is estimating its <em>own</em> true effect, drawn from a distribution of true effects across settings, populations, or protocols. It adds the estimated between-study variance (&tau;&sup2;) into every study's weight, which pulls the smaller/noisier studies more nearly level with the large ones.</p>
-          <p>The practical consequence: the Random-Effects diamond is usually wider (less certain) than the Fixed-Effect one, and gives comparatively more say to smaller studies. When heterogeneity is low the two nearly coincide; when it's high, Random-Effects is generally the more defensible summary.</p>`,
-      },
-      {
-        heading: 'The dashed null line',
-        html: `<p>Marks "no effect" &mdash; 0 for a difference, or a ratio of 1 for a risk ratio/odds ratio. A pooled diamond that does not touch this line indicates a statistically significant result at the conventional &alpha; = .05 threshold; one that does touch it does not rule out no effect. It's common, and not a contradiction, for several individual studies' lines to cross the null while the pooled diamond does not &mdash; that's the entire point of pooling evidence.</p>`,
-      },
-      {
-        heading: 'Prediction intervals: a different question than the CI',
-        html: `<p>The confidence interval around the Random-Effects diamond answers "how precisely do we know the <em>average</em> true effect?" The prediction interval answers a different, often more clinically relevant question: "if one more study were run tomorrow, what range would <em>its own</em> true effect plausibly fall in?"</p>
-          <p>Because the PI has to account for the full spread of true effects across settings &mdash; not just uncertainty about their average &mdash; it is always at least as wide as the Random-Effects CI, and it can cross the null line even when that CI does not. That's not an error: it's telling you that while the average effect looks real, any single future study could still turn up null.</p>`,
-      },
-      {
-        heading: 'Heterogeneity captions: Q, τ², I²',
-        html: `<p>Most forest plots in this app caption their heterogeneity statistics directly beneath the plot. <strong>Q</strong> tests whether the studies' point estimates differ more than sampling error alone would explain (a small p-value flags real heterogeneity, though Q has famously low power with few studies). <strong>&tau;&sup2;</strong> is the estimated variance of true effects between studies &mdash; it's what feeds the Random-Effects weights and the prediction interval. <strong>I&sup2;</strong> restates that same variance as a percentage of total variability across studies; a common (debated) rule of thumb reads roughly &lt;25% as low, 25&ndash;75% as moderate, and &gt;75% as considerable heterogeneity.</p>`,
-      },
-    ],
-    related: [
-      { id: 'meta-analysis',      why: 'Pools effect sizes across studies with the Fixed-Effect/Random-Effects forest plot shown above.' },
-      { id: 'hksj-meta-analysis', why: 'Same forest-plot grammar, comparing the standard random-effects CI to the wider Hartung-Knapp-Sidik-Jonkman adjustment.' },
-      { id: 'meta-analysis-proportions', why: 'Same grammar applied to pooled proportions, via Arcsine/Logit/Raw transforms or a one-stage GLMM.' },
-      { id: 'network-meta-analysis', why: 'Extends the same forest-plot grammar to every treatment compared against a common reference.' },
-    ],
-  },
-
-  {
-    id: 'reading-network-diagrams',
-    category: 'Chart Reading',
-    title: 'How to Read a Network Meta-Analysis Diagram & League Table',
-    blurb: 'What the nodes, edges, and league-table cells actually represent, and how direct evidence differs from indirect.',
-    dek: `A network meta-analysis compares three or more treatments at once, even when not every pair has been tested head-to-head. The diagram shows what evidence actually exists; the league table shows what the model estimated from it.`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 324" style="width:100%;height:auto;display:block;" role="img" aria-label="Example network diagram with four treatments">
-  <line x1="200" y1="66" x2="80" y2="196" stroke="#B7BEDA" stroke-width="2.75"/>
-  <line x1="200" y1="66" x2="320" y2="196" stroke="#B7BEDA" stroke-width="1.5"/>
-  <line x1="80" y1="196" x2="320" y2="196" stroke="#B7BEDA" stroke-width="4"/>
-  <line x1="80" y1="196" x2="200" y2="296" stroke="#B7BEDA" stroke-width="1.5"/>
-  <line x1="320" y1="196" x2="200" y2="296" stroke="#B7BEDA" stroke-width="2.75"/>
-  <text x="200" y="40" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">reference treatment</text>
-  <circle cx="200" cy="66" r="22" fill="#4E6EDB" stroke="#4E6EDB" stroke-width="1.5"/>
-  <text x="200" y="70" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#fff">A</text>
-  <circle cx="80" cy="196" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
-  <text x="80" y="200" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">B</text>
-  <circle cx="320" cy="196" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
-  <text x="320" y="200" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">C</text>
-  <circle cx="200" cy="296" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
-  <text x="200" y="300" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">D</text>
-</svg>`,
-    figureCaption: `Four treatments; B&ndash;C has the most direct trials (thickest line), while A&ndash;D was never compared head-to-head.`,
-    legend: [
-      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Blue node &mdash; the reference treatment. Every effect in the league table and network forest plot is expressed relative to it.` },
-      { swatchClass: 'is-line', swatchStyle: 'background:#B7BEDA', text: `Line between nodes &mdash; at least one trial directly compared that pair; a <strong>thicker</strong> line means more direct trials made that same comparison.` },
-    ],
-    sections: [
-      {
-        heading: 'Nodes and edges',
-        html: `<p>Each circle is a treatment. A line between two circles means at least one trial directly randomized patients between that pair &mdash; no line means that pair was <em>never</em> compared head-to-head in the available data.</p>`,
-      },
-      {
-        heading: 'Direct vs. indirect evidence',
-        html: `<p>A network meta-analysis can still estimate an effect for a pair with no line between them, by chaining the comparisons that do exist &mdash; e.g., estimating A vs. D by combining A vs. B, B vs. C, and C vs. D trials. This borrowed, chained evidence is called <strong>indirect</strong> evidence, as opposed to the <strong>direct</strong> evidence from trials that compared that exact pair. The model blends both where both exist, which is the whole appeal of a network analysis over separate pairwise meta-analyses.</p>`,
-      },
-      {
-        heading: 'Reading the league table',
-        html: `<p>The diagonal names each treatment (the reference treatment's diagonal cell is highlighted). Every cell above the diagonal compares the treatment named at the <strong>top of its column</strong> against the treatment named at the <strong>start of its row</strong> &mdash; showing the pooled effect estimate with its 95% CI underneath. The cells below the diagonal are left blank, since they'd just be the mirror image of the cell above (same comparison, opposite direction).</p>`,
-      },
-      {
-        heading: 'The treatment forest plot',
-        html: `<p>Alongside the league table, this app also draws a forest plot with one row per treatment, each showing that treatment's effect versus the reference treatment named at the top. It uses the exact same visual grammar as a standard forest plot &mdash; see <a href="#learn/reading-forest-plots">How to Read a Forest Plot</a> for the square/line/null-line conventions.</p>`,
-      },
-    ],
-    related: [
-      { id: 'network-meta-analysis', why: 'Produces the network diagram, league table, and treatment forest plot described above.' },
-    ],
-  },
-
-  {
-    id: 'reading-box-plots',
-    category: 'Chart Reading',
-    title: 'How to Read a Box Plot',
-    blurb: 'What the box, whiskers, and open circles represent, and how the 1.5×IQR outlier rule works.',
-    dek: `A box plot summarizes an entire distribution in five landmarks &mdash; without assuming it's bell-shaped, and without letting a few extreme values distort the picture the way a mean and SD can.`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" style="width:100%;height:auto;display:block;" role="img" aria-label="Example box-and-whisker plot">
-  <line x1="73.8" y1="62" x2="145.5" y2="62" stroke="#4E6EDB" stroke-width="1.5"/>
-  <line x1="253.1" y1="62" x2="360.7" y2="62" stroke="#4E6EDB" stroke-width="1.5"/>
-  <line x1="73.8" y1="52" x2="73.8" y2="72" stroke="#4E6EDB" stroke-width="1.5"/>
-  <line x1="360.7" y1="52" x2="360.7" y2="72" stroke="#4E6EDB" stroke-width="1.5"/>
-  <rect x="145.5" y="42" width="107.6" height="40" fill="rgba(78,110,219,.12)" stroke="#4E6EDB" stroke-width="1.5"/>
-  <line x1="190.3" y1="42" x2="190.3" y2="82" stroke="#4E6EDB" stroke-width="2.5"/>
-  <circle cx="477.2" cy="62" r="4" fill="none" stroke="#E0527C" stroke-width="1.5"/>
-  <text x="142.5" y="34" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q1 = 10</text>
-  <text x="256.1" y="34" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q3 = 22</text>
-  <text x="190.3" y="98" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Median = 15</text>
-  <text x="73.8" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">lower fence</text>
-  <text x="360.7" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">upper fence</text>
-  <text x="477.2" y="80" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E0527C">outlier</text>
-</svg>`,
-    figureCaption: `IQR = Q3 &minus; Q1 = 12; fences sit 1.5&times;IQR beyond the box; one point falls outside the upper fence.`,
-    legend: [
-      { swatchClass: 'is-square', swatchStyle: 'background:rgba(78,110,219,.25);border:1.5px solid #4E6EDB;', text: `Box: <strong>interquartile range</strong>, the middle 50% of the data from Q1 to Q3 (height = Q3 &minus; Q1).` },
-      { swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB;height:4px;', text: `Thick line inside the box: the <strong>median</strong> (Q2), not the mean.` },
-      { swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Whiskers: extend to the most extreme data point that is still <em>within</em> the fences.` },
-      { swatchClass: 'is-square', swatchStyle: 'background:transparent;border:1.5px solid #E0527C;border-radius:50%;', text: `Open circle: a flagged <strong>outlier</strong> beyond 1.5&times;IQR from the box.` },
-    ],
-    sections: [
-      {
-        heading: 'The box: the middle 50% of your data',
-        html: `<p>The box spans the first quartile (Q1, the 25th percentile) to the third quartile (Q3, the 75th percentile). Exactly half of the data values fall inside it, by definition &mdash; regardless of whether the underlying distribution is symmetric, skewed, or nothing like a bell curve.</p>`,
-      },
-      {
-        heading: 'The line inside: the median, not the mean',
-        html: `<p>The thick line marks the median &mdash; the middle value when the data are sorted. Unlike the mean, the median isn't pulled around by a handful of extreme values, which is exactly why box plots pair it with quartiles rather than a mean and SD.</p>`,
-      },
-      {
-        heading: 'Whiskers and fences: how far is "typical"',
-        html: `<p>Tukey's rule places a <strong>lower fence</strong> at Q1 &minus; 1.5&times;IQR and an <strong>upper fence</strong> at Q3 + 1.5&times;IQR. The whiskers themselves don't extend all the way to the fences &mdash; they stop at the most extreme data point that still falls <em>within</em> the fences, so a whisker's exact length depends on where your real data happen to land.</p>`,
-      },
-      {
-        heading: 'Outliers: the open circles',
-        html: `<p>Any value beyond a fence is plotted as its own open circle rather than folded into the whisker. Being flagged as an outlier by the 1.5&times;IQR rule is a statistical convention, not proof of a data-entry error or a subject who "doesn't belong" &mdash; it's a prompt to look at that value more closely, not an instruction to delete it.</p>`,
-      },
-    ],
-    related: [
-      { id: 'interquartile-range', why: 'Computes Q1, median, Q3, and the IQR from raw data, and draws the box plot shown above.' },
-    ],
-  },
-
-  {
-    id: 'reading-bland-altman-plots',
-    category: 'Chart Reading',
-    title: 'How to Read a Bland-Altman Plot',
-    blurb: 'Why this plot is about agreement, not correlation, and how to read the bias line and limits of agreement.',
-    dek: `Two measurement methods can correlate almost perfectly and still disagree badly in absolute terms. A Bland-Altman plot is built specifically to catch that.`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 230" style="width:100%;height:auto;display:block;" role="img" aria-label="Example Bland-Altman plot">
-  <line x1="44" y1="186" x2="544" y2="186" stroke="#EEF1F7" stroke-width="1"/>
-  <text x="38" y="189" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">-20</text>
-  <line x1="44" y1="143.5" x2="544" y2="143.5" stroke="#EEF1F7" stroke-width="1"/>
-  <text x="38" y="146.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">-10</text>
-  <line x1="44" y1="58.5" x2="544" y2="58.5" stroke="#EEF1F7" stroke-width="1"/>
-  <text x="38" y="61.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">10</text>
-  <line x1="44" y1="16" x2="544" y2="16" stroke="#EEF1F7" stroke-width="1"/>
-  <text x="38" y="19" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">20</text>
-  <line x1="44" y1="101" x2="544" y2="101" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
-  <text x="48" y="113" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0 (no difference)</text>
-  <line x1="44" y1="160.5" x2="544" y2="160.5" stroke="#E07B2C" stroke-width="1.5" stroke-dasharray="5,3"/>
-  <line x1="44" y1="24.5" x2="544" y2="24.5" stroke="#E07B2C" stroke-width="1.5" stroke-dasharray="5,3"/>
-  <line x1="44" y1="92.5" x2="544" y2="92.5" stroke="#1A1A2E" stroke-width="1.5"/>
-  <circle cx="119" cy="84" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="169" cy="113.75" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="219" cy="75.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="254" cy="96.75" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="294" cy="135" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="334" cy="58.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="369" cy="88.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="419" cy="122.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="469" cy="92.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <circle cx="504" cy="37.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
-  <text x="540" y="88.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Mean = +2.0</text>
-  <text x="540" y="20.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">+1.96 SD</text>
-  <text x="540" y="156.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">-1.96 SD</text>
-  <text x="44" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0</text>
-  <text x="169" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">25</text>
-  <text x="294" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">50</text>
-  <text x="419" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">75</text>
-  <text x="544" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">100</text>
-  <text x="294" y="222" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">mean of the two measurements</text>
-  <text x="12" y="101" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099" transform="rotate(-90 12 101)">difference (A - B)</text>
-</svg>`,
-    figureCaption: `Ten paired measurements: a bias of +2.0, with limits of agreement from &minus;14 to +18.`,
-    legend: [
-      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Each dot &mdash; one paired measurement, plotted as (average of the two methods, difference between them).` },
-      { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Solid line &mdash; the mean difference (bias) between the two methods.` },
-      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#E07B2C" stroke-width="2" stroke-dasharray="5,3"/></svg>`, text: `Dashed amber lines &mdash; limits of agreement: bias &plusmn; 1.96&times;SD of the differences.` },
-      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Thin dashed line &mdash; zero, i.e. perfect agreement.` },
-    ],
-    sections: [
-      {
-        heading: "What's plotted: agreement, not correlation",
-        html: `<p>The x-axis is the <em>average</em> of the two methods for each subject (the best available estimate of their true value, since neither method is assumed perfect); the y-axis is the <em>difference</em> between the two methods for that same subject. Two methods can have a correlation of 0.99 and still disagree by a clinically important amount &mdash; correlation measures whether values move together, not whether they agree in absolute terms. That's precisely the failure mode this plot is designed to expose.</p>`,
-      },
-      {
-        heading: 'The bias line',
-        html: `<p>The solid line marks the mean difference across all subjects &mdash; the average systematic offset of one method relative to the other. A bias line far from zero means one method is consistently reading higher or lower than the other, even if no single pair of readings looks alarming.</p>`,
-      },
-      {
-        heading: 'Limits of agreement: are they narrow enough to matter?',
-        html: `<p>The dashed amber lines sit at the bias &plusmn; 1.96&times;SD of the differences &mdash; the range within which about 95% of future differences between the two methods are expected to fall, assuming differences are roughly normally distributed. Whether that range is "narrow enough" is a clinical judgment, not a statistical one: this plot doesn't have a built-in pass/fail threshold, unlike the equivalence-zone plot.</p>`,
-      },
-      {
-        heading: 'Spotting patterns: proportional bias and funnels',
-        html: `<p>Look for two failure patterns beyond a simple offset: a <strong>trend</strong> (points drifting from negative to positive difference as the mean increases, meaning agreement isn't constant across the measurement range), and a <strong>funnel</strong> (the scatter fanning out wider at one end, meaning the two methods disagree more at higher or lower values). Either pattern means a single bias-and-limits summary doesn't tell the whole story.</p>`,
-      },
-    ],
-    related: [
-      { id: 'bland-altman', why: 'Computes the bias and limits of agreement, and draws the plot shown above.' },
-    ],
-  },
-
-  {
-    id: 'reading-equivalence-plots',
-    category: 'Chart Reading',
-    title: 'How to Read an Equivalence / Non-Inferiority Zone Plot',
-    blurb: 'The one rule that decides equivalence, and why a non-significant p-value is not the same thing.',
-    dek: `Equivalence and non-inferiority testing (TOST) ask a different question than a standard hypothesis test: not "is there a difference?" but "is the difference small enough not to matter?"`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 190" style="width:100%;height:auto;display:block;" role="img" aria-label="Example equivalence zone plot comparing two studies">
-  <rect x="106.7" y="24" width="288.9" height="142" fill="#4E6EDB" opacity=".08"/>
-  <line x1="20" y1="166" x2="540" y2="166" stroke="#CDD2E0" stroke-width="1.5"/>
-  <line x1="251.1" y1="24" x2="251.1" y2="166" stroke="#CDD2E0" stroke-width="1"/>
-  <line x1="106.7" y1="24" x2="106.7" y2="166" stroke="#4E6EDB" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <line x1="395.6" y1="24" x2="395.6" y2="166" stroke="#4E6EDB" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <text x="106.7" y="16" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4E6EDB">-&Delta;</text>
-  <text x="395.6" y="16" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4E6EDB">+&Delta;</text>
-  <text x="251.1" y="182" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0</text>
-  <text x="28" y="45" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Study A: equivalence shown</text>
-  <line x1="193.3" y1="59" x2="366.7" y2="59" stroke="#1A1A2E" stroke-width="2"/>
-  <circle cx="280" cy="59" r="5" fill="#E07B2C" stroke="#1A1A2E" stroke-width="1"/>
-  <text x="28" y="117" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Study B: equivalence NOT shown</text>
-  <line x1="222.2" y1="131" x2="453.3" y2="131" stroke="#1A1A2E" stroke-width="2"/>
-  <circle cx="337.8" cy="131" r="5" fill="#E07B2C" stroke="#1A1A2E" stroke-width="1"/>
-</svg>`,
-    figureCaption: `Same margins, two outcomes: Study A's CI fits entirely inside the zone; Study B's spills past +&Delta;.`,
-    legend: [
-      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;opacity:.35;', text: `Shaded band &mdash; the equivalence/non-inferiority zone: differences considered too small to matter clinically.` },
-      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#4E6EDB" stroke-width="2" stroke-dasharray="4,3"/></svg>`, text: `Dashed vertical lines &mdash; the margin(s) that define the edges of that zone.` },
-      { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Thick line with a dot &mdash; the point estimate and its 95% confidence interval.` },
-    ],
-    sections: [
-      {
-        heading: 'The rule: does the whole CI fit inside the shaded zone?',
-        html: `<p>Equivalence (or non-inferiority) is demonstrated only when the <strong>entire</strong> confidence interval &mdash; not just the point estimate &mdash; falls within the shaded zone. In the figure above, Study A's CI is fully inside the zone: equivalence is shown. Study B's point estimate looks similar, but its CI extends past +&Delta;, so equivalence is not established &mdash; the data can't rule out a difference as large as the margin.</p>`,
-      },
-      {
-        heading: 'One-sided vs. two-sided margins',
-        html: `<p><strong>Equivalence</strong> uses two margins (&minus;&Delta; to +&Delta;): the treatment must be shown to be neither meaningfully worse nor meaningfully better. <strong>Non-inferiority</strong> uses a single margin on the side that would matter (e.g., only "not meaningfully worse"), so the zone extends open-ended toward the other side of the plot &mdash; being better than the comparator is never a problem for non-inferiority.</p>`,
-      },
-      {
-        heading: "Why a regular p-value doesn't answer this question",
-        html: `<p>A standard hypothesis test's null hypothesis is "no difference" &mdash; failing to reject it (a non-significant p-value) means the data are <em>consistent with</em> no difference, not that a meaningful difference has been <em>ruled out</em>. An underpowered study will produce a non-significant p-value almost by default. TOST flips the logic: the null hypothesis becomes "the difference is at least as large as the margin," and equivalence is only concluded when that null is actively rejected on both sides &mdash; which is exactly what "the whole CI fits in the zone" is checking.</p>`,
-      },
-    ],
-    related: [
-      { id: 'equivalence-test', why: 'Runs the two one-sided tests (TOST) procedure and draws the zone plot shown above.' },
-    ],
-  },
-
-  {
     id: 'data-nominal',
     category: 'Data Types',
     title: 'Nominal Data',
@@ -13573,7 +14062,7 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
+        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
       },
     ],
     related: [
@@ -13581,6 +14070,7 @@ const GUIDES = [
       { id: 'fishers-exact', why: 'Exact alternative to Chi-Square for small-sample 2×2 tables.' },
       { id: 'cramers-v', why: 'Strength of association for nominal tables larger than 2×2.' },
       { id: 'cohens-kappa', why: 'Chance-corrected agreement between two raters on categorical classifications.' },
+      { id: 'fleiss-kappa', why: 'Extends Cohen\'s Kappa to three or more raters on unordered categories.' },
       { id: 'mcnemars-test', why: 'Tests paired/matched nominal data, such as before-and-after classification of the same subjects.' },
     ],
   },
@@ -13704,13 +14194,14 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Comparing a sample mean to a known value: <strong>1-Sample t-Test</strong>. Comparing two independent groups: <strong>Unpaired t-Test (Welch's)</strong>. Comparing two paired/matched measurements: <strong>Paired t-Test</strong>. Comparing three or more groups: <strong>1-Way ANOVA</strong> (independent groups) or <strong>Repeated Measures ANOVA</strong> (same subjects). Relationship between two continuous variables: <strong>Pearson's Correlation</strong>, <strong>Simple</strong> or <strong>Multiple Linear Regression</strong>. Standardized effect size for a mean difference: <strong>Cohen's d</strong>.</p>`,
+        html: `<p>Comparing a sample mean to a known value: <strong>1-Sample t-Test</strong>. Comparing two independent groups: <strong>Unpaired t-Test (Welch's)</strong>. Comparing two paired/matched measurements: <strong>Paired t-Test</strong>. Comparing three or more groups: <strong>1-Way ANOVA</strong> (independent groups) or <strong>Repeated Measures ANOVA</strong> (same subjects) — check the equal-variance assumption first with <strong>Levene's Test</strong>. Relationship between two continuous variables: <strong>Pearson's Correlation</strong>, <strong>Simple</strong> or <strong>Multiple Linear Regression</strong>. Standardized effect size for a mean difference: <strong>Cohen's d</strong>.</p>`,
       },
     ],
     related: [
       { id: 'unpaired-t-test', why: 'Compares means between two independent continuous samples.' },
       { id: 'paired-t-test', why: 'Compares means between two paired/matched continuous measurements.' },
       { id: 'anova-1way', why: 'Extends the two-group comparison to three or more independent groups.' },
+      { id: 'levenes-test', why: 'Checks the equal-variance assumption behind ANOVA and the pooled-variance t-test.' },
       { id: 'pearson-r', why: 'Measures the linear relationship between two continuous variables.' },
       { id: 'simple-regression', why: 'Fits a line predicting one continuous variable from another.' },
       { id: 'cohens-d', why: 'Standardized effect size for the difference between two means.' },
@@ -13770,12 +14261,771 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Estimating the probability of remaining event-free over time, accounting for censoring: <strong>Kaplan-Meier Survival Curve</strong>. Comparing survival between two groups: <strong>Log-Rank Test</strong>.</p>`,
+        html: `<p>Estimating the probability of remaining event-free over time, accounting for censoring: <strong>Kaplan-Meier Survival Curve</strong>. Comparing survival between two groups: <strong>Log-Rank Test</strong> (significance) and <strong>Cox Proportional Hazards</strong> (a hazard ratio quantifying the size of that difference, with a 95% CI).</p>`,
       },
     ],
     related: [
       { id: 'kaplan-meier', why: 'Estimates the survival curve and median survival time from censored time-to-event data.' },
       { id: 'log-rank-test', why: 'Tests whether survival differs between two groups.' },
+      { id: 'cox-ph', why: 'Estimates the hazard ratio between two groups, quantifying how much (not just whether) survival differs.' },
+    ],
+  },
+
+  {
+    id: 'reading-forest-plots',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Forest Plot',
+    blurb: 'What the squares, lines, and diamonds mean — plus fixed vs. random effects, weights, and prediction intervals.',
+    dek: `Every forest plot in this app &mdash; Meta-Analysis, HKSJ, GLMM/Proportions, and Network &mdash; draws from the same visual vocabulary. Learn it once here and you can read all of them.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates">
+  <line x1="260.9" y1="16" x2="260.9" y2="197" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="260.9" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">null = 0</text>
+  <text x="90" y="36" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 1</text>
+  <line x1="215.2" y1="33" x2="377.5" y2="33" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="293.8" y="30.5" width="5.1" height="5.1" fill="#4E6EDB"/>
+  <text x="296.3" y="26.5" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.30</text>
+  <text x="90" y="62" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 2</text>
+  <line x1="279.5" y1="59" x2="372.3" y2="59" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="322.2" y="55.3" width="7.4" height="7.4" fill="#4E6EDB"/>
+  <text x="325.9" y="51.3" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.55</text>
+  <text x="90" y="88" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 3</text>
+  <line x1="320.7" y1="85" x2="390.2" y2="85" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="350.5" y="80" width="10" height="10" fill="#4E6EDB"/>
+  <text x="355.5" y="76" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.80</text>
+  <line x1="100" y1="98" x2="540" y2="98" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="90" y="135" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#4E6EDB">Fixed-Effect</text>
+  <polygon points="313.4,132 339.7,126 366.0,132 339.7,138" fill="#4E6EDB"/>
+  <text x="339.7" y="122" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#4E6EDB">0.67</text>
+  <text x="90" y="161" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#E07B2C">Random-Effects</text>
+  <polygon points="291.7,158 333.6,152 375.5,158 333.6,164" fill="#E07B2C"/>
+  <text x="333.6" y="148" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#E07B2C">0.62</text>
+  <text x="90" y="187" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">95% PI</text>
+  <line x1="219.5" y1="184" x2="444.2" y2="184" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="219.5" y1="179" x2="219.5" y2="189" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="444.2" y1="179" x2="444.2" y2="189" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="331.9" y="176" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[-0.35, 1.55]</text>
+  <line x1="100" y1="197" x2="540" y2="197" stroke="#CDD2E0" stroke-width="1.5"/>
+</svg>`,
+    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval.`,
+    legendColumns: [
+      [
+        { colLabel: 'Reading a study row', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Horizontal line: that study's own 95% confidence interval.` },
+        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Dashed vertical line: the null value (0, or a ratio of 1 for RR/OR).` },
+        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="2" y1="5" x2="22" y2="5" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/><line x1="2" y1="2" x2="2" y2="8" stroke="#7B8099" stroke-width="1.5"/><line x1="22" y1="2" x2="22" y2="8" stroke="#7B8099" stroke-width="1.5"/></svg>`, text: `Dashed whisker:<br><strong>95% prediction interval</strong>, the range a new study's true effect would plausibly fall in.` },
+      ],
+      [
+        { colLabel: 'Weight & pooled estimate', swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB', text: `Blue square: <strong>size</strong> shows how much weight that study carries in the pooled result (the square itself marks its point estimate).` },
+        { swatchClass: 'is-diamond', swatchStyle: 'background:#4E6EDB', text: `Blue diamond: <strong>Fixed-Effect</strong>, the pooled estimate assuming one shared true effect; its width is its own 95% CI.` },
+        { swatchClass: 'is-diamond', swatchStyle: 'background:#E07B2C', text: `Amber diamond: <strong>Random-Effects</strong>, the pooled estimate allowing for between-study variation; its width is its own 95% CI.` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'One row per study',
+        html: `<p>Each study gets a square and a line. The square marks that study's own point estimate; the line is its 95% confidence interval. Studies are usually sorted top-to-bottom in the order they were entered, with the pooled result(s) below a divider line.</p>`,
+      },
+      {
+        heading: 'Reading the weights: why the squares differ in size',
+        html: `<p>A study's weight in the pooled estimate is driven by its <strong>precision</strong> &mdash; roughly, the inverse of its variance. A large, tightly-measured study (small standard error) gets a big square and pulls the pooled diamond toward it; a small, noisy study gets a tiny square and barely moves it, even if its own point estimate looks dramatic. Reading square sizes tells you at a glance which studies are actually driving the pooled conclusion.</p>`,
+      },
+      {
+        heading: 'Fixed-Effect vs. Random-Effects: two diamonds, two assumptions',
+        html: `<p><strong>Fixed-Effect</strong> assumes every study is estimating the exact same true effect, so all the variation between studies is treated as sampling noise &mdash; weight comes from precision alone.</p>
+          <p><strong>Random-Effects</strong> assumes each study is estimating its <em>own</em> true effect, drawn from a distribution of true effects across settings, populations, or protocols. It adds the estimated between-study variance (&tau;&sup2;) into every study's weight, which pulls the smaller/noisier studies more nearly level with the large ones.</p>
+          <p>The practical consequence: the Random-Effects diamond is usually wider (less certain) than the Fixed-Effect one, and gives comparatively more say to smaller studies. When heterogeneity is low the two nearly coincide; when it's high, Random-Effects is generally the more defensible summary.</p>`,
+      },
+      {
+        heading: 'The dashed null line',
+        html: `<p>Marks "no effect" &mdash; 0 for a difference, or a ratio of 1 for a risk ratio/odds ratio. A pooled diamond that does not touch this line indicates a statistically significant result at the conventional &alpha; = .05 threshold; one that does touch it does not rule out no effect. It's common, and not a contradiction, for several individual studies' lines to cross the null while the pooled diamond does not &mdash; that's the entire point of pooling evidence.</p>`,
+      },
+      {
+        heading: 'Prediction intervals: a different question than the CI',
+        html: `<p>The confidence interval around the Random-Effects diamond answers "how precisely do we know the <em>average</em> true effect?" The prediction interval answers a different, often more clinically relevant question: "if one more study were run tomorrow, what range would <em>its own</em> true effect plausibly fall in?"</p>
+          <p>Because the PI has to account for the full spread of true effects across settings &mdash; not just uncertainty about their average &mdash; it is always at least as wide as the Random-Effects CI, and it can cross the null line even when that CI does not. That's not an error: it's telling you that while the average effect looks real, any single future study could still turn up null.</p>`,
+      },
+      {
+        heading: 'Heterogeneity captions: Q, τ², I²',
+        html: `<p>Most forest plots in this app caption their heterogeneity statistics directly beneath the plot. <strong>Q</strong> tests whether the studies' point estimates differ more than sampling error alone would explain (a small p-value flags real heterogeneity, though Q has famously low power with few studies). <strong>&tau;&sup2;</strong> is the estimated variance of true effects between studies &mdash; it's what feeds the Random-Effects weights and the prediction interval. <strong>I&sup2;</strong> restates that same variance as a percentage of total variability across studies; a common (debated) rule of thumb reads roughly &lt;25% as low, 25&ndash;75% as moderate, and &gt;75% as considerable heterogeneity.</p>`,
+      },
+    ],
+    related: [
+      { id: 'meta-analysis',      why: 'Pools effect sizes across studies with the Fixed-Effect/Random-Effects forest plot shown above.' },
+      { id: 'hksj-meta-analysis', why: 'Same forest-plot grammar, comparing the standard random-effects CI to the wider Hartung-Knapp-Sidik-Jonkman adjustment.' },
+      { id: 'meta-analysis-proportions', why: 'Same grammar applied to pooled proportions, via Arcsine/Logit/Raw transforms or a one-stage GLMM.' },
+      { id: 'network-meta-analysis', why: 'Extends the same forest-plot grammar to every treatment compared against a common reference.' },
+    ],
+  },
+
+  {
+    id: 'reading-network-diagrams',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Network Meta-Analysis Diagram & League Table',
+    blurb: 'What the nodes, edges, and league-table cells actually represent, and how direct evidence differs from indirect.',
+    dek: `A network meta-analysis compares three or more treatments at once, even when not every pair has been tested head-to-head. The diagram shows what evidence actually exists; the league table shows what the model estimated from it.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 324" style="width:100%;height:auto;display:block;" role="img" aria-label="Example network diagram with four treatments">
+  <line x1="200" y1="66" x2="80" y2="196" stroke="#B7BEDA" stroke-width="2.75"/>
+  <line x1="200" y1="66" x2="320" y2="196" stroke="#B7BEDA" stroke-width="1.5"/>
+  <line x1="80" y1="196" x2="320" y2="196" stroke="#B7BEDA" stroke-width="4"/>
+  <line x1="80" y1="196" x2="200" y2="296" stroke="#B7BEDA" stroke-width="1.5"/>
+  <line x1="320" y1="196" x2="200" y2="296" stroke="#B7BEDA" stroke-width="2.75"/>
+  <text x="200" y="40" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">reference treatment</text>
+  <circle cx="200" cy="66" r="22" fill="#4E6EDB" stroke="#4E6EDB" stroke-width="1.5"/>
+  <text x="200" y="70" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#fff">A</text>
+  <circle cx="80" cy="196" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
+  <text x="80" y="200" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">B</text>
+  <circle cx="320" cy="196" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
+  <text x="320" y="200" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">C</text>
+  <circle cx="200" cy="296" r="22" fill="#EDEFF7" stroke="#8891B8" stroke-width="1.5"/>
+  <text x="200" y="300" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="12" font-weight="700" fill="#1A1A2E">D</text>
+</svg>`,
+    figureCaption: `Four treatments; B&ndash;C has the most direct trials (thickest line), while A&ndash;D was never compared head-to-head.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Blue node &mdash; the reference treatment. Every effect in the league table and network forest plot is expressed relative to it.` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#B7BEDA', text: `Line between nodes &mdash; at least one trial directly compared that pair; a <strong>thicker</strong> line means more direct trials made that same comparison.` },
+    ],
+    sections: [
+      {
+        heading: 'Nodes and edges',
+        html: `<p>Each circle is a treatment. A line between two circles means at least one trial directly randomized patients between that pair &mdash; no line means that pair was <em>never</em> compared head-to-head in the available data.</p>`,
+      },
+      {
+        heading: 'Direct vs. indirect evidence',
+        html: `<p>A network meta-analysis can still estimate an effect for a pair with no line between them, by chaining the comparisons that do exist &mdash; e.g., estimating A vs. D by combining A vs. B, B vs. C, and C vs. D trials. This borrowed, chained evidence is called <strong>indirect</strong> evidence, as opposed to the <strong>direct</strong> evidence from trials that compared that exact pair. The model blends both where both exist, which is the whole appeal of a network analysis over separate pairwise meta-analyses.</p>`,
+      },
+      {
+        heading: 'Reading the league table',
+        html: `<p>The diagonal names each treatment (the reference treatment's diagonal cell is highlighted). Every cell above the diagonal compares the treatment named at the <strong>top of its column</strong> against the treatment named at the <strong>start of its row</strong> &mdash; showing the pooled effect estimate with its 95% CI underneath. The cells below the diagonal are left blank, since they'd just be the mirror image of the cell above (same comparison, opposite direction).</p>`,
+      },
+      {
+        heading: 'The treatment forest plot',
+        html: `<p>Alongside the league table, this app also draws a forest plot with one row per treatment, each showing that treatment's effect versus the reference treatment named at the top. It uses the exact same visual grammar as a standard forest plot &mdash; see <a href="#learn/reading-forest-plots">How to Read a Forest Plot</a> for the square/line/null-line conventions.</p>`,
+      },
+    ],
+    related: [
+      { id: 'network-meta-analysis', why: 'Produces the network diagram, league table, and treatment forest plot described above.' },
+    ],
+  },
+
+  {
+    id: 'reading-box-plots',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Box Plot',
+    blurb: 'What the box, whiskers, and open circles represent, and how the 1.5×IQR outlier rule works.',
+    dek: `A box plot summarizes an entire distribution in five landmarks &mdash; without assuming it's bell-shaped, and without letting a few extreme values distort the picture the way a mean and SD can.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" style="width:100%;height:auto;display:block;" role="img" aria-label="Example box-and-whisker plot">
+  <line x1="73.8" y1="62" x2="145.5" y2="62" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="253.1" y1="62" x2="360.7" y2="62" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="73.8" y1="52" x2="73.8" y2="72" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="360.7" y1="52" x2="360.7" y2="72" stroke="#4E6EDB" stroke-width="1.5"/>
+  <rect x="145.5" y="42" width="107.6" height="40" fill="rgba(78,110,219,.12)" stroke="#4E6EDB" stroke-width="1.5"/>
+  <line x1="190.3" y1="42" x2="190.3" y2="82" stroke="#4E6EDB" stroke-width="2.5"/>
+  <circle cx="477.2" cy="62" r="4" fill="none" stroke="#E0527C" stroke-width="1.5"/>
+  <text x="142.5" y="34" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q1 = 10</text>
+  <text x="256.1" y="34" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Q3 = 22</text>
+  <text x="190.3" y="98" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Median = 15</text>
+  <text x="73.8" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">lower fence</text>
+  <text x="360.7" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">upper fence</text>
+  <text x="477.2" y="80" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E0527C">outlier</text>
+</svg>`,
+    figureCaption: `IQR = Q3 &minus; Q1 = 12; fences sit 1.5&times;IQR beyond the box; one point falls outside the upper fence.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:rgba(78,110,219,.25);border:1.5px solid #4E6EDB;', text: `Box: <strong>interquartile range</strong>, the middle 50% of the data from Q1 to Q3 (height = Q3 &minus; Q1).` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB;height:4px;', text: `Thick line inside the box: the <strong>median</strong> (Q2), not the mean.` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Whiskers: extend to the most extreme data point that is still <em>within</em> the fences.` },
+      { swatchClass: 'is-square', swatchStyle: 'background:transparent;border:1.5px solid #E0527C;border-radius:50%;', text: `Open circle: a flagged <strong>outlier</strong> beyond 1.5&times;IQR from the box.` },
+    ],
+    sections: [
+      {
+        heading: 'The box: the middle 50% of your data',
+        html: `<p>The box spans the first quartile (Q1, the 25th percentile) to the third quartile (Q3, the 75th percentile). Exactly half of the data values fall inside it, by definition &mdash; regardless of whether the underlying distribution is symmetric, skewed, or nothing like a bell curve.</p>`,
+      },
+      {
+        heading: 'The line inside: the median, not the mean',
+        html: `<p>The thick line marks the median &mdash; the middle value when the data are sorted. Unlike the mean, the median isn't pulled around by a handful of extreme values, which is exactly why box plots pair it with quartiles rather than a mean and SD.</p>`,
+      },
+      {
+        heading: 'Whiskers and fences: how far is "typical"',
+        html: `<p>Tukey's rule places a <strong>lower fence</strong> at Q1 &minus; 1.5&times;IQR and an <strong>upper fence</strong> at Q3 + 1.5&times;IQR. The whiskers themselves don't extend all the way to the fences &mdash; they stop at the most extreme data point that still falls <em>within</em> the fences, so a whisker's exact length depends on where your real data happen to land.</p>`,
+      },
+      {
+        heading: 'Outliers: the open circles',
+        html: `<p>Any value beyond a fence is plotted as its own open circle rather than folded into the whisker. Being flagged as an outlier by the 1.5&times;IQR rule is a statistical convention, not proof of a data-entry error or a subject who "doesn't belong" &mdash; it's a prompt to look at that value more closely, not an instruction to delete it.</p>`,
+      },
+    ],
+    related: [
+      { id: 'interquartile-range', why: 'Computes Q1, median, Q3, and the IQR from raw data, and draws the box plot shown above.' },
+    ],
+  },
+
+  {
+    id: 'reading-bland-altman-plots',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Bland-Altman Plot',
+    blurb: 'Why this plot is about agreement, not correlation, and how to read the bias line and limits of agreement.',
+    dek: `Two measurement methods can correlate almost perfectly and still disagree badly in absolute terms. A Bland-Altman plot is built specifically to catch that.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 230" style="width:100%;height:auto;display:block;" role="img" aria-label="Example Bland-Altman plot">
+  <line x1="44" y1="186" x2="544" y2="186" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="189" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">-20</text>
+  <line x1="44" y1="143.5" x2="544" y2="143.5" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="146.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">-10</text>
+  <line x1="44" y1="58.5" x2="544" y2="58.5" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="61.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">10</text>
+  <line x1="44" y1="16" x2="544" y2="16" stroke="#EEF1F7" stroke-width="1"/>
+  <text x="38" y="19" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">20</text>
+  <line x1="44" y1="101" x2="544" y2="101" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="48" y="113" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0 (no difference)</text>
+  <line x1="44" y1="160.5" x2="544" y2="160.5" stroke="#E07B2C" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="44" y1="24.5" x2="544" y2="24.5" stroke="#E07B2C" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="44" y1="92.5" x2="544" y2="92.5" stroke="#1A1A2E" stroke-width="1.5"/>
+  <circle cx="119" cy="84" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="169" cy="113.75" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="219" cy="75.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="254" cy="96.75" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="294" cy="135" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="334" cy="58.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="369" cy="88.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="419" cy="122.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="469" cy="92.5" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <circle cx="504" cy="37.25" r="3.5" fill="#4E6EDB" opacity=".75"/>
+  <text x="540" y="88.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Mean = +2.0</text>
+  <text x="540" y="20.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">+1.96 SD</text>
+  <text x="540" y="156.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">-1.96 SD</text>
+  <text x="44" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0</text>
+  <text x="169" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">25</text>
+  <text x="294" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">50</text>
+  <text x="419" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">75</text>
+  <text x="544" y="210" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">100</text>
+  <text x="294" y="222" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">mean of the two measurements</text>
+  <text x="12" y="101" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099" transform="rotate(-90 12 101)">difference (A - B)</text>
+</svg>`,
+    figureCaption: `Ten paired measurements: a bias of +2.0, with limits of agreement from &minus;14 to +18.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Each dot &mdash; one paired measurement, plotted as (average of the two methods, difference between them).` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Solid line &mdash; the mean difference (bias) between the two methods.` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#E07B2C" stroke-width="2" stroke-dasharray="5,3"/></svg>`, text: `Dashed amber lines &mdash; limits of agreement: bias &plusmn; 1.96&times;SD of the differences.` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Thin dashed line &mdash; zero, i.e. perfect agreement.` },
+    ],
+    sections: [
+      {
+        heading: "What's plotted: agreement, not correlation",
+        html: `<p>The x-axis is the <em>average</em> of the two methods for each subject (the best available estimate of their true value, since neither method is assumed perfect); the y-axis is the <em>difference</em> between the two methods for that same subject. Two methods can have a correlation of 0.99 and still disagree by a clinically important amount &mdash; correlation measures whether values move together, not whether they agree in absolute terms. That's precisely the failure mode this plot is designed to expose.</p>`,
+      },
+      {
+        heading: 'The bias line',
+        html: `<p>The solid line marks the mean difference across all subjects &mdash; the average systematic offset of one method relative to the other. A bias line far from zero means one method is consistently reading higher or lower than the other, even if no single pair of readings looks alarming.</p>`,
+      },
+      {
+        heading: 'Limits of agreement: are they narrow enough to matter?',
+        html: `<p>The dashed amber lines sit at the bias &plusmn; 1.96&times;SD of the differences &mdash; the range within which about 95% of future differences between the two methods are expected to fall, assuming differences are roughly normally distributed. Whether that range is "narrow enough" is a clinical judgment, not a statistical one: this plot doesn't have a built-in pass/fail threshold, unlike the equivalence-zone plot.</p>`,
+      },
+      {
+        heading: 'Spotting patterns: proportional bias and funnels',
+        html: `<p>Look for two failure patterns beyond a simple offset: a <strong>trend</strong> (points drifting from negative to positive difference as the mean increases, meaning agreement isn't constant across the measurement range), and a <strong>funnel</strong> (the scatter fanning out wider at one end, meaning the two methods disagree more at higher or lower values). Either pattern means a single bias-and-limits summary doesn't tell the whole story.</p>`,
+      },
+    ],
+    related: [
+      { id: 'bland-altman', why: 'Computes the bias and limits of agreement, and draws the plot shown above.' },
+    ],
+  },
+
+  {
+    id: 'reading-equivalence-plots',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read an Equivalence / Non-Inferiority Zone Plot',
+    blurb: 'The one rule that decides equivalence, and why a non-significant p-value is not the same thing.',
+    dek: `Equivalence and non-inferiority testing (TOST) ask a different question than a standard hypothesis test: not "is there a difference?" but "is the difference small enough not to matter?"`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 190" style="width:100%;height:auto;display:block;" role="img" aria-label="Example equivalence zone plot comparing two studies">
+  <rect x="106.7" y="24" width="288.9" height="142" fill="#4E6EDB" opacity=".08"/>
+  <line x1="20" y1="166" x2="540" y2="166" stroke="#CDD2E0" stroke-width="1.5"/>
+  <line x1="251.1" y1="24" x2="251.1" y2="166" stroke="#CDD2E0" stroke-width="1"/>
+  <line x1="106.7" y1="24" x2="106.7" y2="166" stroke="#4E6EDB" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="395.6" y1="24" x2="395.6" y2="166" stroke="#4E6EDB" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="106.7" y="16" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4E6EDB">-&Delta;</text>
+  <text x="395.6" y="16" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4E6EDB">+&Delta;</text>
+  <text x="251.1" y="182" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0</text>
+  <text x="28" y="45" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Study A: equivalence shown</text>
+  <line x1="193.3" y1="59" x2="366.7" y2="59" stroke="#1A1A2E" stroke-width="2"/>
+  <circle cx="280" cy="59" r="5" fill="#E07B2C" stroke="#1A1A2E" stroke-width="1"/>
+  <text x="28" y="117" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Study B: equivalence NOT shown</text>
+  <line x1="222.2" y1="131" x2="453.3" y2="131" stroke="#1A1A2E" stroke-width="2"/>
+  <circle cx="337.8" cy="131" r="5" fill="#E07B2C" stroke="#1A1A2E" stroke-width="1"/>
+</svg>`,
+    figureCaption: `Same margins, two outcomes: Study A's CI fits entirely inside the zone; Study B's spills past +&Delta;.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;opacity:.35;', text: `Shaded band &mdash; the equivalence/non-inferiority zone: differences considered too small to matter clinically.` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#4E6EDB" stroke-width="2" stroke-dasharray="4,3"/></svg>`, text: `Dashed vertical lines &mdash; the margin(s) that define the edges of that zone.` },
+      { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Thick line with a dot &mdash; the point estimate and its 95% confidence interval.` },
+    ],
+    sections: [
+      {
+        heading: 'The rule: does the whole CI fit inside the shaded zone?',
+        html: `<p>Equivalence (or non-inferiority) is demonstrated only when the <strong>entire</strong> confidence interval &mdash; not just the point estimate &mdash; falls within the shaded zone. In the figure above, Study A's CI is fully inside the zone: equivalence is shown. Study B's point estimate looks similar, but its CI extends past +&Delta;, so equivalence is not established &mdash; the data can't rule out a difference as large as the margin.</p>`,
+      },
+      {
+        heading: 'One-sided vs. two-sided margins',
+        html: `<p><strong>Equivalence</strong> uses two margins (&minus;&Delta; to +&Delta;): the treatment must be shown to be neither meaningfully worse nor meaningfully better. <strong>Non-inferiority</strong> uses a single margin on the side that would matter (e.g., only "not meaningfully worse"), so the zone extends open-ended toward the other side of the plot &mdash; being better than the comparator is never a problem for non-inferiority.</p>`,
+      },
+      {
+        heading: "Why a regular p-value doesn't answer this question",
+        html: `<p>A standard hypothesis test's null hypothesis is "no difference" &mdash; failing to reject it (a non-significant p-value) means the data are <em>consistent with</em> no difference, not that a meaningful difference has been <em>ruled out</em>. An underpowered study will produce a non-significant p-value almost by default. TOST flips the logic: the null hypothesis becomes "the difference is at least as large as the margin," and equivalence is only concluded when that null is actively rejected on both sides &mdash; which is exactly what "the whole CI fits in the zone" is checking.</p>`,
+      },
+    ],
+    related: [
+      { id: 'equivalence-test', why: 'Runs the two one-sided tests (TOST) procedure and draws the zone plot shown above.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-effect-measures',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Understanding Effect Measures: Relative Risk, Odds Ratio, and Absolute Effects',
+    blurb: 'Relative risk (RR) and odds ratio (OR) answer subtly different questions — and confusing them can meaningfully inflate how big an effect looks.',
+    dek: `Relative risk (RR), odds ratio (OR), and hazard ratio (HR) all describe proportional change, but they are not interchangeable, and none of them tells you how many real people are actually affected. This guide defines RR and OR directly, shows where they diverge, and then turns to why relative and absolute measures of the same result can tell very different stories.`,
+    sections: [
+      {
+        heading: 'Relative risk (RR): the ratio of two risks',
+        html: `<p>Relative risk (RR) is the risk of an outcome in the exposed or treated group, divided by the risk of that same outcome in the unexposed or control group. "Risk" here means a simple proportion &mdash; the number of people who had the outcome, divided by the total number of people in that group, over a defined follow-up period. Relative risk can be calculated directly in study designs where you observe a defined group of people forward in time and count outcomes as they occur &mdash; randomized controlled trials and cohort studies.</p>`,
+      },
+      {
+        heading: 'Odds ratio (OR): the ratio of two odds',
+        html: `<p>Odds ratio (OR) is the odds of an outcome in the exposed group, divided by the odds of that same outcome in the unexposed group, where odds is defined as risk divided by (1 minus risk). The odds ratio is the natural output of logistic regression, and is the standard effect measure reported in case-control studies. This is because a case-control study samples participants based on their outcome status (a fixed number of "cases" and "controls" are recruited), which means absolute risks &mdash; and therefore relative risk &mdash; cannot be estimated directly from the sampled data. The odds ratio remains estimable under this design regardless.</p>`,
+      },
+      {
+        heading: 'Worked example: where relative risk and odds ratio diverge',
+        html: `<p>Consider a hypothetical study of 200 participants, 100 exposed and 100 unexposed:</p><div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Group</th><th>Outcome present</th><th>Outcome absent</th><th>Risk (proportion with outcome)</th><th>Odds (risk &divide; [1 &minus; risk])</th></tr></thead><tbody><tr><td>Exposed</td><td>30</td><td>70</td><td>30 / 100 = 30%</td><td>30 / 70 = 0.43</td></tr><tr><td>Unexposed</td><td>10</td><td>90</td><td>10 / 100 = 10%</td><td>10 / 90 = 0.11</td></tr></tbody></table></div><p>Relative risk = 30% divided by 10% = 3.0. Odds ratio = 0.43 divided by 0.11 = 3.9.</p><p>The rule of thumb that follows from this: when the outcome being studied is rare &mdash; conventionally, under about 10% &mdash; the odds ratio closely approximates the relative risk, and the two are often (loosely) used interchangeably. When the outcome is common, as in this example, the odds ratio overstates the relative risk, sometimes substantially. A reader who mentally translates a reported odds ratio directly into "relative risk" language, without checking how common the outcome actually is, will quietly overstate the size of the effect &mdash; a particularly easy mistake to make when reading case-control studies of common outcomes, since the odds ratio is the only measure such studies can report.</p>`,
+      },
+      {
+        heading: 'From relative measures to absolute ones',
+        html: `<p>Absolute risk (AR) is simply the plain probability of an outcome occurring in a given group over a specified period &mdash; for example, "a 30% risk" or "30 out of 100 people." It is not a comparison to anything else; it is the number itself, which is exactly why it is easy to lose sight of once a study starts reporting relative measures (RR, OR, HR) instead.</p><p>Relative risk reduction (RRR) is calculated as (risk in the control group minus risk in the treated group), divided by the risk in the control group. Absolute risk reduction (ARR) is simply the risk in the control group minus the risk in the treated group, expressed in percentage points &mdash; the difference between two absolute risks. The two can tell very different stories about the same result:</p><div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Baseline (control) risk</th><th>Treated risk</th><th>Relative risk reduction</th><th>Absolute risk reduction</th><th>Number needed to treat</th></tr></thead><tbody><tr><td>2%</td><td>1%</td><td>50%</td><td>1 percentage point</td><td>100</td></tr><tr><td>40%</td><td>20%</td><td>50%</td><td>20 percentage points</td><td>5</td></tr></tbody></table></div><p>Both rows describe "a 50% relative risk reduction." But treating 100 patients to prevent a single event, versus treating 5, are very different clinical propositions &mdash; and press coverage and abstracts overwhelmingly report the relative number because it is the larger, more attention-grabbing figure.</p>`,
+      },
+      {
+        heading: 'Number needed to treat and number needed to harm',
+        html: `<p>Number needed to treat (NNT) = 1 divided by the absolute risk reduction (expressed as a decimal &mdash; for example, 1% = 0.01, so NNT = 100). It is a practical shorthand for "how many patients must I treat for one of them to benefit."</p><p>Number needed to harm (NNH) applies the same logic to an adverse effect. A treatment can have an impressive NNT for benefit alongside a concerning NNH for harm; both numbers are needed to judge its net value.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Whenever a result is reported only as "X% reduction" or "X% increase," reconstruct the baseline and treated event rates from the raw numbers (usually available in a results table) before judging how large the effect really is &mdash; and check whether the reported figure is a relative risk or an odds ratio, especially if the outcome being studied is common.</p>`,
+      },
+      {
+        heading: 'Sanity-checking a reported effect and CI',
+        html: `<p>A genuine 95% CI is always built symmetrically around its own point estimate on the log scale (for ratio measures like RR, OR, or HR). If you are ever transcribing a result by hand &mdash; into a spreadsheet, a meta-analysis dataset, or a calculator &mdash; a quick plausibility check is worth the ten seconds: does the point estimate sit roughly in the middle of the CI, on a log scale rather than a linear one? A visibly off-center CI, or a point estimate that is not even inside its own CI, is usually a transcription error rather than a real result &mdash; worth going back to the source table to double-check before using the number.</p>`,
+      },
+    ],
+    related: [
+      { id: 'measures-of-association', why: 'Calculates RR, OR, and related measures of association directly from a 2×2 table.' },
+      { id: 'or-to-nnt-nnh', why: 'Converts an odds ratio into NNT/NNH using a stated control event rate.' },
+      { id: 'or-to-rr', why: 'Converts between odds ratio and relative risk given a baseline risk — useful for checking how much they diverge.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-p-values',
+    category: 'Critical Appraisal of the Literature',
+    title: 'What a P-Value Actually Means',
+    blurb: 'It is not the probability that the null hypothesis is true, "by chance alone" has a narrower meaning than it sounds like, and 0.05 is a convention, not a law of nature.',
+    dek: `A p-value answers one narrow question: if there truly were no effect, how likely is data this extreme, or more extreme, by random chance alone? It says nothing about the size of an effect, it assumes the study itself is free of bias, and testing more comparisons makes a chance "significant" result more likely, not less.`,
+    sections: [
+      {
+        heading: 'The precise definition',
+        html: `<p>A p-value is the probability of observing data this extreme or more extreme, given that the null hypothesis is true. Statisticians often write this using a vertical bar, as in P(data | null hypothesis is true) &mdash; the bar simply means "given that" or "assuming." So P(data | null hypothesis is true) reads as "the probability of this data, given that the null hypothesis is true."</p><p>This is easy to flip by accident into P(null hypothesis is true | data) &mdash; "the probability the null hypothesis is true, given this data" &mdash; which is a different quantity altogether, and not what a p-value provides. Answering that reversed question requires Bayesian reasoning and a starting assumption (a "prior") about how likely the null hypothesis was before seeing any data. A p-value alone cannot supply that.</p>`,
+      },
+      {
+        heading: '"By chance alone" has a narrower meaning than it sounds like',
+        html: `<p>A p-value quantifies random sampling error only &mdash; the variation you would expect simply from drawing a different random sample from the same population, assuming the study itself has no systematic flaws. "By chance alone" is accurate shorthand for that specific kind of variability, but only under the assumption that the underlying statistical model is correctly specified and the study is free of bias.</p><p>This matters because there is a second, entirely different source of a "significant" result that a p-value says nothing about: systematic error, meaning confounding, selection bias, or measurement bias (covered in the Confounding and Bias guide). A p-value of 0.001 from a badly confounded observational study is very unlikely to be explained by random sampling variability &mdash; but that does not mean the observed association is real. It may be entirely explained by a confounder that has nothing to do with random chance. A very small p-value makes random sampling variability an unlikely explanation; it does not, on its own, rule out bias.</p>`,
+      },
+      {
+        heading: '0.05 is a threshold of convention, not a discontinuity in evidence',
+        html: `<p>A p-value of 0.049 and a p-value of 0.051 represent virtually identical evidence against the null hypothesis, but a hard cutoff treats them as categorically different &mdash; one "significant," one not. It is more informative to read the actual p-value together with the effect size, rather than only noting which side of 0.05 it happens to fall on.</p>`,
+      },
+      {
+        heading: 'Worked example: testing multiple comparisons',
+        html: `<p>If you test 20 truly independent null hypotheses &mdash; say, 20 patient subgroups &mdash; each at a significance threshold (often called the alpha level) of 0.05, the probability that at least one produces a false-positive "significant" result by chance alone is 1 minus (0.95 raised to the 20th power), which is approximately 64%. This is why a "significant" finding buried in a subgroup analysis &mdash; especially one that was not specified in advance &mdash; deserves far more skepticism than a trial's pre-specified primary endpoint.</p>`,
+      },
+      {
+        heading: 'What a p-value does not tell you',
+        html: `<p>Effect size, clinical importance, and probability of replication are all separate from the p-value. Two studies can report an identical p-value with very different effect sizes, and vice versa.</p>`,
+      },
+    ],
+    related: [
+      { id: 'fragility-index', why: 'Directly tests how many patients\' outcomes would need to flip before this p-value crosses 0.05 — a concrete measure of how much this significance actually rests on.' },
+      { id: 'critical-value-t', why: 'Finds the critical t-value and corresponding p-value for a given alpha and degrees of freedom.' },
+      { id: 'critical-value-z', why: 'Same idea for the z-distribution, used with large samples or known population variance.' },
+      { id: 'binomial-hyp-test', why: 'Worked example of a p-value calculation against a binomial null hypothesis.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-confidence-intervals',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Confidence Intervals: What "95%" Actually Covers',
+    blurb: 'A 95% confidence interval (CI) is not "a 95% probability the true value lies in this range" — here is the distinction, and why it matters less in practice than you might think.',
+    dek: `The width and location of a confidence interval (CI) tell you far more than whether it crosses zero. But the textbook-precise meaning of "95% confidence" trips up even experienced readers, and it is worth getting right.`,
+    sections: [
+      {
+        heading: 'The technically correct interpretation',
+        html: `<p>In the frequentist statistical framework that produces most confidence intervals in the medical literature, the true population parameter (the real effect size, out in the world) is treated as a fixed, if unknown, number &mdash; it does not have a probability distribution of its own. Because of this, it is not correct to say "there is a 95% probability that the true value lies within this specific interval." That particular, already-calculated interval either contains the true value or it does not; once the numbers are in, there is no remaining probability to assign to it.</p><p>What "95% confidence" actually describes is the long-run behavior of the method used to build the interval: if a study were repeated over and over, drawing a new sample each time and constructing a new 95% confidence interval from each one, approximately 95% of those intervals &mdash; across all of those repetitions &mdash; would contain the true parameter. It is a property of the procedure, not a probability statement about this one interval.</p>`,
+      },
+      {
+        heading: 'Why this distinction rarely changes practical interpretation',
+        html: `<p>In everyday reading, treating a confidence interval as "the range of values reasonably compatible with the data" is a fine working shorthand, and is how most careful readers actually use it. The distinction matters most when someone explicitly claims "there is a 95% chance the true effect is between X and Y." That phrasing describes a different quantity &mdash; a Bayesian credible interval, covered in the next guide &mdash; not the standard confidence interval.</p>`,
+      },
+      {
+        heading: 'Worked example',
+        html: `<p>A trial reports a risk difference of &minus;4% with a 95% confidence interval of &minus;8% to 0%.</p><p>Correct: "The data are reasonably compatible with values anywhere in that range, and this method would capture the true value in about 95% of repeated experiments."</p><p>Not technically correct, though commonly said: "There is a 95% probability the true value is between &minus;8% and 0%."</p>`,
+      },
+      {
+        heading: 'What actually matters when reading one',
+        html: `<p>The width of the interval (its precision, driven mostly by sample size) and what values fall inside it &mdash; especially near the boundary closest to "no effect." A confidence interval that barely excludes zero is far less reassuring than one comfortably clear of it, even though both would technically be called "statistically significant."</p>`,
+      },
+    ],
+    related: [
+      { id: 'single-sample-ci', why: 'Builds a confidence interval for a single sample mean.' },
+      { id: 'confidence-interval-proportion', why: 'Same idea for a single sample proportion.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-interval-types',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Confidence Interval, Credible Interval, or Prediction Interval? Three Different Questions',
+    blurb: 'These three intervals look alike on the page — a number, a dash, another number — but they answer genuinely different questions, and mixing them up leads to real misinterpretation.',
+    dek: `A confidence interval, a credible interval, and a prediction interval can all appear as a 95% range around a similar-looking estimate. Confusing them is easy and common. This guide lays out what each one is actually asking, side by side.`,
+    sections: [
+      {
+        heading: 'Confidence interval (CI): how precisely is the average effect estimated?',
+        html: `<p>Covered in full in the previous guide. In short: a confidence interval describes the long-run behavior of a method for estimating a fixed, unknown parameter (such as a true mean difference or a true relative risk). "95% confidence" refers to how often the method would capture the true value across repeated studies &mdash; not a direct probability statement about this one interval.</p>`,
+      },
+      {
+        heading: 'Credible interval (CrI): the Bayesian alternative that does support a direct probability statement',
+        html: `<p>A credible interval comes from Bayesian statistics, which treats the parameter of interest itself as having a probability distribution &mdash; updated from a starting assumption (the "prior") using the observed data. Because of this different framework, it is technically correct to say "there is a 95% probability that the true value lies within this credible interval," which is exactly the statement that cannot be made about a standard confidence interval.</p><p>The trade-off is that a credible interval depends on the chosen prior &mdash; the assumption about how likely different values were before seeing any data. A weak or uninformative prior often produces a credible interval numerically very close to the confidence interval from the same data. A strong or informative prior can shift it meaningfully. Worked illustration: two researchers analyze the identical set of trial data on a new treatment. One uses a neutral prior (assuming all effect sizes are equally plausible beforehand) and calculates a 95% credible interval of 1% to 9% absolute risk reduction. The other, more skeptical of the treatment based on prior evidence from similar drugs, uses a prior centered on "no effect" and calculates a 95% credible interval of &minus;1% to 6% for the same data. Both intervals are legitimate; they differ because they start from different assumptions, not because either analysis is wrong. Any reported credible interval should be read alongside a description of the prior used to produce it.</p>`,
+      },
+      {
+        heading: 'Prediction interval (PI): where would one new study, or one new patient, actually fall?',
+        html: `<p>A prediction interval answers a different question from either of the above: not "where is the true average effect," but "where would one new observation &mdash; a new study in a meta-analysis, or a new patient's individual value &mdash; plausibly land."</p><p>Because a prediction interval has to account for genuine variation between studies or between individuals, on top of the ordinary uncertainty in estimating an average, it is always at least as wide as the corresponding confidence interval &mdash; often considerably wider, and typically substantially wider still when meaningful between-study heterogeneity is present. This exact concept appears in the meta-analysis forest-plot guide, where the prediction interval for a pooled effect can cross the null value even when the confidence interval around the same pooled estimate does not. That is not a contradiction: it means the average effect across studies looks real, while any single new study could still plausibly turn up null, because true effects vary from setting to setting.</p>`,
+      },
+      {
+        heading: 'Side-by-side summary',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Interval</th><th>Question it answers</th><th>Can you say "95% probability the true value is inside"?</th></tr></thead><tbody><tr><td>Confidence interval (CI)</td><td>How precisely is the true average effect estimated?</td><td>No &mdash; describes the method's long-run behavior</td></tr><tr><td>Credible interval (CrI)</td><td>Given this data and this prior, where does the true value probably lie?</td><td>Yes &mdash; but only relative to the stated prior</td></tr><tr><td>Prediction interval (PI)</td><td>Where would one new study or one new patient plausibly fall?</td><td>Not applicable &mdash; answers a different question entirely</td></tr></tbody></table></div>`,
+      },
+    ],
+    related: [
+      { id: 'bayesian-cri', why: 'Computes a Bayesian credible interval directly, so you can compare it against a frequentist CI on the same data.' },
+      { id: 'single-sample-ci', why: 'The confidence interval this guide contrasts against the credible interval.' },
+      { id: 'meta-analysis', why: 'Produces both a confidence interval and a prediction interval for a pooled effect — see How to Read a Forest Plot for how to tell them apart visually.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-clinical-significance',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Statistical Significance vs. Clinical Significance',
+    blurb: '"Significant" answers "is this probably not chance?" It does not answer "does this matter to a patient?"',
+    dek: `A large enough trial can turn a trivial effect into a very small p-value. A well-designed but small trial can fail to reach significance for an effect that would matter a great deal if it is real.`,
+    sections: [
+      {
+        heading: 'Worked example: a large trial, a tiny effect',
+        html: `<p>A trial of 50,000 patients finds that a blood-pressure-lowering drug reduces systolic blood pressure by 0.8 mmHg on average, with a p-value below 0.001. Statistically, this is very unlikely to be due to chance. Clinically, a 0.8 mmHg difference is unlikely to change treatment decisions for an individual patient, despite being statistically significant. (A shift this size could still matter at a population level if applied across millions of people &mdash; clinical significance for an individual and public-health significance across a population are not always the same judgment.)</p>`,
+      },
+      {
+        heading: 'The reverse failure: a small trial, a real-looking effect',
+        html: `<p>A trial of 40 patients finds a 15-point improvement on a validated pain scale, but with a p-value of 0.11, because the sample size is small. This does not mean the drug does not work &mdash; it means the study lacked the statistical power to reliably distinguish a real 15-point effect from chance at this sample size (see the next guide, on power and sample size, for exactly why). "Not significant" is not the same as "no effect," a point closely related to the confidence-interval discussion above.</p>`,
+      },
+      {
+        heading: 'The practical habit',
+        html: `<p>Ask both questions separately for every result. First: "is this probably real, and how precisely is it estimated?" &mdash; answered by the p-value and confidence interval. Second, independent of the first: "if this is real, is it large enough to change what I would do?" &mdash; a judgment informed by the absolute effect size and the patient's circumstances, not by the p-value.</p>`,
+      },
+    ],
+    related: [
+      { id: 'fragility-index', why: 'Quantifies exactly how many patients a "significant" result depends on — a concrete way to weigh whether statistical significance reflects a robust finding.' },
+      { id: 'sample-size-2mean', why: 'Calculates the sample size needed to detect a given effect size — directly relevant to whether a "significant" result was ever a fair test.' },
+      { id: 'posthoc-power', why: 'Estimates the power an already-completed study had to detect a given effect.' },
+      { id: 'power-ppv-fpp', why: 'Explores how power interacts with the false positive proportion of significant findings.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-power-sample-size',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Power, Type II Error, and Why "No Difference Found" Isn\'t the Same as "No Difference"',
+    blurb: 'An underpowered trial that finds no significant difference has not proven the treatments are equivalent — it may simply have been too small to detect a real effect.',
+    dek: `Statistical power is the probability that a study will detect a true effect of a given size, if one actually exists. A trial with low power can easily produce a "negative" result even when a clinically meaningful effect is real &mdash; and this misunderstanding can lead to abandoning potentially effective treatments or dismissing a genuine effect as statistical noise.`,
+    sections: [
+      {
+        heading: 'Two kinds of error, defined against each other',
+        html: `<p>A Type I error (a "false positive") means concluding there is an effect when there truly is none. Its probability is the significance threshold, conventionally called alpha, almost always set at 0.05.</p><p>A Type II error (a "false negative") means failing to detect an effect that truly exists. Its probability is called beta. Statistical power is defined as 1 minus beta &mdash; the probability of correctly detecting a true effect of a specified size, if one is really there. A commonly used target is 80% power (beta = 0.20), meaning the study is designed to have an 80% chance of detecting the effect size it was built to find, accepting a 20% chance of missing it even though it is real.</p>`,
+      },
+      {
+        heading: 'What determines power',
+        html: `<p>Four things trade off against each other in any power calculation: the sample size, the size of the effect the study is trying to detect, the amount of variability in the outcome being measured, and the chosen alpha level. Holding everything else fixed, a study can increase its power by enrolling more patients, by only trying to detect a larger effect, by measuring a less variable (noisier) outcome, or by accepting a more lenient alpha threshold. In practice, sample size is usually the only one of these that a research team can directly control after the outcome and population are already decided.</p>`,
+      },
+      {
+        heading: 'Worked example',
+        html: `<p>Suppose a true difference between two treatments is 10 percentage points in absolute event rate, but a trial was only sized (powered) to reliably detect a difference of 20 percentage points. The trial may well complete with a p-value comfortably above 0.05, reported as "no significant difference between treatments."</p><p>The honest conclusion is not "the treatments are equivalent" &mdash; it is "this study did not have enough participants to reliably detect a difference as small as 10 percentage points, even though such a difference may be real and clinically important." A wide confidence interval around the observed difference, still including clinically meaningful effects in either direction, is usually the clearest sign that this has happened (see the Confidence Intervals guide above).</p>`,
+      },
+      {
+        heading: 'Why this matters beyond the statistics',
+        html: `<p>Underpowered "negative" trials are a common and consequential source of misinterpretation in the literature, because "no significant difference" is so easily, and incorrectly, read as "proven not to work" or "proven equivalent." This can lead to abandoning potentially effective treatments, or to dismissing a genuine effect as statistical noise &mdash; particularly when several small underpowered trials on the same question are each individually reported as "negative," rather than being pooled (see the Meta-Analysis guide) to reveal a real effect that no single small trial had the power to detect on its own.</p>`,
+      },
+    ],
+    related: [
+      { id: 'sample-size-2mean', why: 'Calculates the sample size needed for a target power, given an effect size and variability.' },
+      { id: 'posthoc-power', why: 'Estimates the power a completed study had, given its actual sample size and observed effect.' },
+      { id: 'type1-type2-errors', why: 'Interactive explorer for the Type I/Type II error trade-off described in this guide.' },
+      { id: 'power-vs-es-alpha', why: 'Shows how power shifts as effect size and alpha change, holding sample size fixed.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-confounding-bias',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Confounding, Bias, and Why Randomization Matters',
+    blurb: 'An observed association in a cohort or case-control study can come from the exposure being studied — or from something else entirely.',
+    dek: `Before treating "A is associated with B" as "A causes B," a careful reader checks whether confounding, reverse causation, or bias could produce the same result even if A has no effect on B at all.`,
+    sections: [
+      {
+        heading: 'Confounding',
+        html: `<p>A confounder is a third factor that causes both the exposure being studied and the outcome, creating a spurious or exaggerated association between them. A well-known historical example: early observational studies linking coffee consumption to pancreatic cancer were substantially confounded by smoking, since heavy coffee drinkers at the time were also more likely to smoke.</p>`,
+      },
+      {
+        heading: 'Reverse causation',
+        html: `<p>The outcome may be causing the exposure, rather than the other way around. This is sometimes called the "sick quitter" effect: people who develop early symptoms of illness often reduce alcohol consumption or physical activity beforehand, which can make "abstainers" look artificially unhealthy in a snapshot comparison &mdash; when in fact the developing illness caused the abstaining, not the reverse.</p>`,
+      },
+      {
+        heading: 'Selection bias',
+        html: `<p>The way subjects entered the study, or were retained in it, created the observed association, rather than the exposure itself doing so.</p>`,
+      },
+      {
+        heading: 'Measurement bias (also called information bias)',
+        html: `<p>The exposure or outcome was measured, recorded, or recalled differently between the groups being compared. A common form is recall bias, in which participants who already have the disease being studied ("cases") remember and report past exposures more vividly or differently than unaffected participants ("controls").</p>`,
+      },
+      {
+        heading: 'Why randomization is different in kind, not just in degree',
+        html: `<p>Statistical adjustment in an observational study &mdash; regression, matching, or propensity scores &mdash; can only account for confounders that were actually measured. Randomization tends to balance both measured and unmeasured confounders between groups on average, simply through the play of chance at the moment of assignment &mdash; this is a property that holds across repeated random assignments, not a guarantee in any single trial, where some imbalance can still occur by chance, particularly in smaller studies. This is the core reason a well-run randomized controlled trial (RCT) sits above even a large, carefully adjusted observational study when the question is whether A actually causes B.</p>`,
+      },
+    ],
+    related: [
+      { id: 'measures-of-association', why: 'The same RR/OR output that confounding and bias can distort if not accounted for.' },
+      { id: 'ipw-ate', why: 'Uses inverse probability weighting to adjust for measured confounders in an observational analysis.' },
+      { id: 'assoc-pred-intervals', why: 'Prediction intervals for measures of association, useful when communicating uncertainty beyond a single confidence interval.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-study-design',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Study Design Hierarchy and Its Exceptions',
+    blurb: 'Randomized controlled trial (RCT) > cohort study > case-control study > case series is a reasonable default — but a poorly run RCT can be less trustworthy than a well-run cohort study.',
+    dek: `The hierarchy reflects how well a design controls bias and confounding in principle, not a guarantee about any specific study. Each design has its own characteristic failure points worth checking directly, rather than trusting the label alone. This hierarchy applies specifically to questions about whether a treatment causes an outcome. Evidence-based medicine uses different hierarchies for questions of diagnosis, prognosis, or harm &mdash; for a diagnostic accuracy question, for instance, a well-designed cross-sectional study is the strongest available design, not an RCT.`,
+    sections: [
+      {
+        heading: 'Randomized controlled trials (RCTs) — what to check',
+        html: `<p>Loss to follow-up, and whether it was balanced between the treatment arms &mdash; large or unequal dropout between groups can undo the balance that randomization created.</p><p>Intention-to-treat (ITT) analysis versus per-protocol analysis: ITT analyzes patients according to the group they were originally randomized to, regardless of whether they fully adhered to treatment, which preserves the benefit of randomization. Per-protocol analysis, which excludes patients who did not adhere, can reintroduce the very confounding that randomization was designed to prevent.</p><p>The adequacy and actual success of blinding, and the funding source, including any role the sponsor played in the analysis or reporting of results.</p>`,
+      },
+      {
+        heading: 'Cohort studies — what to check',
+        html: `<p>Confounding, both measured and unmeasured; whether the exposed and unexposed groups were truly comparable at baseline; and whether loss to follow-up differed meaningfully between the two groups.</p>`,
+      },
+      {
+        heading: 'Case-control studies — what to check',
+        html: `<p>Recall bias (see the confounding and bias guide above), and how the control group was selected &mdash; specifically, whether controls are truly representative of the broader population that produced the cases.</p>`,
+      },
+      {
+        heading: 'Any design: surrogate outcomes vs. hard clinical outcomes',
+        html: `<p>A surrogate outcome &mdash; a biomarker, an imaging finding, or a laboratory value &mdash; improving does not guarantee that a hard clinical outcome, such as death, disability, or a symptomatic event, also improves. Several well-known treatments have improved a surrogate marker while showing no benefit &mdash; or even causing harm &mdash; on hard clinical outcomes in later, larger trials.</p>`,
+      },
+    ],
+    related: [
+      { id: 'measures-of-association', why: 'Common output measure across RCTs, cohort studies, and case-control studies alike.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-diagnostic-tests-prevalence',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Diagnostic Tests Depend on Prevalence',
+    blurb: 'Sensitivity and specificity are properties of the test itself. Positive predictive value (PPV) and negative predictive value (NPV) are properties of both the test and the population it is used in.',
+    dek: `The same test can look excellent in a specialty referral population and much less useful in general primary care &mdash; not because the test changed, but because the prevalence of disease in the population did.`,
+    sections: [
+      {
+        heading: 'What PPV and NPV actually mean',
+        html: `<p>Positive predictive value (PPV) is the probability that a positive test result is a true positive &mdash; in other words, given that someone tested positive, how likely is it that they actually have the disease.</p><p>Negative predictive value (NPV) is the probability that a negative test result is a true negative &mdash; given that someone tested negative, how likely is it that they actually do not have the disease.</p><p>These are often the most clinically relevant quantities after a test comes back, as opposed to sensitivity and specificity, which describe the test's performance in the other direction (among people whose true disease status is already known).</p>`,
+      },
+      {
+        heading: 'Worked example',
+        html: `<p>Consider a test with 90% sensitivity (correctly identifies 90% of people who truly have the disease) and 90% specificity (correctly identifies 90% of people who truly do not have the disease).</p><p>Applied to a population where disease prevalence is 50% &mdash; typical of a referral or specialty clinic setting &mdash; out of 1,000 patients (500 with the disease, 500 without): true positives = 450, false positives = 50. Positive predictive value (PPV) = 450 divided by (450 + 50) = 90%.</p><p>Applied instead to a general screening population where prevalence is only 1% &mdash; out of 1,000 patients (10 with the disease, 990 without): true positives = 9, false positives is approximately 99. Positive predictive value (PPV) = 9 divided by (9 + 99), which is approximately 8%.</p><p>The same test, with the same sensitivity and specificity, produces a PPV that collapses from 90% to about 8% purely because the prevalence of disease dropped. A positive result in a low-prevalence screening context is far more likely to be a false positive than the identical positive result would be in a high-prevalence referral context.</p>`,
+      },
+      {
+        heading: 'What a likelihood ratio actually means',
+        html: `<p>A likelihood ratio expresses how many times more &mdash; or less &mdash; likely a given test result is in someone who truly has the disease, compared to someone who truly does not. It is a statement about the test result itself, not about the patient's final probability of disease, which is exactly why it does not shift with prevalence the way PPV and NPV do.</p><p>The positive likelihood ratio (LR+) equals sensitivity divided by (1 minus specificity). A LR+ of 5 means a positive result is 5 times as likely to occur in a person who has the disease as in a person who does not.</p><p>The negative likelihood ratio (LR&minus;) equals (1 minus sensitivity) divided by specificity. A LR&minus; of 0.2 means a negative result is only one-fifth as likely in a person who has the disease as in a person who does not &mdash; equivalently, a negative result is 5 times as likely in someone without the disease as in someone with it.</p>`,
+      },
+      {
+        heading: 'Worked example: updating pretest probability to posttest probability',
+        html: `<p>Likelihood ratios are applied through the odds form of Bayes' theorem: pretest odds, multiplied by the likelihood ratio, equals posttest odds. Probability and odds are related by odds = probability &divide; (1 &minus; probability), and probability = odds &divide; (1 + odds).</p><p>Suppose a patient's pretest probability of disease &mdash; based on clinical judgment and the prevalence in a similar population &mdash; is 20%. Converting to odds: pretest odds = 0.20 &divide; (1 &minus; 0.20) = 0.25.</p><p>The patient is tested, and the result is positive. The test's positive likelihood ratio (LR+) is 5. Posttest odds = pretest odds &times; LR+ = 0.25 &times; 5 = 1.25.</p><p>Converting back to a probability: posttest probability = 1.25 &divide; (1 + 1.25) &asymp; 56%.</p><p>A single positive result moved this patient's probability of disease from 20% to about 56% &mdash; a substantial shift, consistent with an LR+ of 5 falling in the moderate range described below. The same arithmetic works in the other direction with the negative likelihood ratio (LR&minus;) for a negative result.</p>`,
+      },
+      {
+        heading: 'A rough rule of thumb for size of shift',
+        html: `<p>A positive likelihood ratio (LR+) greater than 10, or a negative likelihood ratio (LR&minus;) less than 0.1, produces a large, often decisive shift in probability. A positive likelihood ratio (LR+) between 2 and 5, or a negative likelihood ratio (LR&minus;) between 0.2 and 0.5, produces only a small-to-moderate shift, as in the worked example above.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a diagnostic accuracy study reports only sensitivity and specificity &mdash; or reports positive predictive value (PPV) and negative predictive value (NPV) without stating the disease prevalence in its study population &mdash; those PPV and NPV figures cannot safely be transferred to a different clinical setting where the prevalence of disease differs from the study population.</p>`,
+      },
+    ],
+    related: [
+      { id: 'sensitivity-specificity', why: 'Calculates sensitivity, specificity, and likelihood ratios from a 2×2 diagnostic table.' },
+      { id: 'post-test-probability', why: 'Applies a likelihood ratio to a pretest probability to get the posttest probability, as worked through in this guide.' },
+      { id: 'ppv-npv-vs-prevalence', why: 'Shows PPV and NPV shifting across a range of prevalence values, exactly as in the worked example above.' },
+      { id: 'roc-auc', why: 'Extends the same sensitivity/specificity logic across every possible cutoff of a continuous test.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-survival-basics',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Survival Analysis Basics: Censoring, Hazard Ratios, and Proportional Hazards',
+    blurb: 'A hazard ratio (HR) describes relative risk over time — not the absolute difference in how long people lived.',
+    dek: `Kaplan-Meier curves, censoring, and hazard ratios are routinely reported together, but each answers a different question, and conflating them is a common source of over- or under-interpreting survival results.`,
+    sections: [
+      {
+        heading: 'Censoring does not mean "no event"',
+        html: `<p>A patient is described as "censored" when their follow-up ends &mdash; because the study concludes, the patient withdraws, or contact is lost &mdash; before the event of interest occurs. Censoring means "we stopped observing this person," not "this event definitely did not happen to them." If censoring is related to prognosis &mdash; for example, if sicker patients drop out of one treatment group disproportionately more than the other &mdash; it can bias the entire analysis. This situation is called informative censoring, and it violates a core assumption of standard survival analysis methods.</p>`,
+      },
+      {
+        heading: 'Worked example: what a hazard ratio actually says',
+        html: `<p>A hazard ratio (HR) of 0.70 for death means that, at any given moment during the follow-up period, the treated group's instantaneous rate of the event is 70% of the control group's rate at that same moment. It does not directly tell you "patients on treatment lived 30% longer" or supply any specific number of extra months of survival &mdash; answering that question requires looking at the actual Kaplan-Meier curves or reported median survival times, which the hazard ratio alone cannot provide.</p>`,
+      },
+      {
+        heading: 'Proportional hazards is an assumption, not a fact about the data',
+        html: `<p>The proportional hazards assumption holds that the hazard ratio stays roughly constant across the entire follow-up period. When two survival curves cross, or when a treatment's relative benefit clearly grows or shrinks over time &mdash; common, for example, when comparing an upfront surgical risk against a more slowly accruing medical benefit &mdash; a single summary hazard ratio can average over, and obscure, a considerably more complicated true pattern. This assumption should be checked directly (for example, using Schoenfeld residuals, or a visual check that the curves remain roughly parallel on a log scale), rather than assumed by default.</p>`,
+      },
+    ],
+    related: [
+      { id: 'kaplan-meier', why: 'Builds the Kaplan-Meier curve this guide explains, directly from event/censoring data.' },
+      { id: 'log-rank-test', why: 'Tests whether two Kaplan-Meier curves differ significantly.' },
+      { id: 'cox-ph', why: 'Estimates the hazard ratio described in this guide, along with a check of the proportional hazards assumption.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-meta-analysis-reading',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Reading a Meta-Analysis: Beyond the Pooled Estimate',
+    blurb: 'The pooled diamond on a forest plot is only as trustworthy as the heterogeneity behind it — and pooling studies cannot fix flawed primary research.',
+    dek: `A precise-looking pooled estimate sitting atop wildly inconsistent individual studies deserves more scrutiny, not more confidence. This guide complements How to Read a Forest Plot with the broader questions a critical reader should ask about a meta-analysis as a whole.`,
+    sections: [
+      {
+        heading: 'Heterogeneity first, pooled estimate second',
+        html: `<p>Before trusting the pooled diamond, check the heterogeneity statistics: I-squared (I&sup2;), tau-squared (&tau;&sup2;), and Cochran's Q (see the forest plot guide for a full explanation of each). High heterogeneity means the individual studies may not all be estimating the same underlying effect &mdash; pooling them into a single number can create a false sense of precision about a quantity that does not cleanly exist across all the included studies.</p>`,
+      },
+      {
+        heading: 'Fixed-effect vs. random-effects models, revisited',
+        html: `<p>A fixed-effect model assumes every study shares one true effect, and derives all weighting from precision alone. A random-effects model allows the true effect to vary across studies, and is often preferred whenever meaningful heterogeneity is present &mdash; it is also the more conservative choice, typically producing a wider confidence interval.</p>`,
+      },
+      {
+        heading: 'Publication bias',
+        html: `<p>Smaller studies showing null or unfavorable results are less likely to be published than smaller studies showing a positive result, whereas larger studies tend to get published regardless of their outcome, given the greater investment involved in conducting them. A funnel plot &mdash; which graphs each study's effect size against its precision &mdash; that appears asymmetric, with small unfavorable studies missing, is the classic warning sign. Formal statistical tests (such as Egger's test) can supplement this visual check, but should not replace it.</p>`,
+      },
+      {
+        heading: 'Pooling cannot fix flawed primary studies',
+        html: `<p>A meta-analysis pools effect estimates, not raw truth. If the underlying trials are individually biased &mdash; through poor blinding, inadequate randomization, or selective outcome reporting &mdash; the pooled estimate inherits, and can even amplify, that same bias, arriving at a more precise wrong answer rather than a more correct one. Always check whether the review formally assessed the risk of bias in its included studies, and whether that assessment was factored into the final interpretation &mdash; for example, through the GRADE framework (Grading of Recommendations Assessment, Development and Evaluation), or through sensitivity analyses that exclude studies at high risk of bias.</p>`,
+      },
+    ],
+    related: [
+      { id: 'meta-analysis', why: 'Produces the forest plot, pooled estimate, and heterogeneity statistics (I², τ², Q) discussed in this guide.' },
+      { id: 'hksj-meta-analysis', why: 'Same pooling logic with the Hartung-Knapp-Sidik-Jonkman adjustment for few studies.' },
+      { id: 'meta-analysis-proportions', why: 'Applies the same critical-reading questions to pooled proportions rather than pooled effect sizes.' },
+      { id: 'network-meta-analysis', why: 'Extends heterogeneity and pooling concepts to comparisons across three or more treatments at once.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-regression-to-mean',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Regression to the Mean',
+    blurb: 'Why a before/after study with no control group will almost always show "improvement" — treatment or not.',
+    dek: `People, and the measurements taken from them, are often enrolled in a study, or brought in for treatment, precisely because they are at an extreme. Some of that extremity is simply random noise, and noise tends to fade on remeasurement, regardless of any treatment given.`,
+    sections: [
+      {
+        heading: 'The mechanism',
+        html: `<p>Any measurement with a random component &mdash; blood pressure on a given day, a pain score during a flare-up, a laboratory value &mdash; reflects a person's true underlying average, plus some random noise around that average. People tend to seek treatment, or get enrolled in a study, exactly when that noise has pushed their measurement to an extreme. On remeasurement, the noise component tends to move back toward zero on average, which makes the second measurement look "better" (closer to the person's true average) even if nothing was actually done to treat them.</p>`,
+      },
+      {
+        heading: 'Worked illustration',
+        html: `<p>Suppose 100 patients are enrolled in a trial specifically because their blood pressure reading was unusually high on the day they were screened &mdash; say, above the 90th percentile of their own personal, usual distribution of readings. Even with no treatment at all, a substantial fraction of this group would show a lower reading at their next visit, simply because an unusually high reading for a given person is statistically more likely to be followed by a more typical reading than by an even more extreme one.</p>`,
+      },
+      {
+        heading: 'Why this makes uncontrolled before/after studies unreliable',
+        html: `<p>A clinic that treats patients at their symptomatic worst, and remeasures them later, will see apparent "improvement" in nearly every case &mdash; and this improvement is indistinguishable from a true treatment effect unless there is a comparison group, ideally a randomized control group. Both the treatment group and a randomized control group would be expected to regress toward the mean at roughly the same rate, which allows any genuine difference between the two groups to be attributed to the treatment itself, rather than to this statistical artifact.</p>`,
+      },
+    ],
+    related: [
+      { id: 'paired-t-test', why: 'The most common test applied to before/after data — pairing controls for individual differences, but not for regression to the mean.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-subgroup-interaction',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Subgroup Analyses and Interaction Tests',
+    blurb: '“The treatment worked in women but not men” is one of the most common misreadings in the clinical literature — and usually isn’t what the data actually show.',
+    dek: `A trial can report a "significant" effect in one subgroup and a "non-significant" effect in another without there being any real difference between those subgroups at all. Telling the two apart requires a specific tool &mdash; the interaction test &mdash; that most headlines, and many abstracts, skip entirely.`,
+    sections: [
+      {
+        heading: 'The core mistake: comparing significance, not effects',
+        html: `<p>Consider a trial reporting: in women, relative risk (RR) = 0.70, 95% CI 0.55&ndash;0.90, p = 0.01; in men, RR = 0.85, 95% CI 0.65&ndash;1.10, p = 0.15. It is tempting to conclude the treatment works in women but not men.</p><p>But look at the two confidence intervals: they overlap substantially, and the point estimates (0.70 vs. 0.85) are not far apart. One crossed the conventional p < 0.05 threshold and one did not &mdash; but that is a statement about two separate comparisons against a null of "no effect," not a comparison of the two subgroups against each other.</p><p>A formal test of whether these two effects actually differ (see below) would very plausibly come back non-significant here. As the statisticians Andrew Gelman and Hal Stern put it in a widely cited paper: the difference between "significant" and "not significant" is not itself necessarily significant.</p>`,
+      },
+      {
+        heading: 'What an interaction test actually asks',
+        html: `<p>An interaction test (sometimes called a test for effect modification) directly asks: does the size of the treatment effect differ across levels of another variable, such as sex, age group, or disease severity? This is a single test with its own p-value &mdash; typically an interaction term in a regression model, or a test of homogeneity across subgroups in a meta-analysis.</p><p>Only when this test is itself significant is there real statistical evidence that the effect actually varies by subgroup. A trial can have one "significant" and one "non-significant" subgroup result with a completely non-significant interaction test &mdash; meaning the honest conclusion is "we found no evidence the treatment effect differs by sex," not "it works in one and not the other."</p>`,
+      },
+      {
+        heading: 'Multiplicity: many subgroups, many chances for a false positive',
+        html: `<p>Trials often report effects across many subgroups at once &mdash; age bands, sex, region, biomarker status, disease severity. Each additional subgroup comparison is another opportunity for a chance "significant" finding, exactly as in the multiplicity problem covered in the P-Values guide.</p><p>The famous illustration: in the 1988 ISIS-2 aspirin trial, investigators deliberately reported outcomes by astrological star sign, specifically to demonstrate that subgroup analysis can produce absurd "findings" &mdash; aspirin appeared to provide no benefit for patients born under Gemini or Libra. It remains one of the most memorable real examples of why any single subgroup result needs to be read with real skepticism.</p>`,
+      },
+      {
+        heading: 'Pre-specified vs. post hoc subgroups',
+        html: `<p>A subgroup analysis named in the study protocol before data collection carries far more weight than one identified by looking through the data afterward for something interesting (post hoc). Post hoc subgroup findings should be treated as hypothesis-generating only &mdash; a reason to test the idea in a new, independent study &mdash; not as confirmatory evidence on their own.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before accepting a claim that an effect differs between groups, check for: a formal interaction test reported alongside the subgroup results (not just two separate p-values), whether the subgroup was pre-specified, and biological or clinical plausibility. Absent an explicit interaction test, "significant in one group, not the other" should usually be read as "we don't have clear evidence this differs by subgroup," rather than as a real, differential effect.</p>`,
+      },
+    ],
+    related: [
+      { id: 'interaction-test', why: 'Directly tests whether two subgroup effect estimates differ significantly from each other — the calculator built for this guide\'s core teaching point.' },
+      { id: 'anova-2way', why: 'Tests main effects and their interaction directly, for two-factor designs.' },
+      { id: 'measures-of-association', why: 'Produces the subgroup-level effect estimates and confidence intervals discussed in the worked example.' },
+      { id: 'meta-analysis', why: 'Subgroup/heterogeneity testing in a pooled-effects context is the same underlying idea.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-table2-fallacy',
+    category: 'Critical Appraisal of the Literature',
+    title: 'The Table 2 Fallacy',
+    blurb: 'A multivariable model is built to give one unconfounded estimate — the exposure of interest. The other coefficients sitting right next to it in the same table are not free bonus results.',
+    dek: `When a study adjusts for confounders in a regression model, only the effect estimate for the exposure of interest was actually designed to be free of confounding. The "adjustment" variables in that same table &mdash; age, sex, smoking status, whatever else was included &mdash; are routinely reported and even discussed as if they are equally clean causal estimates. They usually aren't, and it's common enough in the literature to have its own name: the Table 2 fallacy.`,
+    sections: [
+      {
+        heading: 'What the fallacy actually is',
+        html: `<p>Named by Daniel Westreich and Sander Greenland (2013, American Journal of Epidemiology), the Table 2 fallacy describes treating every row of a multivariable model's results table as an equally valid, confounding-free effect estimate. In reality, a model's covariate set is chosen specifically to isolate the causal effect of one exposure of interest. The other covariates were included because they were confounders of that exposure-outcome relationship &mdash; not because the model was built to give each of them, individually, an unconfounded estimate of their own effect.</p><p>Worked illustration: a study of a new drug's effect on cardiovascular events adjusts for age, sex, smoking, and baseline blood pressure. Table 2 reports an adjusted odds ratio (OR) of 0.65 for the drug &mdash; the estimate the whole study was designed to produce cleanly &mdash; and, in the same table, an OR of 1.8 for smoking. That smoking OR was never the point of the model; smoking's own relationship with cardiovascular events could easily be confounded by factors such as diet, exercise, or socioeconomic status that were never included, because they weren't relevant to the drug-outcome question the authors actually cared about.</p>`,
+      },
+      {
+        heading: 'Why this happens: confounders are exposure-specific',
+        html: `<p>A confounder is only a confounder relative to a specific exposure. Age may genuinely confound the drug-outcome relationship and be correctly adjusted for on that basis &mdash; but whether age, or anything else, was adequately modeled as a confounder of smoking's effect was never a design goal of this particular model.</p>`,
+      },
+      {
+        heading: 'Where it shows up',
+        html: `<p>Three common places: a paper's own abstract or discussion casually reporting a secondary coefficient as a finding in its own right; a reader skimming a results table and assuming every row carries equal evidentiary weight; and later papers citing someone else's adjustment-variable coefficient as if it were a dedicated result on that topic.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before citing any coefficient from a multivariable table, ask whether this was the exposure the study was actually built around, or an adjustment variable included for a different exposure's sake. Only the former deserves to be read as the paper's intended causal estimate. Treat an interesting-looking secondary coefficient the same way as a post hoc subgroup finding (see the Subgroup Analyses guide) &mdash; a hypothesis worth testing properly, not a result to cite as-is.</p>`,
+      },
+    ],
+    related: [
+      { id: 'measures-of-association', why: 'Produces the same odds ratio/relative risk output that sits at the center of this fallacy.' },
+      { id: 'ipw-ate', why: 'A modeling approach built specifically around one exposure of interest — illustrating the same principle from a different angle.' },
     ],
   },
 
