@@ -6,6 +6,8 @@ Open `index.html` in a browser to use it; everything runs client-side with no bu
 
 ## Calculator categories
 
+88 calculators across:
+
 - ANOVA
 - Bayesian & Meta-Analysis
 - Chi-Square & Categorical
