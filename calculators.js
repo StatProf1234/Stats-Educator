@@ -1931,6 +1931,10 @@ const CALCULATORS = [
       {
         label: 'z-Statistic',
         latex: 'z = \\dfrac{p-p_0}{SE}'
+      },
+      {
+        label: '95% CI for p (sample-based Wald SE)',
+        latex: 'p \\pm 1.96\\sqrt{\\dfrac{p(1-p)}{n}}'
       }
     ],
 
@@ -2007,6 +2011,10 @@ const CALCULATORS = [
       {
         label: 'z-Statistic',
         latex: 'z = \\dfrac{p_1-p_2}{SE_{pooled}}'
+      },
+      {
+        label: '95% CI for p₁−p₂ (unpooled SE)',
+        latex: '(p_1-p_2) \\pm 1.96\\sqrt{\\dfrac{p_1(1-p_1)}{n_1}+\\dfrac{p_2(1-p_2)}{n_2}}'
       }
     ],
 
@@ -2044,7 +2052,7 @@ const CALCULATORS = [
       const pPooled   = (n1 * p1 + n2 * p2) / (n1 + n2);
       const sePooled  = Math.sqrt(pPooled * (1 - pPooled) * (1 / n1 + 1 / n2));
       const diff      = p1 - p2;
-      const z         = diff / sePooled;
+      const z         = sePooled === 0 ? 0 : diff / sePooled;
       const pValue    = normalTwoTailedP(z);
       const seUnpooled = Math.sqrt(p1 * (1 - p1) / n1 + p2 * (1 - p2) / n2);
       const margin     = 1.96 * seUnpooled;
@@ -2313,7 +2321,86 @@ const CALCULATORS = [
     }
   },
 
-  /* ── 27a. SAMPLE SIZE FOR A SURVEY ───────────────────────────────────────
+  /* ── 27a. SAMPLE SIZE — ANOVA (COHEN'S f) ────────────────────────────────
+     Required per-cell sample size for a fixed-effects ANOVA main effect
+     or interaction, from Cohen's f, alpha, and target power, via the
+     noncentral F distribution (see noncentralFPower()/requiredSample-
+     SizeAnovaF() helpers). Set "Total Cells in the Full Design" equal to
+     "Levels" for the classic one-way case; set it to the product of all
+     factor levels to reproduce G*Power's "ANOVA: Fixed effects, main
+     effects and interactions" procedure for a factorial design.        */
+  {
+    id:          'sample-size-anova-f',
+    name:        "Sample Size — ANOVA (Cohen's f)",
+    hint:        'search n per cell until noncentral-F power ≥ target, λ=f²N',
+    category:    'Power & Sample Size',
+    description: "Determines the per-cell sample size needed to detect a specified Cohen's f effect size for a fixed-effects ANOVA main effect or interaction, given alpha and target power — covers both a simple one-way design and a main effect or interaction within a larger factorial design.",
+
+    formulas: [
+      {
+        label: 'Noncentrality Parameter',
+        latex: '\\lambda = f^{2} \\times N_{total}'
+      },
+      {
+        label: 'Power (Noncentral F Distribution)',
+        latex: "\\text{Power} = P\\!\\left(F'_{df_1,\\,df_2,\\,\\lambda} > F_{crit,\\,\\alpha}\\right), \\quad df_1=k-1,\\ \\ df_2=N_{total}-g"
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'alpha',       label: 'Significance Level (α)',                                       default: 0.05 },
+      { id: 'power',       label: 'Target Power (1−β)',                                           default: 0.80 },
+      { id: 'effectF',     label: "Cohen's f (Effect Size)",                                      default: 0.25 },
+      { id: 'levels',      label: 'Levels of the Effect Being Tested (k)',                        default: 3 },
+      { id: 'totalGroups', label: 'Total Cells in the Full Design (g) — same as k for one-way',   default: 18 },
+    ],
+
+    example({ alpha, power, effectF, levels, totalGroups }) {
+      levels = Math.round(levels); totalGroups = Math.round(totalGroups);
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1 || !isFinite(power) || power <= 0 || power >= 1 ||
+          !isFinite(effectF) || effectF <= 0 || !isFinite(levels) || levels < 2 ||
+          !isFinite(totalGroups) || totalGroups < levels ||
+          typeof jStat === 'undefined' || !jStat.centralF || !jStat.centralF.inv)
+        return "Enter alpha, target power, Cohen's f, the number of levels, and the total cells in the design to see a worked medical example here.";
+      const res = requiredSampleSizeAnovaF(effectF, levels, totalGroups, alpha, power);
+      if (!res) return 'Enter a larger effect size — the search did not converge within a practical sample size.';
+      return `A bonding study plans to compare ${levels} surface-conditioning protocols within a larger factorial design of ${totalGroups} material × conditioning cells. Assuming a medium effect (Cohen's f = ${effectF}) at α = ${alpha}, ${res.nPerCell} specimens per cell (N = ${res.totalN} total) gives ${(res.power * 100).toFixed(1)}% power to detect the conditioning effect — just above the ${(power * 100).toFixed(0)}% target.`;
+    },
+
+    calculate({ alpha, power, effectF, levels, totalGroups }) {
+      levels = Math.round(levels); totalGroups = Math.round(totalGroups);
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1)   return [err('Significance Level must be between 0 and 1 (exclusive)')];
+      if (!isFinite(power) || power <= 0 || power >= 1)   return [err('Target Power must be between 0 and 1 (exclusive)')];
+      if (!isFinite(effectF) || effectF <= 0)             return [err("Cohen's f must be greater than 0")];
+      if (!isFinite(levels) || levels < 2)                return [err('Levels of the Effect Being Tested must be at least 2')];
+      if (!isFinite(totalGroups) || totalGroups < levels) return [err('Total Cells in the Full Design must be at least the number of Levels entered')];
+      if (typeof jStat === 'undefined' || !jStat.centralF || !jStat.centralF.inv)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const res = requiredSampleSizeAnovaF(effectF, levels, totalGroups, alpha, power);
+      if (!res) return [err('No sample size up to 100,000 per cell reached the target power — double-check the effect size and other inputs.')];
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const designNote = totalGroups === levels
+        ? 'One-way design (Total Cells = Levels): the classic single-factor ANOVA sample-size case.'
+        : `Factorial design: testing a ${levels}-level effect (df₁=${levels - 1}) within a ${totalGroups}-cell design — matches G*Power's "main effects and interactions" procedure.`;
+
+      return [
+        { label: 'Required Sample Size (per cell)', value: res.nPerCell, ci: null, isRatio: false, highlight: true },
+        { label: 'Required Total Sample Size (N)',  value: res.totalN,   ci: null, isRatio: false, highlight: true },
+        { label: 'Achieved Power at This N',        value: f(res.power, 4), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom (df₁, df₂)',   isText: true, ci: null, isRatio: false, value: `${levels - 1}, ${res.df2}` },
+        { label: 'Noncentrality Parameter (λ)',     value: f(res.lambda), ci: null, isRatio: false },
+        { label: 'F-Critical Value',                value: f(res.fCrit),  ci: null, isRatio: false },
+        { label: 'Design', isText: true, ci: null, isRatio: false, value: designNote },
+        { label: 'Method', isText: true, ci: null, isRatio: false,
+          value: "Searches increasing per-cell n until the achieved power (from the noncentral F distribution, λ=f²N) reaches the target. Matches standard ANOVA sample-size procedures (e.g. G*Power); for a simple one-way ANOVA, set Total Cells equal to Levels. Minor discrepancies vs. other software can arise from differing df₂ conventions — report the df₁/df₂ shown alongside the sample size." },
+      ];
+    }
+  },
+
+  /* ── 27b. SAMPLE SIZE FOR A SURVEY ───────────────────────────────────────
      Precision-based sample size for estimating a single population
      proportion within a margin of error — the formula most surveys
      actually need, as opposed to the power-based tests above (which are
@@ -3880,6 +3967,117 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 42a. MONTE CARLO EXACT TEST (r×c TABLE) ────────────────────────────
+     Simulation-based exact test of independence for r×c contingency
+     tables, for use when the asymptotic chi-square approximation is
+     unreliable (conventionally, when a sizeable share of cells have an
+     expected count below 5 — the same situation Fisher's Exact Test
+     addresses for 2×2 tables, extended here to larger tables). See the
+     randomTableFixedMargins()/monteCarloContingencyTest() helpers.      */
+  {
+    id:          'monte-carlo-exact-test',
+    name:        'Monte Carlo Exact Test (r×c Table)',
+    hint:        'simulated exact p under fixed row/column margins',
+    category:    'Chi-Square & Categorical',
+    description: 'Estimates an exact p-value for an r×c contingency table by simulating random tables under the same row and column totals — for use when expected cell counts are too low (conventionally <5) to trust the asymptotic chi-square approximation.',
+
+    formulas: [
+      {
+        label: 'Observed Chi-Square Statistic',
+        latex: '\\chi^2_{obs} = \\sum_{i,j} \\dfrac{(O_{ij}-E_{ij})^2}{E_{ij}}'
+      },
+      {
+        label: 'Monte Carlo Exact p-value',
+        latex: 'p_{MC} = \\dfrac{1+\\#\\{b : \\chi^2_b \\ge \\chi^2_{obs}\\}}{1+B}, \\quad \\text{table}_b \\sim \\text{fixed-margin null}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'table', type: 'textarea',
+        label: 'Contingency Table (rows separated by lines, cells comma-separated)',
+        default: '3,7,2\n8,2,2\n1,9,2\n2,8,2\n7,3,2\n1,1,10'
+      },
+      { id: 'permutations', label: 'Monte Carlo Permutations (B)', default: 10000 },
+    ],
+
+    example({ table, permutations }) {
+      const matrix = parseMatrix(table);
+      if (matrix.length < 2) return 'Enter at least 2 rows to see a worked medical example here.';
+      const c = matrix[0].length;
+      if (c < 2 || matrix.some(row => row.length !== c) || matrix.some(row => row.some(v => !isFinite(v) || v < 0)) ||
+          typeof jStat === 'undefined' || !jStat.chisquare)
+        return 'Enter a valid contingency table to see a worked medical example here.';
+      let B = Math.round(permutations);
+      if (!isFinite(B) || B < 1000) B = 1000;
+      const { observedChi2, p } = monteCarloContingencyTest(matrix, Math.min(B, 5000));
+      const f = v => +v.toFixed(3);
+      return `A study cross-tabulates failure mode against material, but several cells have fewer than 5 expected observations, so the usual chi-square p-value can't be trusted. Simulating random tables that share the same row and column totals gives χ² = ${f(observedChi2)} and a Monte Carlo exact p-value of ${formatPValue(p)} — a direct, assumption-free estimate rather than the large-sample approximation.`;
+    },
+
+    calculate({ table, permutations }) {
+      const matrix = parseMatrix(table);
+      if (matrix.length < 2) return [err('Enter at least 2 rows')];
+      const c = matrix[0].length;
+      if (c < 2) return [err('Enter at least 2 columns')];
+      if (matrix.some(row => row.length !== c)) return [err('Every row must have the same number of columns')];
+      if (matrix.some(row => row.some(v => !isFinite(v) || v < 0))) return [err('All cell values must be zero or greater')];
+      if (matrix.some(row => row.some(v => !Number.isInteger(v)))) return [err('All cell counts must be whole numbers — this test simulates discrete tables under fixed margins')];
+      if (typeof jStat === 'undefined' || !jStat.chisquare)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      let B = Math.round(permutations);
+      if (!isFinite(B) || B < 1000) B = 1000;
+      if (B > 100000) B = 100000;
+
+      const r = matrix.length;
+      const rowSums = matrix.map(row => row.reduce((s, v) => s + v, 0));
+      const colSums = Array.from({ length: c }, (_, j) => matrix.reduce((s, row) => s + row[j], 0));
+      const N = rowSums.reduce((s, v) => s + v, 0);
+      if (N === 0) return [err('Table total must be greater than 0')];
+
+      const df = (r - 1) * (c - 1);
+      let expectedBelow5 = 0;
+      const totalCells = r * c;
+      for (let i = 0; i < r; i++)
+        for (let j = 0; j < c; j++)
+          if ((rowSums[i] * colSums[j]) / N < 5) expectedBelow5++;
+
+      const { observedChi2, p } = monteCarloContingencyTest(matrix, B);
+      const asymptoticP = 1 - jStat.chisquare.cdf(observedChi2, df);
+      const V = Math.sqrt(observedChi2 / (N * Math.min(r - 1, c - 1)));
+
+      const seP  = Math.sqrt(p * (1 - p) / B);
+      const ciLo = Math.max(0, p - 1.96 * seP);
+      const ciHi = Math.min(1, p + 1.96 * seP);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const isSignificant = p < 0.05;
+      const pctBelow5 = (expectedBelow5 / totalCells * 100).toFixed(0);
+      const reliabilityNote = expectedBelow5 > 0
+        ? `${expectedBelow5} of ${totalCells} cells (${pctBelow5}%) have expected counts below 5 — the asymptotic chi-square p-value above may be unreliable; the Monte Carlo exact p-value is the more appropriate result here.`
+        : 'No cells have expected counts below 5 — the asymptotic chi-square approximation is likely already reliable, and the Monte Carlo result mainly serves as a cross-check.';
+
+      return [
+        { label: 'Table Size', value: `${r} × ${c}`, ci: null, isRatio: false, isText: true },
+        { label: 'Total (N)', value: N, ci: null, isRatio: false },
+        { label: 'Cells with Expected Count < 5', isText: true, ci: null, isRatio: false, value: `${expectedBelow5} of ${totalCells} (${pctBelow5}%)` },
+        { label: 'Observed Chi-Square (χ²)', value: f(observedChi2), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom (df)', value: df, ci: null, isRatio: false },
+        { label: "Cramer's V", value: f(V), ci: null, isRatio: false },
+        { label: 'Asymptotic Chi-Square p-value (for comparison)', value: formatPValue(asymptoticP), ci: null, isRatio: false },
+        { label: 'Monte Carlo Permutations (B)', value: B, ci: null, isRatio: false },
+        { label: 'Monte Carlo Exact p-value', value: formatPValue(p), ci: [f(ciLo), f(ciHi)], isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant ? `Reject H₀ — significant association (Monte Carlo exact p = ${formatPValue(p)})` : 'Fail to reject H₀ — no significant association detected' },
+        { label: 'Reliability of the Asymptotic Test', isText: true, ci: null, isRatio: false, value: reliabilityNote },
+        { label: 'Method', isText: true, ci: null, isRatio: false,
+          value: "Random tables are drawn under the observed row/column margins via sequential conditional hypergeometric sampling (the same construction behind R's r2dtable()/Patefield's algorithm), and the Monte Carlo p-value is the proportion of simulated tables with a chi-square statistic at least as extreme as observed (Laplace +1/+1 estimator). The 95% CI reflects simulation (not sampling) uncertainty and narrows with more permutations." },
+      ];
+    }
+  },
+
   /* ── 43. POISSON & NEGATIVE BINOMIAL ────────────────────────────────────
      Compares Poisson(λ) against a Negative Binomial with the SAME
      mean (μ = λ) plus a dispersion parameter r — the standard way to
@@ -3995,8 +4193,8 @@ const CALCULATORS = [
         latex: 'U_1 = R_1 - \\dfrac{n_1(n_1+1)}{2} \\qquad U_2 = R_2 - \\dfrac{n_2(n_2+1)}{2}'
       },
       {
-        label: 'Normal Approximation (tie-corrected)',
-        latex: 'z = \\dfrac{U_1 - \\tfrac{n_1n_2}{2}}{\\sqrt{\\tfrac{n_1n_2}{12}\\left[(N+1)-\\dfrac{\\sum(t^3-t)}{N(N-1)}\\right]}}'
+        label: 'Normal Approximation (tie- & continuity-corrected)',
+        latex: 'z = \\dfrac{\\left(U_1 - \\tfrac{n_1n_2}{2}\\right) - 0.5\\,\\text{sign}\\!\\left(U_1-\\tfrac{n_1n_2}{2}\\right)}{\\sqrt{\\tfrac{n_1n_2}{12}\\left[(N+1)-\\dfrac{\\sum(t^3-t)}{N(N-1)}\\right]}}'
       }
     ],
 
@@ -4078,8 +4276,8 @@ const CALCULATORS = [
         latex: 'W^{+} = \\sum_{d_i>0} \\text{rank}(|d_i|) \\qquad W^{-} = \\sum_{d_i<0} \\text{rank}(|d_i|)'
       },
       {
-        label: 'Normal Approximation (tie-corrected)',
-        latex: 'z = \\dfrac{W^{+} - \\tfrac{n(n+1)}{4}}{\\sqrt{\\tfrac{n(n+1)(2n+1)}{24} - \\dfrac{\\sum(t^3-t)}{48}}}'
+        label: 'Normal Approximation (tie- & continuity-corrected)',
+        latex: 'z = \\dfrac{\\left(W^{+} - \\tfrac{n(n+1)}{4}\\right) - 0.5\\,\\text{sign}\\!\\left(W^{+}-\\tfrac{n(n+1)}{4}\\right)}{\\sqrt{\\tfrac{n(n+1)(2n+1)}{24} - \\dfrac{\\sum(t^3-t)}{48}}}'
       }
     ],
 
@@ -5217,8 +5415,8 @@ const CALCULATORS = [
         latex: '\\tau_b=\\dfrac{n_C-n_D}{\\sqrt{(n_0-n_X)(n_0-n_Y)}}'
       },
       {
-        label: 'Normal Approximation (significance)',
-        latex: 'z=\\dfrac{\\tau_b}{\\sqrt{\\tfrac{2(2n+5)}{9n(n-1)}}}'
+        label: 'Normal Approximation (significance, tie-corrected)',
+        latex: 'z=\\dfrac{n_C-n_D}{\\sqrt{Var(n_C-n_D)}}'
       }
     ],
 
@@ -5275,8 +5473,27 @@ const CALCULATORS = [
       if (denom === 0) return [err('Cannot compute τ — all values are tied in X or in Y')];
 
       const tau = (nC - nD) / denom;
-      const varTau = 2 * (2 * n + 5) / (9 * n * (n - 1));
-      const z = tau / Math.sqrt(varTau);
+
+      // Tie-corrected variance of S = nC-nD (Kendall 1970 / Best & Gipps 1974),
+      // the same normal-approximation formula R's cor.test(method="kendall") uses.
+      const tieGroupSizes = arr => {
+        const counts = new Map();
+        arr.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
+        return [...counts.values()].filter(c => c > 1);
+      };
+      const tX = tieGroupSizes(xs), tY = tieGroupSizes(ys);
+      const sumT2  = g => g.reduce((s, t) => s + t * (t - 1), 0);
+      const sumT2b = g => g.reduce((s, t) => s + t * (t - 1) * (2 * t + 5), 0);
+      const sumT3  = g => g.reduce((s, t) => s + t * (t - 1) * (t - 2), 0);
+
+      const v0 = n * (n - 1) * (2 * n + 5);
+      const vt = sumT2b(tX), vu = sumT2b(tY);
+      const v1 = n > 1 ? (sumT2(tX) * sumT2(tY)) / (2 * n * (n - 1)) : 0;
+      const v2 = n > 2 ? (sumT3(tX) * sumT3(tY)) / (9 * n * (n - 1) * (n - 2)) : 0;
+      const varS = (v0 - vt - vu) / 18 + v1 + v2;
+
+      const S = nC - nD;
+      const z = S / Math.sqrt(varS);
       const pValue = normalTwoTailedP(z);
       const isSignificant = pValue < 0.05;
 
@@ -5287,7 +5504,7 @@ const CALCULATORS = [
         { label: 'Concordant Pairs (nC)', value: nC, ci: null, isRatio: false },
         { label: 'Discordant Pairs (nD)', value: nD, ci: null, isRatio: false },
         { label: "Kendall's τᵦ", value: f(tau), ci: null, isRatio: false, highlight: true },
-        { label: 'z-Statistic (normal approximation)', value: f(z), ci: null, isRatio: false },
+        { label: 'z-Statistic (normal approximation, tie-corrected)', value: f(z), ci: null, isRatio: false },
         { label: 'p-value (approximate)', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant ? 'Reject H₀ — X and Y are significantly associated' : 'Fail to reject H₀ — no significant association' },
@@ -5394,8 +5611,12 @@ const CALCULATORS = [
         latex: '\\text{Critical}_{lower,\\,upper} = \\mu_0 \\mp z_{1-\\alpha/2}\\cdot SE'
       },
       {
-        label: 'Beta & Power',
+        label: 'Beta & Power — One-Tailed',
         latex: '\\beta = \\Phi\\!\\left(\\dfrac{\\text{Critical}-\\mu_A}{SE}\\right) \\qquad \\text{Power} = 1-\\beta'
+      },
+      {
+        label: 'Beta & Power — Two-Tailed',
+        latex: '\\beta = \\Phi\\!\\left(\\dfrac{\\text{Critical}_{upper}-\\mu_A}{SE}\\right) - \\Phi\\!\\left(\\dfrac{\\text{Critical}_{lower}-\\mu_A}{SE}\\right) \\qquad \\text{Power} = 1-\\beta'
       }
     ],
 
@@ -5581,8 +5802,12 @@ const CALCULATORS = [
 
     formulas: [
       {
-        label: 'Achieved (Post-Hoc) Power',
+        label: 'Achieved (Post-Hoc) Power — Two-Tailed',
         latex: '\\text{Power} = \\left[1-\\Phi\\!\\left(z_{1-\\alpha/2}-\\dfrac{\\hat\\delta}{SE}\\right)\\right] + \\Phi\\!\\left(-z_{1-\\alpha/2}-\\dfrac{\\hat\\delta}{SE}\\right)'
+      },
+      {
+        label: 'Achieved (Post-Hoc) Power — One-Tailed',
+        latex: '\\text{Power} = 1-\\Phi\\!\\left(z_{1-\\alpha}-\\dfrac{\\hat\\delta}{SE}\\right)'
       }
     ],
 
@@ -9747,6 +9972,286 @@ const CALCULATORS = [
     }
   },
 
+  /* ── HOLM-ŠÍDÁK TEST ─────────────────────────────────────────────────
+     Post-hoc pairwise comparisons following a significant ANOVA, run
+     as ordinary pooled-variance t-tests (using the ANOVA's own MSW
+     and dfW), with the Holm-Šídák step-down procedure controlling the
+     family-wise error rate across all pairs. Slightly more powerful
+     than Holm-Bonferroni because each step uses the exact Šídák bound
+     1-(1-p)^k rather than the more conservative p×k.                 */
+  {
+    id:          'holm-sidak-test',
+    name:        'Holm-Šídák Test',
+    hint:        't_ij = (x̄ᵢ−x̄ⱼ)/√(MSW(1/nᵢ+1/nⱼ)), step-down Šídák',
+    category:    'ANOVA',
+    description: 'Post-hoc pairwise comparisons following ANOVA, using pooled-variance t-tests with the Holm-Šídák step-down correction for multiple comparisons.',
+
+    formulas: [
+      {
+        label: 'Pairwise t-Statistic (pooled variance)',
+        latex: 't_{ij} = \\dfrac{\\bar{x}_i-\\bar{x}_j}{\\sqrt{MS_W\\left(\\tfrac{1}{n_i}+\\tfrac{1}{n_j}\\right)}} \\;\\sim\\; t_{df_W}'
+      },
+      {
+        label: 'Holm-Šídák Step-Down Adjustment',
+        latex: 'p_{(i)}^{HS} = \\max_{j \\le i}\\Big\\{1-(1-p_{(j)})^{\\,m-j+1}\\Big\\}'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupFields: [
+      { prefix: 'mean', label: 'Mean (x̄)' },
+      { prefix: 'sd',   label: 'SD (s)' },
+      { prefix: 'n',    label: 'Size (n)' },
+    ],
+    inputs: groupInputs([
+      { mean: 31.2, sd: 5.4, n: 10 },
+      { mean: 36.6, sd: 6.1, n: 10 },
+      { mean: 46.1, sd: 8.8, n: 10 },
+    ]),
+
+    example(values) {
+      const { groups, error } = gatherGroups(values);
+      if (error || groups.length < 3 || groups.some(g => g.sd <= 0) || groups.some(g => g.n < 2) ||
+          typeof jStat === 'undefined' || !jStat.studentt)
+        return 'Enter mean, SD, and n for at least 3 groups to see a worked medical example here.';
+      const { k, dfW, msw } = anovaStats(groups);
+      if (dfW < 1) return 'Enter larger group sizes to see a worked medical example here.';
+      const pairs = [];
+      for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          const gi = groups[i], gj = groups[j];
+          const se = Math.sqrt(msw * (1 / gi.n + 1 / gj.n));
+          const t  = (gi.mean - gj.mean) / se;
+          pairs.push(2 * (1 - jStat.studentt.cdf(Math.abs(t), dfW)));
+        }
+      }
+      const adjustedEx = holmSidakAdjust(pairs);
+      const nSig = adjustedEx.filter(p => p < 0.05).length;
+      return `Following a significant ANOVA across ${k} post-surgical rehabilitation protocols (recovery time, in days), the Holm-Šídák procedure tests all ${pairs.length} pairwise mean differences with ordinary t-tests, then corrects the p-values step-by-step (the smallest p-value corrected the most) to hold the overall false-positive rate at 5%: ${nSig} of ${pairs.length} pairs remain significant after correction.`;
+    },
+
+    calculate(values) {
+      const { groups, error } = gatherGroups(values);
+      if (error) return [err(error)];
+      if (groups.length < 3)              return [err('Enter Mean, SD, and N for at least 3 groups')];
+      if (groups.some(g => g.sd <= 0))    return [err('Each group SD must be greater than 0')];
+      if (groups.some(g => g.n < 2))      return [err('Each group Size (n) must be at least 2')];
+      if (typeof jStat === 'undefined' || !jStat.studentt)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const { k, dfW, msw } = anovaStats(groups);
+      if (dfW < 1) return [err('Within-groups degrees of freedom must be at least 1 — increase group sizes')];
+
+      const pairs = [];
+      for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          const gi = groups[i], gj = groups[j];
+          const se   = Math.sqrt(msw * (1 / gi.n + 1 / gj.n));
+          const diff = gi.mean - gj.mean;
+          const t    = diff / se;
+          const p    = 2 * (1 - jStat.studentt.cdf(Math.abs(t), dfW));
+          pairs.push({ gi, gj, diff, se, t, p });
+        }
+      }
+      const adjusted = holmSidakAdjust(pairs.map(pr => pr.p));
+      const tCrit = jStat.studentt.inv(0.975, dfW);
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'MS Within (MSW)', value: f(msw), ci: null, isRatio: false },
+        { label: 'df Within',       value: dfW,    ci: null, isRatio: false },
+      ];
+
+      pairs.forEach((pr, idx) => {
+        const adjP = adjusted[idx];
+        rows.push({
+          label:     `${pr.gi.label} − ${pr.gj.label} (Mean Diff.)`,
+          value:     f(pr.diff),
+          ci:        [f(pr.diff - tCrit * pr.se), f(pr.diff + tCrit * pr.se)],
+          isRatio:   false,
+          highlight: adjP < 0.05,
+        });
+        rows.push({ label: `${pr.gi.label} vs ${pr.gj.label} — t / p / Holm-Šídák-adjusted p`, isText: true, ci: null, isRatio: false,
+          value: `t(${dfW}) = ${f(pr.t)}, ${formatPText(pr.p)}, adj. ${formatPText(adjP)}${adjP < 0.05 ? ' — significant' : ''}` });
+      });
+
+      rows.push({
+        label: 'Method', isText: true, ci: null, isRatio: false,
+        value: "Pooled-variance t-tests (using the ANOVA's MSW and dfW) with Holm-Šídák step-down correction across all pairs. The 95% CI shown on each mean difference uses the unadjusted t critical value for context — significance (highlighted) is judged on the Holm-Šídák-adjusted p-value instead."
+      });
+
+      return rows;
+    }
+  },
+
+  /* ── SHAPIRO-WILK TEST ────────────────────────────────────────────────
+     Tests whether a sample is consistent with a normal distribution —
+     the assumption behind t-tests, ANOVA, and Pearson correlation.
+     Paired in practice with Levene's/Brown-Forsythe test: Levene's
+     checks equal variance across groups, Shapiro-Wilk checks the
+     shape of each group's (or the residuals') distribution.          */
+  {
+    id:          'shapiro-wilk-test',
+    name:        'Shapiro-Wilk Test',
+    hint:        'W = (Σaᵢx₍ᵢ₎)² / Σ(xᵢ−x̄)²',
+    category:    'ANOVA',
+    description: 'Tests whether a sample of continuous data is consistent with a normal distribution — the assumption behind parametric tests like the t-test and ANOVA.',
+
+    formulas: [
+      {
+        label: 'Shapiro-Wilk W Statistic',
+        latex: 'W = \\dfrac{\\left(\\sum_{i=1}^{n} a_i\\, x_{(i)}\\right)^2}{\\sum_{i=1}^{n}(x_i-\\bar{x})^2}'
+      },
+      {
+        label: "p-value (Royston's normalizing approximation)",
+        latex: 'z = \\dfrac{g(W)-\\mu_n}{\\sigma_n} \\qquad p = 1-\\Phi(z)'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'data', type: 'textarea', label: 'Sample Data (comma-separated)', default: '36.6,36.2,36.6,41.8,39.5,44.3,46.1,52.9,37.7,35.9' },
+    ],
+
+    example({ data }) {
+      const values = parseNumberList(data);
+      if (values.length < 3 || values.length > 5000 || typeof jStat === 'undefined' || !jStat.normal)
+        return 'Enter at least 3 numeric values (and no more than 5000) to see a worked medical example here.';
+      if (values.every(v => v === values[0])) return 'Enter values with some spread (not all identical) to see a worked medical example here.';
+      const { n, W, pValue } = shapiroWilkStats(values);
+      const f = v => +v.toFixed(3);
+      const tail = pValue < 0.05
+        ? 'the data depart significantly from a normal distribution — worth pairing the parametric result with a nonparametric or rank-based robustness check'
+        : 'no significant departure from normality was detected, so the normality assumption behind a t-test or ANOVA looks reasonable';
+      return `Before running a parametric test on ${n} post-operative CRP levels (mg/L) from ICU patients, the Shapiro-Wilk test checks whether the sample is consistent with a normal distribution: W = ${f(W)}, ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate({ data }) {
+      const values = parseNumberList(data);
+      if (values.length < 3) return [err('Enter at least 3 numeric values')];
+      if (values.length > 5000) return [err('This approximation is only valid for up to 5000 values')];
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+      if (values.every(v => v === values[0])) return [err('All values are identical — the sample has zero variance, so the test is undefined')];
+
+      const { n, W, z, pValue, mean, sd } = shapiroWilkStats(values);
+      const isSignificant = pValue < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Sample Size (n)', value: n, ci: null, isRatio: false },
+        { label: 'Mean',            value: f(mean, 3), ci: null, isRatio: false },
+        { label: 'SD',              value: f(sd, 3),   ci: null, isRatio: false },
+        { label: 'Shapiro-Wilk Statistic (W)', value: f(W, 4), ci: null, isRatio: false, highlight: true },
+        { label: 'z (normalizing approximation)', value: f(z, 3), ci: null, isRatio: false },
+        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? 'Reject H₀ — the sample departs significantly from a normal distribution.'
+            : 'Fail to reject H₀ — no significant departure from normality detected.' },
+        { label: 'Method', isText: true, ci: null, isRatio: false,
+          value: "Royston's (1995) algorithm AS R94 — the same approximation used internally by R's shapiro.test() — is most accurate for n ≥ 12 and valid up to n = 5000." },
+      ];
+    }
+  },
+
+  /* ── ALIGNED RANK TRANSFORM (ART) ANOVA ──────────────────────────────
+     Nonparametric alternative to a 2-way factorial ANOVA (Wobbrock,
+     Findlater, Gergle & Higgins 2011), for when normality or equal-
+     variance assumptions are violated but both main effects AND their
+     interaction still need testing — unlike Kruskal-Wallis or the
+     Friedman test, which only handle a single factor. Typically run
+     alongside a standard 2-way ANOVA as a robustness check: if both
+     approaches agree, the conclusion doesn't hinge on the assumptions
+     the parametric test needs.                                       */
+  {
+    id:          'art-anova',
+    name:        'Aligned Rank Transform (ART) ANOVA',
+    hint:        'Align → rank → 2-way ANOVA F-test, per effect',
+    category:    'Non-Parametric Tests',
+    description: 'Nonparametric alternative to a 2-way factorial ANOVA, testing both main effects and their interaction when normality or equal-variance assumptions are violated.',
+
+    formulas: [
+      {
+        label: 'Alignment (per effect X, at each observation)',
+        latex: 'Y^{aligned}_{X} = \\left(Y_{ij} - \\bar{Y}_{i\\cdot j}\\right) + \\widehat{effect}_X'
+      },
+      {
+        label: 'Rank, then Re-run the 2-Way ANOVA',
+        latex: 'F_X = \\dfrac{MS_X\\!\\left(rank(Y^{aligned}_X)\\right)}{MS_E\\!\\left(rank(Y^{aligned}_X)\\right)}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'data', type: 'textarea',
+        label: 'Long-Format Data — Factor A level, Factor B level, value (comma-separated, one row per observation)',
+        default: '1,1,98\n1,1,88\n1,1,92\n1,2,42\n1,2,79\n1,2,25\n2,1,98\n2,1,95\n2,1,90\n2,2,95\n2,2,93\n2,2,97'
+      },
+    ],
+
+    example({ data }) {
+      const { rows, numFactors, error } = parseLongFactorial(data);
+      if (error || numFactors !== 2 || typeof jStat === 'undefined' || !jStat.centralF)
+        return 'Enter long-format data with exactly 2 factor columns to see a worked medical example here.';
+      const aLevels = [...new Set(rows.map(r => r.factors[0]))];
+      const bLevels = [...new Set(rows.map(r => r.factors[1]))];
+      if (aLevels.length < 2 || bLevels.length < 2) return 'Each factor needs at least 2 levels to see a worked medical example here.';
+      const cellCounts = {};
+      rows.forEach(r => { const key = r.factors[0] + '_' + r.factors[1]; cellCounts[key] = (cellCounts[key] || 0) + 1; });
+      const counts = Object.values(cellCounts);
+      if (counts.some(c => c < 2) || new Set(counts).size > 1)
+        return 'Enter a balanced design (equal replicates per cell, at least 2 each) to see a worked medical example here.';
+
+      const { a, b, n, N, dfAB, dfE, FAB } = artAnovaStats(rows);
+      const pAB = 1 - jStat.centralF.cdf(FAB, dfAB, dfE);
+      const tail = pAB < 0.05
+        ? ' — the two factors interact, corroborating what the ordinary 2-way ANOVA suggested, but without relying on its normality/equal-variance assumptions'
+        : ' — no evidence of interaction, again without assuming normal, equal-variance data';
+      const f = v => +v.toFixed(2);
+      return `Comparing symptom-relief scores (0–100) for ${a} analgesics (Factor A) each given at ${b} doses (Factor B) — n=${n} per cell, N=${N} — where the raw scores look skewed and unevenly spread across cells, the ART-ANOVA re-ranks the data separately for each effect before re-running the ANOVA, a robustness check alongside the standard 2-way ANOVA. Interaction: F(${dfAB},${dfE}) = ${f(FAB)}, ${formatPText(pAB)}${tail}.`;
+    },
+
+    calculate({ data }) {
+      const { rows, numFactors, error } = parseLongFactorial(data);
+      if (error) return [err(error)];
+      if (numFactors !== 2) return [err(`This calculator needs exactly 2 factor columns (found ${numFactors})`)];
+      if (typeof jStat === 'undefined' || !jStat.centralF)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const aLevels = [...new Set(rows.map(r => r.factors[0]))];
+      const bLevels = [...new Set(rows.map(r => r.factors[1]))];
+      if (aLevels.length < 2 || bLevels.length < 2) return [err('Each factor needs at least 2 levels')];
+
+      const cellCounts = {};
+      rows.forEach(r => { const key = r.factors[0] + '_' + r.factors[1]; cellCounts[key] = (cellCounts[key] || 0) + 1; });
+      const counts = Object.values(cellCounts);
+      if (counts.some(c => c < 2)) return [err('Each Factor A × Factor B cell needs at least 2 replicates')];
+      if (new Set(counts).size > 1) return [err('This calculator needs a balanced design — every Factor A × Factor B combination must have the same number of replicates')];
+
+      const { a, b, n, N, dfA, dfB, dfAB, dfE, FA, FB, FAB } = artAnovaStats(rows);
+      const pA  = 1 - jStat.centralF.cdf(FA,  dfA,  dfE);
+      const pB  = 1 - jStat.centralF.cdf(FB,  dfB,  dfE);
+      const pAB = 1 - jStat.centralF.cdf(FAB, dfAB, dfE);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const effectRow = (label, df, F, p) => [
+        { label: `${label} — F(${df}, ${dfE}) & p-value`, isText: true, ci: null, isRatio: false, highlight: p < 0.05,
+          value: `F = ${f(F)}, ${formatPText(p)}${p < 0.05 ? ' — significant' : ''}` },
+      ];
+
+      return [
+        { label: 'Design', value: `a=${a}, b=${b}, n=${n} per cell (N=${N})`, ci: null, isRatio: false, isText: true },
+        ...effectRow('Factor A (aligned & ranked)', dfA, FA, pA),
+        ...effectRow('Factor B (aligned & ranked)', dfB, FB, pB),
+        ...effectRow('Interaction A×B (aligned & ranked)', dfAB, FAB, pAB),
+        { label: 'Method', isText: true, ci: null, isRatio: false,
+          value: 'Aligned Rank Transform (Wobbrock et al. 2011): each effect above comes from its own separately-aligned and re-ranked ANOVA pass, not a single shared ANOVA table — each F-test is only valid for the effect it was aligned to test.' },
+      ];
+    }
+  },
+
 ];
 
 
@@ -9826,6 +10331,161 @@ function normalPowerTwoTailed(delta, sigma, n, alpha) {
 function logChoose(n, k) {
   if (k < 0 || k > n) return -Infinity;
   return jStat.gammaln(n + 1) - jStat.gammaln(k + 1) - jStat.gammaln(n - k + 1);
+}
+
+/* ── NONCENTRAL F POWER / SAMPLE SIZE (COHEN'S f) ────────────────────────
+   Powers the 'sample-size-anova-f' calculator. Power for a fixed-effects
+   ANOVA effect is P(F' > F_crit) under the noncentral F distribution
+   with noncentrality λ = f²·N_total. jStat exposes only the CENTRAL F
+   distribution, so the noncentral CDF is built as the standard Poisson-
+   weighted mixture of central F distributions:
+     P(F' ≤ x) = Σ_j Pois(j; λ/2) · P(F_{df1+2j, df2} ≤ x·df1/(df1+2j))
+   truncated once the Poisson weight becomes negligible. This is the same
+   construction G*Power and R's pf(ncp=) use internally.                 */
+function noncentralFPower(f, df1, totalN, totalGroups, alpha) {
+  const df2 = totalN - totalGroups;
+  if (df2 < 1) return null;
+  const lambda = f * f * totalN;
+  const halfLambda = lambda / 2;
+  const fCrit = jStat.centralF.inv(1 - alpha, df1, df2);
+  let cdf = 0;
+  let logPoisTerm = -halfLambda; // log Pois(0; λ/2)
+  let j = 0;
+  const maxJ = Math.ceil(halfLambda + 40 * Math.sqrt(halfLambda + 1) + 200);
+  while (j <= maxJ) {
+    const poisPmf = Math.exp(logPoisTerm);
+    const dfNum = df1 + 2 * j;
+    cdf += poisPmf * jStat.centralF.cdf(fCrit * df1 / dfNum, dfNum, df2);
+    j += 1;
+    logPoisTerm += Math.log(halfLambda) - Math.log(j); // Pois(j) from Pois(j-1)
+    if (poisPmf < 1e-14 && j > halfLambda) break;
+  }
+  return { power: 1 - cdf, df2, fCrit, lambda };
+}
+
+// Searches increasing per-cell n until the achieved power reaches the
+// target. "totalGroups" is the number of cells in the FULL design (equal
+// to "levels" for a simple one-way ANOVA; equal to the product of all
+// factor levels for a main effect or interaction within a factorial
+// design), since it sets df2 = N_total − totalGroups.
+function requiredSampleSizeAnovaF(f, levels, totalGroups, alpha, targetPower, maxNPerCell = 100000) {
+  for (let n = 2; n <= maxNPerCell; n++) {
+    const totalN = n * totalGroups;
+    const result = noncentralFPower(f, levels - 1, totalN, totalGroups, alpha);
+    if (result && result.power >= targetPower) return { nPerCell: n, totalN, ...result };
+  }
+  return null;
+}
+
+/* ── MONTE CARLO EXACT TEST HELPERS (r×c CONTINGENCY TABLES) ─────────────
+   Powers the 'monte-carlo-exact-test' calculator. Random tables sharing
+   the observed row/column margins are drawn via sequential conditional
+   hypergeometric sampling — the standard construction for the exact
+   conditional (multiple-hypergeometric) distribution under independence,
+   the same one behind R's r2dtable()/Patefield's (1981) algorithm and
+   fisher.test(simulate.p.value=TRUE) for tables larger than 2×2.        */
+
+// Cumulative log-factorial table, 0..N — computed once per test run so
+// the many repeated log-C(n,k) lookups below are simple array lookups
+// rather than repeated jStat.gammaln() calls (which, across 10,000+
+// simulated tables, is the dominant cost).
+function buildLogFactTable(N) {
+  const logFact = new Float64Array(N + 1);
+  for (let i = 1; i <= N; i++) logFact[i] = logFact[i - 1] + Math.log(i);
+  return logFact;
+}
+
+function logChooseFromTable(logFact, n, k) {
+  if (k < 0 || k > n || n < 0) return -Infinity;
+  return logFact[n] - logFact[k] - logFact[n - k];
+}
+
+// One draw from Hypergeometric(population N, K successes, n draws) by
+// inversion over its support — used to fill random tables cell by cell.
+function sampleHypergeometric(N, K, n, logFact) {
+  const lo = Math.max(0, n - (N - K));
+  const hi = Math.min(n, K);
+  if (lo === hi) return lo;
+  const logDenom = logChooseFromTable(logFact, N, n);
+  let maxLog = -Infinity;
+  const logPmf = [];
+  for (let x = lo; x <= hi; x++) {
+    const lp = logChooseFromTable(logFact, K, x) + logChooseFromTable(logFact, N - K, n - x) - logDenom;
+    logPmf.push(lp);
+    if (lp > maxLog) maxLog = lp;
+  }
+  const probs = logPmf.map(lp => Math.exp(lp - maxLog));
+  const sumP = probs.reduce((s, v) => s + v, 0);
+  const u = Math.random() * sumP;
+  let cum = 0;
+  for (let i = 0; i < probs.length; i++) {
+    cum += probs[i];
+    if (u <= cum) return lo + i;
+  }
+  return hi;
+}
+
+// Generates one random r×c table with the same row/column totals as the
+// observed table, filling it row by row: within each row, each column's
+// count (except the last, taken by subtraction) is drawn as a
+// hypergeometric variate conditional on what previous columns in that
+// row already consumed from the shared column pool. The last row is
+// filled entirely by subtraction.
+function randomTableFixedMargins(rowSums, colSums, logFact) {
+  const r = rowSums.length, c = colSums.length;
+  const colRemaining = colSums.slice();
+  const table = Array.from({ length: r }, () => new Array(c).fill(0));
+  for (let i = 0; i < r - 1; i++) {
+    let drawsLeft = rowSums[i];
+    let poolLeft = colRemaining.reduce((s, v) => s + v, 0);
+    for (let j = 0; j < c - 1; j++) {
+      const K = colRemaining[j];
+      const x = sampleHypergeometric(poolLeft, K, drawsLeft, logFact);
+      table[i][j] = x;
+      colRemaining[j] -= x;
+      poolLeft -= K; // column j's whole remaining stock leaves the pool, not just x
+      drawsLeft -= x;
+    }
+    table[i][c - 1] = drawsLeft;
+    colRemaining[c - 1] -= drawsLeft;
+  }
+  for (let j = 0; j < c; j++) table[r - 1][j] = colRemaining[j];
+  return table;
+}
+
+// Pearson chi-square statistic for an r×c table (same formula the
+// Cramer's V calculator uses).
+function contingencyChiSquare(matrix) {
+  const r = matrix.length, c = matrix[0].length;
+  const rowSums = matrix.map(row => row.reduce((s, v) => s + v, 0));
+  const colSums = Array.from({ length: c }, (_, j) => matrix.reduce((s, row) => s + row[j], 0));
+  const N = rowSums.reduce((s, v) => s + v, 0);
+  let chi2 = 0;
+  for (let i = 0; i < r; i++)
+    for (let j = 0; j < c; j++) {
+      const expected = rowSums[i] * colSums[j] / N;
+      if (expected > 0) chi2 += (matrix[i][j] - expected) ** 2 / expected;
+    }
+  return chi2;
+}
+
+// Simulates nPerm random tables under the observed margins and reports
+// the proportion whose chi-square statistic is at least as extreme as
+// the observed one, using the standard "+1/+1" estimator so the
+// Monte Carlo p-value is never reported as exactly 0.
+function monteCarloContingencyTest(matrix, nPerm) {
+  const rowSums = matrix.map(row => row.reduce((s, v) => s + v, 0));
+  const c = matrix[0].length;
+  const colSums = Array.from({ length: c }, (_, j) => matrix.reduce((s, row) => s + row[j], 0));
+  const N = rowSums.reduce((s, v) => s + v, 0);
+  const logFact = buildLogFactTable(N);
+  const observedChi2 = contingencyChiSquare(matrix);
+  let countGE = 0;
+  for (let b = 0; b < nPerm; b++) {
+    const t = randomTableFixedMargins(rowSums, colSums, logFact);
+    if (contingencyChiSquare(t) >= observedChi2 - 1e-9) countGE++;
+  }
+  return { observedChi2, p: (countGE + 1) / (nPerm + 1), countGE, N };
 }
 
 // Two-sided Fisher's exact test p-value for a 2×2 table [[a,b],[c,d]],
@@ -10134,7 +10794,15 @@ function proportionEffectAndSE(x, n, method) {
 // interval built on a different scale).
 function proportionInverse(theta, method) {
   const clip = v => Math.max(0, Math.min(1, v));
-  if (method === 'arcsine') return clip(Math.sin(theta) ** 2);
+  if (method === 'arcsine') {
+    // sin(theta)^2 is only the correct inverse of arcsin(sqrt(p)) while theta
+    // stays within arcsin's range [0, pi/2] — a wide/skewed CI or PI can push
+    // a transformed-scale bound outside that range, where sin() turns back
+    // downward and the back-transformed bound would "fold over" onto the
+    // wrong side of the interval instead of clamping toward 0 or 1.
+    const thetaInDomain = Math.max(0, Math.min(Math.PI / 2, theta));
+    return clip(Math.sin(thetaInDomain) ** 2);
+  }
   if (method === 'logit') return clip(1 / (1 + Math.exp(-theta)));
   return clip(theta);
 }
@@ -10517,6 +11185,156 @@ function holmAdjust(pValues) {
     adjusted[origIdx] = Math.min(1, runningMax);
   });
   return adjusted;
+}
+
+// Holm-Šídák step-down p-value adjustment for multiple comparisons —
+// same step-down logic as holmAdjust() above, but using the sharper
+// (slightly less conservative) Šídák single-step bound 1-(1-p)^k at
+// each step instead of Bonferroni's p*k. Matches the "Holm-Šídák"
+// post-hoc option in SPSS/GraphPad. Returns adjusted p-values in the
+// SAME order as the input array (not sorted).
+function holmSidakAdjust(pValues) {
+  const m = pValues.length;
+  const order = pValues.map((_, i) => i).sort((a, b) => pValues[a] - pValues[b]);
+  const adjusted = new Array(m);
+  let runningMax = 0;
+  order.forEach((origIdx, rank) => {
+    const k = m - rank; // remaining hypotheses at this step (incl. this one)
+    const raw = 1 - Math.pow(1 - pValues[origIdx], k);
+    runningMax = Math.max(runningMax, raw);
+    adjusted[origIdx] = Math.min(1, runningMax);
+  });
+  return adjusted;
+}
+
+// Shapiro-Wilk test of normality — Royston's (1995) algorithm AS R94,
+// the same approximation used internally by R's shapiro.test() and
+// SciPy. Computes W from the correlation between the ordered sample
+// and expected standard-normal order statistics (Blom's approximation,
+// with polynomial-corrected weights for the two most extreme order
+// statistics when n > 5), then converts W to a p-value via a
+// normalizing transformation fitted separately for n ≤ 11 and n ≥ 12.
+// Valid for 3 ≤ n ≤ 5000; most accurate for n ≥ 12 (matches published
+// tables to roughly 3 decimal places — an approximation, not an exact
+// tail probability).
+function shapiroWilkStats(data) {
+  const x = data.slice().sort((a, b) => a - b);
+  const n = x.length;
+  const mean = x.reduce((s, v) => s + v, 0) / n;
+  const ssTotal = x.reduce((s, v) => s + (v - mean) ** 2, 0);
+
+  const m = Array.from({ length: n }, (_, i) => jStat.normal.inv((i + 1 - 0.375) / (n + 0.25), 0, 1));
+  const ssumm2 = m.reduce((s, v) => s + v * v, 0);
+  const rsn = 1 / Math.sqrt(n);
+
+  const a = new Array(n);
+  if (n > 5) {
+    const aN  = -2.706056 * rsn ** 5 + 4.434685 * rsn ** 4 - 2.071190 * rsn ** 3 - 0.147981 * rsn ** 2 + 0.221157 * rsn + m[n - 1] / Math.sqrt(ssumm2);
+    const aN1 = -3.582633 * rsn ** 5 + 5.682633 * rsn ** 4 - 1.752461 * rsn ** 3 - 0.293762 * rsn ** 2 + 0.042981 * rsn + m[n - 2] / Math.sqrt(ssumm2);
+    const fac = Math.sqrt((ssumm2 - 2 * m[n - 1] ** 2 - 2 * m[n - 2] ** 2) / (1 - 2 * aN ** 2 - 2 * aN1 ** 2));
+    a[n - 1] = aN;  a[0] = -aN;
+    a[n - 2] = aN1; a[1] = -aN1;
+    for (let i = 2; i < n - 2; i++) a[i] = m[i] / fac;
+  } else {
+    const aN = m[n - 1] / Math.sqrt(ssumm2);
+    const fac = Math.sqrt((ssumm2 - 2 * m[n - 1] ** 2) / (1 - 2 * aN ** 2));
+    a[n - 1] = aN; a[0] = -aN;
+    for (let i = 1; i < n - 1; i++) a[i] = m[i] / fac;
+  }
+
+  const numerator = x.reduce((s, v, i) => s + a[i] * v, 0);
+  const W = Math.min(1, numerator ** 2 / ssTotal);
+
+  let mu, sigma, wTrans;
+  if (n <= 11) {
+    const gamma = -2.273 + 0.459 * n;
+    wTrans = -Math.log(gamma - Math.log(1 - W));
+    mu    = 0.5440 - 0.39978 * n + 0.025054 * n ** 2 - 0.0006714 * n ** 3;
+    sigma = Math.exp(1.3822 - 0.77857 * n + 0.062767 * n ** 2 - 0.0020322 * n ** 3);
+  } else {
+    const lnn = Math.log(n);
+    wTrans = Math.log(1 - W);
+    mu    = -1.5861 - 0.31082 * lnn - 0.083751 * lnn ** 2 + 0.0038915 * lnn ** 3;
+    sigma = Math.exp(-0.4803 - 0.082676 * lnn + 0.0030302 * lnn ** 2);
+  }
+  const z = (wTrans - mu) / sigma;
+  const pValue = 1 - jStat.normal.cdf(z, 0, 1);
+
+  return { n, W, z, pValue, mean, sd: Math.sqrt(ssTotal / (n - 1)) };
+}
+
+// Aligned Rank Transform (ART) ANOVA (Wobbrock, Findlater, Gergle &
+// Higgins 2011) for a balanced 2-factor design — the nonparametric
+// counterpart to 'anova-2way' that still tests main effects AND their
+// interaction (unlike Kruskal-Wallis/Friedman, which only handle one
+// factor at a time). For EACH effect (A, B, A×B) in turn: align every
+// observation by adding that effect's own estimated contribution back
+// onto the full-model residual, rank the aligned values across the
+// WHOLE dataset (ties averaged), then run an ordinary 2-way ANOVA
+// F-test on those ranks. Only the effect that alignment was built
+// around is kept from each pass — the three F-tests below come from
+// three separate alignment-and-rank passes, not one shared ANOVA table.
+// Returns raw F statistics and df only; callers compute p-values via
+// jStat, matching the convention of leveneStats()/kruskalWallisStats().
+function artAnovaStats(rows) {
+  const aLevels = [...new Set(rows.map(r => r.factors[0]))].sort((x, y) => x - y);
+  const bLevels = [...new Set(rows.map(r => r.factors[1]))].sort((x, y) => x - y);
+  const a = aLevels.length, b = bLevels.length;
+  const cellsIdx = aLevels.map(av => bLevels.map(bv =>
+    rows.map((r, idx) => idx).filter(idx => rows[idx].factors[0] === av && rows[idx].factors[1] === bv)
+  ));
+  const n = cellsIdx[0][0].length;
+  const N = rows.length;
+  const values = rows.map(r => r.value);
+  const grandMean = values.reduce((s, v) => s + v, 0) / N;
+  const mean = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+
+  const aMeans = cellsIdx.map(row => mean(row.flat().map(idx => values[idx])));
+  const bMeans = bLevels.map((_, j) => mean(cellsIdx.map(row => row[j]).flat().map(idx => values[idx])));
+  const cellMeans = cellsIdx.map(row => row.map(idxArr => mean(idxArr.map(idx => values[idx]))));
+
+  const cellOf = new Array(N);
+  cellsIdx.forEach((row, i) => row.forEach((idxArr, j) => idxArr.forEach(idx => { cellOf[idx] = [i, j]; })));
+
+  const residual = values.map((v, idx) => {
+    const [i, j] = cellOf[idx];
+    return v - cellMeans[i][j];
+  });
+
+  const alignedFor = effect => values.map((v, idx) => {
+    const [i, j] = cellOf[idx];
+    let est;
+    if (effect === 'A')      est = aMeans[i] - grandMean;
+    else if (effect === 'B') est = bMeans[j] - grandMean;
+    else                     est = cellMeans[i][j] - aMeans[i] - bMeans[j] + grandMean;
+    return residual[idx] + est;
+  });
+
+  const dfA = a - 1, dfB = b - 1, dfAB = (a - 1) * (b - 1), dfE = a * b * (n - 1);
+
+  function fStatOnRanks(alignedValues) {
+    const { ranks } = rankWithTies(alignedValues);
+    const rGrandMean = ranks.reduce((s, v) => s + v, 0) / N;
+    const rMean = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+    const rCells = cellsIdx.map(row => row.map(idxArr => idxArr.map(idx => ranks[idx])));
+    const rAMeans = rCells.map(row => rMean(row.flat()));
+    const rBMeans = bLevels.map((_, j) => rMean(rCells.map(row => row[j]).flat()));
+    const rCellMeans = rCells.map(row => row.map(rMean));
+    const SSA = b * n * rAMeans.reduce((s, mm) => s + (mm - rGrandMean) ** 2, 0);
+    const SSB = a * n * rBMeans.reduce((s, mm) => s + (mm - rGrandMean) ** 2, 0);
+    let SSAB = 0;
+    for (let i = 0; i < a; i++) for (let j = 0; j < b; j++) SSAB += n * (rCellMeans[i][j] - rAMeans[i] - rBMeans[j] + rGrandMean) ** 2;
+    const SST = ranks.reduce((s, v) => s + (v - rGrandMean) ** 2, 0);
+    const SSE = SST - SSA - SSB - SSAB;
+    const MSA = SSA / dfA, MSB = SSB / dfB, MSAB = SSAB / dfAB, MSE = SSE / dfE;
+    return { FA: MSA / MSE, FB: MSB / MSE, FAB: MSAB / MSE };
+  }
+
+  const FA  = fStatOnRanks(alignedFor('A')).FA;
+  const FB  = fStatOnRanks(alignedFor('B')).FB;
+  const FAB = fStatOnRanks(alignedFor('AB')).FAB;
+
+  return { a, b, n, N, dfA, dfB, dfAB, dfE, FA, FB, FAB };
 }
 
 /* ── DISTRIBUTION TABLE HELPERS ─────────────────────────────────────────
@@ -12303,6 +13121,7 @@ const CALCULATOR_INDEX = [
   { id: 'fragility-index',     name: 'Fragility Index',                 category: 'Chi-Square & Categorical',    description: "Counts how many patients' outcomes would need to change before a statistically significant 2×2 result stops being significant.", status: 'available' },
   { id: 'mcnemars-test',        name: "McNemar's Test",                  category: 'Chi-Square & Categorical',    description: 'Tests marginal homogeneity in paired nominal data (before/after or matched pairs).',           status: 'available' },
   { id: 'cochrans-q',           name: "Cochran's Q Test",                category: 'Chi-Square & Categorical',    description: 'Non-parametric test for differences among three or more matched proportions.',                status: 'available' },
+  { id: 'monte-carlo-exact-test', name: 'Monte Carlo Exact Test (r×c Table)', category: 'Chi-Square & Categorical', description: 'Simulation-based exact p-value for an r×c contingency table, for use when expected cell counts are too low for the asymptotic chi-square approximation.', status: 'available' },
 
   // ── 5. NON-PARAMETRIC TESTS ───────────────────────────────────────────
   { id: 'mann-whitney',         name: 'Mann-Whitney U Test',             category: 'Non-Parametric Tests',        description: 'Non-parametric test comparing two independent groups on ordinal or non-normal data.',          status: 'available' },
@@ -12311,6 +13130,7 @@ const CALCULATOR_INDEX = [
   { id: 'kruskal-wallis',       name: 'Kruskal-Wallis Test',             category: 'Non-Parametric Tests',        description: 'Non-parametric one-way ANOVA for comparing three or more independent groups.',                 status: 'available' },
   { id: 'dunns-test',           name: "Dunn's Test",                     category: 'Non-Parametric Tests',        description: 'Post-hoc pairwise comparisons following a significant Kruskal-Wallis test.',                  status: 'available' },
   { id: 'friedman-test',        name: 'Friedman Test',                   category: 'Non-Parametric Tests',        description: 'Non-parametric repeated measures test for comparing three or more related groups.',            status: 'available' },
+  { id: 'art-anova',            name: 'Aligned Rank Transform (ART) ANOVA', category: 'Non-Parametric Tests',     description: 'Nonparametric alternative to a 2-way factorial ANOVA, testing both main effects and their interaction when normality or equal-variance assumptions are violated.', status: 'available' },
 
   // ── 6. ANOVA ──────────────────────────────────────────────────────────
   { id: 'anova-1way',           name: '1-Way ANOVA',                     category: 'ANOVA',                       description: 'Tests for differences in means across three or more independent groups.',                     status: 'available' },
@@ -12318,6 +13138,8 @@ const CALCULATOR_INDEX = [
   { id: 'anova-multifactor',    name: 'Multi-Factor ANOVA',              category: 'ANOVA',                       description: 'Extends one-way ANOVA to designs with more than two independent factors.',                    status: 'available' },
   { id: 'tukeys-hsd',           name: "Tukey's HSD Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons controlling family-wise error rate after ANOVA.',               status: 'available' },
   { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: 'Tests whether two or more groups have equal variances — the assumption behind ANOVA and the pooled-variance t-test.', status: 'available' },
+  { id: 'holm-sidak-test',      name: "Holm-Šídák Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons following ANOVA, using pooled-variance t-tests with the Holm-Šídák step-down correction for multiple comparisons.', status: 'available' },
+  { id: 'shapiro-wilk-test',    name: 'Shapiro-Wilk Test',               category: 'ANOVA',                       description: 'Tests whether a sample of continuous data is consistent with a normal distribution — the assumption behind parametric tests like the t-test and ANOVA.', status: 'available' },
   { id: 'repeated-measures-anova', name: 'Repeated Measures ANOVA',      category: 'ANOVA',                       description: 'Analyzes data from designs where the same subjects are measured under multiple conditions.',   status: 'available' },
 
   // ── 7. CORRELATION & REGRESSION ──────────────────────────────────────
@@ -12351,6 +13173,7 @@ const CALCULATOR_INDEX = [
   { id: 'sample-size-2mean',    name: 'Sample Size — Difference of Two Means', category: 'Power & Sample Size',   description: 'Determines the per-group sample size needed to detect a specified difference between two independent means, given a common σ, alpha, and target power.', status: 'available' },
   { id: 'sample-size-1prop',    name: 'Sample Size — 1-Sample Proportion', category: 'Power & Sample Size',       description: 'Determines the sample size needed to detect a difference between a hypothesised proportion and an alternative, given alpha and target power.', status: 'available' },
   { id: 'sample-size-2prop',    name: 'Sample Size — Difference of Two Proportions', category: 'Power & Sample Size', description: 'Determines the per-group sample size needed to detect a difference between two independent proportions, given alpha and target power.', status: 'available' },
+  { id: 'sample-size-anova-f',  name: "Sample Size — ANOVA (Cohen's f)", category: 'Power & Sample Size', description: "Determines the per-cell sample size needed to detect a specified Cohen's f effect size for a fixed-effects ANOVA main effect or interaction, covering both one-way and factorial designs.", status: 'available' },
   { id: 'sample-size-survey',   name: 'Sample Size for a Survey',        category: 'Power & Sample Size',         description: 'Determines how many respondents are needed to estimate a population proportion within a target margin of error, with optional finite-population correction and response-rate adjustment.', status: 'available' },
   { id: 'power-ppv-fpp',        name: 'Power, Effect Size, PPV & FPP',   category: 'Power & Sample Size',         description: 'Links statistical power to positive predictive value and false positive probability.',          status: 'available' },
   { id: 'power-delta-alpha',    name: 'Power as a Function of δ & α',    category: 'Power & Sample Size',         description: 'Shows how power changes across a range of delta and alpha values simultaneously.',             status: 'available' },
@@ -12581,11 +13404,18 @@ const WIZARD_TREE = {
     results: [
       { id: 'anova-1way',  why: 'Tests for a difference in means across 3+ independent groups.' },
       { id: 'levenes-test', why: "Check this first if you're unsure the groups have equal variances — a precondition for a standard ANOVA." },
+      { id: 'shapiro-wilk-test', why: "Check this too if you're unsure the outcome is normally distributed in each group — the other key ANOVA precondition." },
       { id: 'tukeys-hsd',  why: 'Run this after a significant ANOVA to find which specific pairs of groups differ.' },
+      { id: 'holm-sidak-test', why: "A slightly more powerful alternative to Tukey's HSD for the same post-hoc pairwise comparisons." },
       { id: 'eta-squared', why: 'Effect size for the ANOVA — how much of the variance the factor actually explains.' },
     ]
   },
-  anova2wayResult:  { results: [ { id: 'anova-2way', why: 'Tests both main effects and their interaction for two factors at once.' } ] },
+  anova2wayResult:  {
+    results: [
+      { id: 'anova-2way', why: 'Tests both main effects and their interaction for two factors at once.' },
+      { id: 'art-anova',  why: 'Nonparametric alternative when normality or equal-variance assumptions are violated but you still need both main effects and the interaction.' },
+    ]
+  },
   anovaMultiResult: { results: [ { id: 'anova-multifactor', why: 'Main-effects model for 3+ independent factors at once.' } ] },
   kruskalResult: {
     results: [
@@ -12664,7 +13494,20 @@ const WIZARD_TREE = {
     ]
   },
   chiGofResult:  { results: [ { id: 'chi-square-gof', why: 'Tests whether observed category counts match expected/theoretical proportions.' } ] },
-  cramersResult: { results: [ { id: 'cramers-v', why: 'Chi-square test of independence plus an effect-size measure for an r×c contingency table.' } ] },
+  cramersResult: {
+    question: 'Are more than about 20% of the table\'s cells expected to have fewer than 5 observations?',
+    options: [
+      { label: 'Yes — several cells are sparse',        next: 'monteCarloResult' },
+      { label: 'No — counts are reasonably large everywhere', next: 'cramersVResult' },
+    ]
+  },
+  cramersVResult: { results: [ { id: 'cramers-v', why: 'Chi-square test of independence plus an effect-size measure for an r×c contingency table.' } ] },
+  monteCarloResult: {
+    results: [
+      { id: 'monte-carlo-exact-test', why: 'Simulates an exact p-value for the table when expected cell counts are too low to trust the asymptotic chi-square approximation.' },
+      { id: 'cramers-v', why: "Still worth reporting alongside it as the table's effect-size summary." },
+    ]
+  },
 
   corrGoal: {
     question: 'Do you want to quantify the strength of a relationship, or predict/model one variable from another(s)?',
@@ -12861,6 +13704,7 @@ const WIZARD_TREE = {
     options: [
       { label: 'One sample mean vs. a hypothesized value',        next: 'ss1meanResult' },
       { label: 'Two independent means',                            next: 'ss2meanResult' },
+      { label: 'Three or more group means (ANOVA main effect or interaction)', next: 'ssAnovaResult' },
       { label: 'One sample proportion vs. a hypothesized value',   next: 'ss1propResult' },
       { label: 'Two independent proportions',                      next: 'ss2propResult' },
       { label: "I'm not testing a hypothesis — I just want to estimate a proportion (e.g. a survey)", next: 'ssSurveyResult' },
@@ -12868,6 +13712,7 @@ const WIZARD_TREE = {
   },
   ss1meanResult: { results: [ { id: 'sample-size-1mean', why: 'Required n to detect a difference from a hypothesized mean.' } ] },
   ss2meanResult: { results: [ { id: 'sample-size-2mean', why: 'Required per-group n to detect a difference between two independent means.' } ] },
+  ssAnovaResult: { results: [ { id: 'sample-size-anova-f', why: "Required per-cell n from Cohen's f, for a one-way ANOVA or for a main effect/interaction within a larger factorial design." } ] },
   ssSurveyResult: { results: [ { id: 'sample-size-survey', why: 'How many respondents you need to estimate a proportion within a target margin of error — the formula most surveys actually need.' } ] },
   ss1propResult: { results: [ { id: 'sample-size-1prop', why: 'Required n to detect a difference from a hypothesized proportion.' } ] },
   ss2propResult: { results: [ { id: 'sample-size-2prop', why: 'Required per-group n to detect a difference between two independent proportions.' } ] },
@@ -12977,6 +13822,7 @@ const SEARCH_KEYWORDS = {
   'fragility-index': ['fragility index', 'fragility quotient', 'how robust is this result', 'reverse fragility index', 'walsh'],
   'mcnemars-test':   ["mcnemar's test", 'paired categorical data', 'before and after yes no', 'matched binary outcome'],
   'cochrans-q':      ["cochran's q test", 'three or more matched binary measurements', 'repeated binary outcome'],
+  'monte-carlo-exact-test': ['monte carlo exact test', 'exact test larger than 2x2', 'expected count below 5 r by c table', 'fisher-freeman-halton', 'simulated p-value contingency table', 'sparse contingency table', 'small cell counts larger table', 'r2dtable', 'exact chi-square'],
 
   // Non-Parametric Tests
   'mann-whitney':          ['mann-whitney u test', 'wilcoxon rank sum test', 'non-parametric two group comparison', 'compare two independent groups not normal', 'skewed data two groups'],
@@ -12985,12 +13831,15 @@ const SEARCH_KEYWORDS = {
   'kruskal-wallis':        ['kruskal-wallis test', 'non-parametric anova', 'compare three or more groups not normal', 'skewed data multiple groups'],
   'dunns-test':            ["dunn's test", 'post hoc after kruskal-wallis', 'pairwise comparison non-parametric'],
   'friedman-test':         ['friedman test', 'non-parametric repeated measures', 'ranks across conditions'],
+  'art-anova':             ['aligned rank transform', 'art anova', 'non-parametric two-way anova', 'non-parametric factorial anova', 'rank transform anova', 'interaction effect non-normal data'],
 
   // ANOVA
   'anova-1way':             ['one-way anova', 'compare three or more group means', 'analysis of variance'],
   'anova-2way':             ['two-way anova', 'two factors', 'interaction effect'],
   'anova-multifactor':      ['multi-factor anova', 'three or more factors'],
   'tukeys-hsd':             ["tukey's hsd", 'post hoc test', 'pairwise comparison after anova', 'which groups differ'],
+  'holm-sidak-test':        ['holm-sidak test', 'holm sidak', 'post hoc test', 'pairwise comparison after anova', 'multiple comparisons correction', 'step-down sidak'],
+  'shapiro-wilk-test':      ['shapiro-wilk test', 'shapiro wilk', 'test for normality', 'normality assumption', 'is my data normally distributed'],
   'repeated-measures-anova': ['repeated measures anova', 'same subjects multiple conditions'],
 
   // Correlation & Regression
@@ -13023,6 +13872,7 @@ const SEARCH_KEYWORDS = {
   'sample-size-2mean':  ['sample size for two means', 'sample size two groups', 'sample size two independent means'],
   'sample-size-1prop':  ['sample size for one proportion'],
   'sample-size-2prop':  ['sample size for two proportions', 'sample size two independent proportions'],
+  'sample-size-anova-f': ['sample size for anova', "cohen's f sample size", 'a priori power analysis anova', 'sample size main effect', 'sample size interaction', 'sample size factorial design', 'gpower anova', 'noncentral f sample size', 'how many per group anova'],
   'sample-size-survey': ['survey sample size', 'how many people to survey', 'margin of error', 'estimate a proportion', 'poll sample size', 'questionnaire sample size', 'response rate'],
   'power-ppv-fpp':      ['false positive risk', 'positive predictive value of a significant result'],
   'power-delta-alpha':  ['power table by effect size and alpha'],
@@ -13372,6 +14222,14 @@ const NOTATION = {
     { symbol: 'R_i', meaning: 'Total number of successes (1s) for subject (row) i across all conditions.' },
     { symbol: 'df', meaning: 'Degrees of freedom for the test, equal to the number of conditions minus one.' },
   ],
+  'monte-carlo-exact-test': [
+    { symbol: '\\chi^2_{obs}', meaning: 'The observed table\'s chi-square statistic, computed the same way as in the Cramer\'s V calculator.' },
+    { symbol: 'O_{ij}, E_{ij}', meaning: 'Observed and expected count in row i, column j of the entered table.' },
+    { symbol: 'B', meaning: 'Number of Monte Carlo permutations (random tables) simulated.' },
+    { symbol: '\\text{table}_b', meaning: 'One randomly simulated table sharing the same row and column totals as the observed table, generated under the null of independence.' },
+    { symbol: 'p_{MC}', meaning: 'Monte Carlo exact p-value — the share of simulated tables at least as extreme as the observed one (with a +1/+1 adjustment so it is never exactly 0).' },
+    { symbol: 'V', meaning: "Cramer's V, reported alongside the exact test as the table's effect-size summary." },
+  ],
 
   // Non-Parametric Tests
   'mann-whitney': [
@@ -13422,6 +14280,16 @@ const NOTATION = {
     { symbol: 'R_j', meaning: 'Sum of the within-subject ranks assigned to condition (column) j across all subjects.' },
     { symbol: 't', meaning: 'Size of each group of tied (equal) values within a subject’s row, used in the tie-correction term.' },
   ],
+  'art-anova': [
+    { symbol: 'Y_{ij}', meaning: 'Raw observation in the cell defined by Factor A level i and Factor B level j.' },
+    { symbol: '\\bar{Y}_{i\\cdot j}', meaning: 'Mean of the observations in that same Factor A × Factor B cell (the residual is the observation minus this cell mean).' },
+    { symbol: '\\widehat{effect}_X', meaning: "Estimated contribution of effect X (Factor A, Factor B, or their interaction) added back onto the residual — this is what 'aligning' means." },
+    { symbol: 'Y^{aligned}_X', meaning: 'The aligned value for effect X: the cell residual plus only that effect\'s own estimated contribution.' },
+    { symbol: 'rank(\\cdot)', meaning: 'Rank of each aligned value across the whole dataset (ties averaged), computed separately for each effect.' },
+    { symbol: 'MS_X', meaning: "Mean square for effect X, from a fresh 2-way ANOVA run on that effect's own ranked, aligned values." },
+    { symbol: 'MS_E', meaning: 'Error mean square from that same ranked ANOVA pass.' },
+    { symbol: 'F_X', meaning: "F-statistic for effect X — MS_X divided by MS_E, both from effect X's own alignment-and-rank pass." },
+  ],
 
   // ANOVA
   'anova-1way': [
@@ -13469,6 +14337,26 @@ const NOTATION = {
     { symbol: 'n_j', meaning: 'Sample size of group j in the pair being compared.' },
     { symbol: '\\bar{x}_i', meaning: 'Mean of group i.' },
     { symbol: '\\bar{x}_j', meaning: 'Mean of group j.' },
+  ],
+  'holm-sidak-test': [
+    { symbol: 't_{ij}', meaning: 'Pooled-variance t-statistic for the pairwise comparison between group i and group j.' },
+    { symbol: '\\bar{x}_i, \\bar{x}_j', meaning: 'Mean of group i and mean of group j, the pair being compared.' },
+    { symbol: 'MS_W', meaning: 'Mean square within groups, the pooled within-group variance from the underlying ANOVA.' },
+    { symbol: 'n_i, n_j', meaning: 'Sample size of group i and group j in the pair being compared.' },
+    { symbol: 'df_W', meaning: 'Within-groups degrees of freedom from the underlying ANOVA, used for the t-distribution.' },
+    { symbol: 'p_{(i)}^{HS}', meaning: 'Holm-Šídák-adjusted p-value for the i-th ranked comparison, controlling the false-positive rate across all pairwise tests.' },
+    { symbol: 'p_{(j)}', meaning: 'Unadjusted p-value of the j-th comparison when comparisons are sorted from smallest to largest p-value.' },
+    { symbol: 'm', meaning: 'Total number of pairwise comparisons being adjusted for.' },
+  ],
+  'shapiro-wilk-test': [
+    { symbol: 'W', meaning: "Shapiro-Wilk test statistic — how closely the sample's shape matches a normal distribution (closer to 1 = more normal)." },
+    { symbol: 'x_{(i)}', meaning: 'The i-th smallest value in the sample (the data sorted in ascending order).' },
+    { symbol: 'a_i', meaning: 'Weight applied to the i-th order statistic, derived from expected standard-normal order statistics.' },
+    { symbol: '\\bar{x}', meaning: 'Sample mean.' },
+    { symbol: 'n', meaning: 'Sample size.' },
+    { symbol: 'z', meaning: "W converted onto an approximately standard-normal scale via Royston's normalizing transformation." },
+    { symbol: '\\mu_n, \\sigma_n', meaning: 'Sample-size-dependent mean and SD used to standardize the transformed W into z.' },
+    { symbol: 'p', meaning: 'p-value from the upper tail of the standard normal distribution at z — small p means the sample departs from normality.' },
   ],
   'repeated-measures-anova': [
     { symbol: 'SS_{cond}', meaning: 'Sum of squares for conditions — variation in scores explained by which condition was measured.' },
@@ -13727,6 +14615,15 @@ const NOTATION = {
     { symbol: 'z_{power}', meaning: 'Critical z-value corresponding to the Target Power (1−β).' },
     { symbol: 'p_1', meaning: 'Group 1 Proportion (p₁) — the expected rate in the first group (e.g. treatment).' },
     { symbol: 'p_2', meaning: 'Group 2 Proportion (p₂) — the expected rate in the second group (e.g. placebo).' },
+  ],
+  'sample-size-anova-f': [
+    { symbol: 'f', meaning: "Cohen's f — the standardized effect size for the ANOVA effect being tested (small ≈ 0.10, medium ≈ 0.25, large ≈ 0.40)." },
+    { symbol: 'k', meaning: 'Levels of the Effect Being Tested — the number of groups within the factor of interest (df₁ = k − 1).' },
+    { symbol: 'g', meaning: 'Total Cells in the Full Design — all cells in the complete factorial layout (equal to k for a simple one-way ANOVA).' },
+    { symbol: 'N_{total}', meaning: 'Required total sample size across the whole design (per-cell n × g).' },
+    { symbol: '\\lambda', meaning: 'Noncentrality parameter of the F distribution under the alternative hypothesis, λ = f² × N_total.' },
+    { symbol: "F'", meaning: 'The noncentral F distribution, used to compute achieved power at a given sample size.' },
+    { symbol: 'df_1, df_2', meaning: 'Numerator (k − 1) and denominator (N_total − g) degrees of freedom for the F-test.' },
   ],
   'sample-size-survey': [
     { symbol: 'z', meaning: 'Critical value from the standard normal distribution for the chosen confidence level (e.g. 1.96 for 95%).' },
@@ -14062,13 +14959,14 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
+        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. For tables larger than 2&times;2 with several low expected cell counts, the <strong>Monte Carlo Exact Test</strong> is the r&times;c analogue of Fisher's Exact Test. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
       },
     ],
     related: [
       { id: 'chi-square-2x2', why: 'Tests association between two nominal variables in a 2×2 table.' },
       { id: 'fishers-exact', why: 'Exact alternative to Chi-Square for small-sample 2×2 tables.' },
       { id: 'cramers-v', why: 'Strength of association for nominal tables larger than 2×2.' },
+      { id: 'monte-carlo-exact-test', why: 'Exact-test alternative to Cramer\'s V/chi-square for larger tables when expected cell counts are too low to trust.' },
       { id: 'cohens-kappa', why: 'Chance-corrected agreement between two raters on categorical classifications.' },
       { id: 'fleiss-kappa', why: 'Extends Cohen\'s Kappa to three or more raters on unordered categories.' },
       { id: 'mcnemars-test', why: 'Tests paired/matched nominal data, such as before-and-after classification of the same subjects.' },
@@ -14837,6 +15735,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'sample-size-2mean', why: 'Calculates the sample size needed for a target power, given an effect size and variability.' },
+      { id: 'sample-size-anova-f', why: "Same idea for a 3+ group ANOVA main effect or interaction, using Cohen's f as the effect size." },
       { id: 'posthoc-power', why: 'Estimates the power a completed study had, given its actual sample size and observed effect.' },
       { id: 'type1-type2-errors', why: 'Interactive explorer for the Type I/Type II error trade-off described in this guide.' },
       { id: 'power-vs-es-alpha', why: 'Shows how power shifts as effect size and alpha change, holding sample size fixed.' },
