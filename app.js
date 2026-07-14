@@ -715,10 +715,11 @@ function renderGroupedInputs(calc) {
     const cells = groupNums.map(i => {
       const inp = byId(f.prefix + i);
       if (!inp) return `<div class="group-cell"></div>`;
+      const isText = inp.type === 'text';
       return `
         <div class="group-cell">
-          <input class="input-el" type="number" id="inp-${inp.id}" data-id="${inp.id}"
-                 value="${inp.default}" step="any" aria-label="${term} ${i} ${esc(f.label)}">
+          <input class="input-el" type="${isText ? 'text' : 'number'}" id="inp-${inp.id}" data-id="${inp.id}"
+                 value="${esc(inp.default)}" ${isText ? '' : 'step="any"'} aria-label="${term} ${i} ${esc(f.label)}">
         </div>`;
     }).join('');
     return rowHeader + cells;

@@ -6068,6 +6068,7 @@ const CALCULATORS = [
     inputLayout: 'groups',
     groupTerm: 'Study',
     groupFields: [
+      { prefix: 'name',   label: 'Name / Date (optional)' },
       { prefix: 'effect', label: 'Effect Estimate' },
       { prefix: 'se',     label: 'SE' },
     ],
@@ -6076,16 +6077,22 @@ const CALCULATORS = [
         { value: 'additive', label: 'Additive (mean diff., risk diff., etc.)' },
         { value: 'ratio',    label: 'Ratio (RR/OR — enter log values)' },
       ] },
+      { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.45 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.12 },
+      { id: 'name2',   type: 'text', label: 'Study 2 Name / Date (optional)', default: '' },
       { id: 'effect2', label: 'Study 2 Effect Estimate', default: 0.30 },
       { id: 'se2',     label: 'Study 2 SE',               default: 0.15 },
+      { id: 'name3',   type: 'text', label: 'Study 3 Name / Date (optional)', default: '' },
       { id: 'effect3', label: 'Study 3 Effect Estimate', default: 0.55 },
       { id: 'se3',     label: 'Study 3 SE',               default: 0.10 },
+      { id: 'name4',   type: 'text', label: 'Study 4 Name / Date (optional)', default: '' },
       { id: 'effect4', label: 'Study 4 Effect Estimate (optional)', default: '' },
       { id: 'se4',     label: 'Study 4 SE (optional)',               default: '' },
+      { id: 'name5',   type: 'text', label: 'Study 5 Name / Date (optional)', default: '' },
       { id: 'effect5', label: 'Study 5 Effect Estimate (optional)', default: '' },
       { id: 'se5',     label: 'Study 5 SE (optional)',               default: '' },
+      { id: 'name6',   type: 'text', label: 'Study 6 Name / Date (optional)', default: '' },
       { id: 'effect6', label: 'Study 6 Effect Estimate (optional)', default: '' },
       { id: 'se6',     label: 'Study 6 SE (optional)',               default: '' },
     ],
@@ -9150,6 +9157,7 @@ const CALCULATORS = [
     inputLayout: 'groups',
     groupTerm: 'Study',
     groupFields: [
+      { prefix: 'name', label: 'Name / Date (optional)' },
       { prefix: 'x', label: 'Events (x)' },
       { prefix: 'n', label: 'Total (n)' },
     ],
@@ -9163,16 +9171,22 @@ const CALCULATORS = [
           { value: 'raw',     label: 'Raw / Untransformed — simplest, least robust near 0%/100%' },
         ] },
 
+      { id: 'name1', type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'x1', label: 'Study 1 Events (x₁)', default: 3 },
       { id: 'n1', label: 'Study 1 Total (n₁)',  default: 50 },
+      { id: 'name2', type: 'text', label: 'Study 2 Name / Date (optional)', default: '' },
       { id: 'x2', label: 'Study 2 Events (x₂)', default: 0 },
       { id: 'n2', label: 'Study 2 Total (n₂)',  default: 40 },
+      { id: 'name3', type: 'text', label: 'Study 3 Name / Date (optional)', default: '' },
       { id: 'x3', label: 'Study 3 Events (x₃)', default: 8 },
       { id: 'n3', label: 'Study 3 Total (n₃)',  default: 60 },
+      { id: 'name4', type: 'text', label: 'Study 4 Name / Date (optional)', default: '' },
       { id: 'x4', label: 'Study 4 Events (x₄)', default: 5 },
       { id: 'n4', label: 'Study 4 Total (n₄)',  default: 45 },
+      { id: 'name5', type: 'text', label: 'Study 5 Name / Date (optional)', default: '' },
       { id: 'x5', label: 'Study 5 Events (optional)', default: '' },
       { id: 'n5', label: 'Study 5 Total (optional)',  default: '' },
+      { id: 'name6', type: 'text', label: 'Study 6 Name / Date (optional)', default: '' },
       { id: 'x6', label: 'Study 6 Events (optional)', default: '' },
       { id: 'n6', label: 'Study 6 Total (optional)',  default: '' },
     ],
@@ -9322,10 +9336,10 @@ const CALCULATORS = [
           [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], tau2)
       });
 
-      const correctedNums = studies.map((s, i) => s.corrected ? i + 1 : null).filter(n => n !== null);
-      if (correctedNums.length > 0) {
+      const correctedLabels = studies.filter(s => s.corrected).map(s => s.label);
+      if (correctedLabels.length > 0) {
         rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
-          value: `${method === 'raw' ? 'Raw' : 'Logit'} pooling needed a continuity correction (+0.5) for ${correctedNums.length === 1 ? `Study ${correctedNums[0]}` : `Studies ${correctedNums.join(', ')}`}, which reported 0% or 100% events — switch to the Arcsine transform to avoid this correction entirely.` });
+          value: `${method === 'raw' ? 'Raw' : 'Logit'} pooling needed a continuity correction (+0.5) for ${correctedLabels.length === 1 ? correctedLabels[0] : correctedLabels.join(', ')}, which reported 0% or 100% events — switch to the Arcsine transform to avoid this correction entirely.` });
       }
 
       const heterogeneity = I2 < 25 ? 'low' : I2 < 75 ? 'moderate' : 'high';
@@ -9488,6 +9502,7 @@ const CALCULATORS = [
     inputLayout: 'groups',
     groupTerm: 'Study',
     groupFields: [
+      { prefix: 'name',   label: 'Name / Date (optional)' },
       { prefix: 'effect', label: 'Effect Estimate' },
       { prefix: 'se',     label: 'SE' },
     ],
@@ -9496,16 +9511,22 @@ const CALCULATORS = [
         { value: 'additive', label: 'Additive (mean diff., risk diff., etc.)' },
         { value: 'ratio',    label: 'Ratio (RR/OR — enter log values)' },
       ] },
+      { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.40 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.15 },
+      { id: 'name2',   type: 'text', label: 'Study 2 Name / Date (optional)', default: '' },
       { id: 'effect2', label: 'Study 2 Effect Estimate', default: 0.25 },
       { id: 'se2',     label: 'Study 2 SE',               default: 0.12 },
+      { id: 'name3',   type: 'text', label: 'Study 3 Name / Date (optional)', default: '' },
       { id: 'effect3', label: 'Study 3 Effect Estimate', default: 0.65 },
       { id: 'se3',     label: 'Study 3 SE',               default: 0.20 },
+      { id: 'name4',   type: 'text', label: 'Study 4 Name / Date (optional)', default: '' },
       { id: 'effect4', label: 'Study 4 Effect Estimate (optional)', default: '' },
       { id: 'se4',     label: 'Study 4 SE (optional)',               default: '' },
+      { id: 'name5',   type: 'text', label: 'Study 5 Name / Date (optional)', default: '' },
       { id: 'effect5', label: 'Study 5 Effect Estimate (optional)', default: '' },
       { id: 'se5',     label: 'Study 5 SE (optional)',               default: '' },
+      { id: 'name6',   type: 'text', label: 'Study 6 Name / Date (optional)', default: '' },
       { id: 'effect6', label: 'Study 6 Effect Estimate (optional)', default: '' },
       { id: 'se6',     label: 'Study 6 SE (optional)',               default: '' },
     ],
@@ -9694,20 +9715,27 @@ const CALCULATORS = [
     inputLayout: 'groups',
     groupTerm: 'Study',
     groupFields: [
+      { prefix: 'name', label: 'Name / Date (optional)' },
       { prefix: 'r', label: 'Correlation (r)' },
       { prefix: 'n', label: 'Sample Size (n)' },
     ],
     inputs: [
+      { id: 'name1', type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'r1', label: 'Study 1 Correlation (r)', default: 0.42 },
       { id: 'n1', label: 'Study 1 Sample Size (n)',  default: 120 },
+      { id: 'name2', type: 'text', label: 'Study 2 Name / Date (optional)', default: '' },
       { id: 'r2', label: 'Study 2 Correlation (r)', default: 0.35 },
       { id: 'n2', label: 'Study 2 Sample Size (n)',  default: 85 },
+      { id: 'name3', type: 'text', label: 'Study 3 Name / Date (optional)', default: '' },
       { id: 'r3', label: 'Study 3 Correlation (r)', default: 0.50 },
       { id: 'n3', label: 'Study 3 Sample Size (n)',  default: 200 },
+      { id: 'name4', type: 'text', label: 'Study 4 Name / Date (optional)', default: '' },
       { id: 'r4', label: 'Study 4 Correlation (r) (optional)', default: '' },
       { id: 'n4', label: 'Study 4 Sample Size (n) (optional)', default: '' },
+      { id: 'name5', type: 'text', label: 'Study 5 Name / Date (optional)', default: '' },
       { id: 'r5', label: 'Study 5 Correlation (r) (optional)', default: '' },
       { id: 'n5', label: 'Study 5 Sample Size (n) (optional)', default: '' },
+      { id: 'name6', type: 'text', label: 'Study 6 Name / Date (optional)', default: '' },
       { id: 'r6', label: 'Study 6 Correlation (r) (optional)', default: '' },
       { id: 'n6', label: 'Study 6 Sample Size (n) (optional)', default: '' },
     ],
@@ -10677,6 +10705,15 @@ function gatherDataGroups(values, maxGroups = 6) {
   return { groups };
 }
 
+// Every study-grid calculator lets the user optionally overwrite the
+// generic "Study N" label with the real study's name/year via a
+// name{i} text field — falls back to "Study N" when left blank.
+function studyLabel(values, i) {
+  const name = values['name' + i];
+  const trimmed = (name == null ? '' : String(name)).trim();
+  return trimmed || `Study ${i}`;
+}
+
 // Reads effect{1..6}/se{1..6} pairs out of the raw input values for
 // 'meta-analysis', skipping blank slots (so studies 4–6 are optional).
 function gatherEffectStudies(values, maxStudies = 6) {
@@ -10686,7 +10723,7 @@ function gatherEffectStudies(values, maxStudies = 6) {
     const e = values['effect' + i], se = values['se' + i];
     const any = provided(e) || provided(se);
     const all = provided(e) && provided(se);
-    if (all) studies.push({ label: `Study ${i}`, effect: e, se });
+    if (all) studies.push({ label: studyLabel(values, i), effect: e, se });
     else if (any) return { error: `Study ${i}: enter both Effect and SE, or leave both blank` };
   }
   return { studies };
@@ -10706,7 +10743,7 @@ function gatherCorrelationStudies(values, maxStudies = 6) {
     if (all) {
       if (r <= -1 || r >= 1) return { error: `Study ${i}: r must be strictly between -1 and 1` };
       if (n <= 3) return { error: `Study ${i}: n must be greater than 3 (Fisher's SE requires n − 3 > 0)` };
-      studies.push({ label: `Study ${i}`, r, n });
+      studies.push({ label: studyLabel(values, i), r, n });
     }
     else if (any) return { error: `Study ${i}: enter both r and n, or leave both blank` };
   }
@@ -10748,7 +10785,7 @@ function gatherProportionStudies(values, maxStudies = 6) {
     if (!Number.isInteger(x) || !Number.isInteger(n)) return { error: `Study ${i}: Events and Total must be whole numbers` };
     if (n < 1) return { error: `Study ${i}: Total (n) must be at least 1` };
     if (x < 0 || x > n) return { error: `Study ${i}: Events (x) must be between 0 and Total (n)` };
-    studies.push({ label: `Study ${i}`, x, n });
+    studies.push({ label: studyLabel(values, i), x, n });
   }
   return { studies };
 }
