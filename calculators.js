@@ -4068,7 +4068,7 @@ const CALCULATORS = [
         { label: "Cramer's V", value: f(V), ci: null, isRatio: false },
         { label: 'Asymptotic Chi-Square p-value (for comparison)', value: formatPValue(asymptoticP), ci: null, isRatio: false },
         { label: 'Monte Carlo Permutations (B)', value: B, ci: null, isRatio: false },
-        { label: 'Monte Carlo Exact p-value', value: formatPValue(p), ci: [f(ciLo), f(ciHi)], isRatio: false, highlight: true },
+        { label: 'Monte Carlo Exact p-value', value: f(p), ci: [f(ciLo), f(ciHi)], isRatio: false, highlight: true },
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant ? `Reject H₀ — significant association (Monte Carlo exact p = ${formatPValue(p)})` : 'Fail to reject H₀ — no significant association detected' },
         { label: 'Reliability of the Asymptotic Test', isText: true, ci: null, isRatio: false, value: reliabilityNote },
