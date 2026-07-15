@@ -16390,4 +16390,25 @@ const GUIDES = [
       { id: 'standard-error', why: 'Computes SE directly, if you need the number rather than just the definition.' },
     ],
   },
+
+  {
+    id: 'reference-appraisal-worksheets',
+    category: 'Reference',
+    title: 'Critical Appraisal Worksheets (Downloadable)',
+    blurb: 'Six fill-in-the-blank worksheets — one per clinical question type — for critiquing a specific article. Download the one matching the article you\'re reading and work through it question by question.',
+    dek: `These worksheets follow the classic "Users' Guides to the Medical Literature" format: each is a two-column checklist (question on the left, space for your own notes on the right) split into three sections &mdash; is it valid, what are the results, and how do I apply it &mdash; with the exact checklist items tailored to the type of question the article addresses. They're organized by clinical question type (therapy, diagnosis, prognosis, etiology/harm, guidelines, systematic review) rather than by study design, which is a different cut than this site's "Appraising Studies by Design" guides &mdash; use whichever framing matches the assignment.`,
+    sections: [
+      {
+        heading: 'Which worksheet for which article',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Question Type</th><th>Use It For</th><th>Download</th></tr></thead><tbody>
+<tr><td>Diagnosis</td><td>An article evaluating how well a diagnostic test performs against a reference standard. See also <a href="#learn/appraisal-appraising-diagnostic-studies">Appraising Diagnostic Accuracy Studies</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-diagnosis.docx" download>critical-appraisal-diagnosis.docx</a></td></tr>
+<tr><td>Etiology</td><td>A cohort or case-control study estimating whether an exposure causes or is associated with an outcome. See also <a href="#learn/appraisal-appraising-observational">Appraising Cohort and Case-Control Studies</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-etiology.docx" download>critical-appraisal-etiology.docx</a></td></tr>
+<tr><td>Guidelines (treatment recommendations)</td><td>A practice guideline or treatment recommendation, rather than a single primary study.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-guidelines.docx" download>critical-appraisal-guidelines.docx</a></td></tr>
+<tr><td>Prognosis</td><td>An article estimating the likely course of a disease or condition over time in a defined group of patients.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-prognosis.docx" download>critical-appraisal-prognosis.docx</a></td></tr>
+<tr><td>Systematic reviews</td><td>A systematic review or meta-analysis pooling results across multiple studies. See also <a href="#learn/appraisal-appraising-systematic-reviews">Appraising Systematic Reviews and Meta-Analyses</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-systematic-reviews.docx" download>critical-appraisal-systematic-reviews.docx</a></td></tr>
+<tr><td>Therapy</td><td>An article testing whether a treatment or intervention works &mdash; typically a randomized trial. See also <a href="#learn/appraisal-appraising-rcts">Appraising Randomized Controlled Trials</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-therapy.docx" download>critical-appraisal-therapy.docx</a></td></tr>
+</tbody></table></div>`,
+      },
+    ],
+  },
 ];
