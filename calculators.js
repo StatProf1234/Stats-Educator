@@ -15719,6 +15719,49 @@ const GUIDES = [
   },
 
   {
+    id: 'appraisal-sd-vs-se',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Standard Deviation vs. Standard Error: What Error Bars Actually Show',
+    blurb: 'Two quantities that look interchangeable on a figure — a bar, a cap, a number after a "±" — answer genuinely different questions, and mixing them up can make a result look far more precise, or far more separated, than it really is.',
+    dek: `Standard deviation (SD) and standard error (SE) are reported the same way &mdash; a single number, often plotted as identical-looking error bars &mdash; but they describe different things. SD describes how spread out the individual data points are. SE describes how precisely the sample mean itself has been estimated. Confusing the two, especially when eyeballing a figure, is one of the most common and least-noticed misreadings in the applied literature.`,
+    sections: [
+      {
+        heading: 'Standard deviation: how spread out the data actually are',
+        html: `<p>Standard deviation describes the typical distance of individual observations from the sample mean, in the original units of measurement. It is a property of the data itself: given a fixed underlying population, SD does not systematically shrink just because a study enrolls more participants &mdash; a larger sample gives a better estimate of the true SD, but does not reduce the actual variability of individual patients.</p>`,
+      },
+      {
+        heading: 'Standard error: how precisely the mean has been estimated',
+        html: `<p>Standard error of the mean is calculated as SD divided by the square root of the sample size (SE = SD / √n). Unlike SD, SE is not describing the spread of individual data points &mdash; it describes how much the sample mean would be expected to vary from study to study if the study were repeated. Because of the √n in the denominator, SE shrinks as sample size grows, even if the underlying data are exactly as variable as before. A study with 10,000 patients and a study with 20 patients can have identical SDs and dramatically different SEs, purely because of sample size.</p>`,
+      },
+      {
+        heading: 'Worked example: the same data, three different bars',
+        html: `<p>Consider a sample with a mean of 120, an SD of 20, and n = 100. The SE would be 20 / √100 = 2. A 95% CI (approximately mean ± 1.96 &times; SE) would run from about 116.1 to 123.9. Plotted as error bars around the same point estimate of 120, these three quantities look extremely different: SD bars extending to roughly 100 and 140; SE bars barely visible, extending only to about 118 and 122; and CI bars close to, but not identical to, the SE bars. A reader glancing at a figure without checking the legend has no way to know which of these three very differently sized bars is being shown.</p>`,
+      },
+      {
+        heading: 'The error-bar-overlap trap',
+        html: `<p>A common shortcut readers use when scanning a figure is checking whether two groups' error bars overlap, as an informal stand-in for statistical significance. This shortcut is unreliable even when the bars are SE (overlapping SE bars can still correspond to a statistically significant difference, and non-overlapping SE bars can occur even when the difference is not significant, depending on the sample sizes and variances involved) &mdash; and it becomes badly misleading if the bars shown are actually SD, which are wider than SE by a factor of √n and will visually overlap far more often regardless of whether the underlying means are meaningfully different. The only way to know what a figure's error bars represent is to check the legend or methods text explicitly; the visual alone does not disclose it.</p>`,
+      },
+      {
+        heading: 'Why this matters for appraisal specifically',
+        html: `<p>Reporting SE where SD would better inform the reader is not necessarily an error &mdash; SE is the right quantity when the point being made is about the precision of an estimated mean, which is often exactly the point of a study. But because SE bars are always the narrower, tidier-looking option, there is a incentive, not always intentional, to default to displaying SE in a results figure even when the more informative quantity for the reader's actual question is SD (how variable are individual patients, not how precisely was the average estimated). Both quantities can be honestly correct and still leave the reader with a different visual impression depending on which one was chosen.</p>`,
+      },
+      {
+        heading: 'What this distinction can — and cannot — tell you',
+        html: `<p>Checking whether a figure or table reports SD or SE (or a CI) tells you which specific question is being answered &mdash; variability among individuals, versus precision of an estimated average &mdash; and lets you judge whether that is the question you actually care about. It cannot, by itself, tell you whether a difference between groups is real or due to chance; that still requires the actual test statistic, p-value, or confidence interval for the comparison being made, not just an eyeball comparison of error bars from each group separately.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before interpreting any error bar, find the legend or methods text and confirm explicitly whether it shows SD, SE, or a 95% CI &mdash; the same-looking bar can be any of the three, and which one it is changes the appropriate interpretation substantially. If a figure does not state which is shown, treat that omission itself as a reporting gap worth noting.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-confidence-intervals', why: 'Covers the third quantity in this comparison — the confidence interval, built directly from SE.' },
+      { id: 'appraisal-effect-measures', why: 'The same "commonly confused, look interchangeable" structure applied to RR, OR, and absolute measures.' },
+      { id: 'standard-error', why: 'Computes SE directly from SD and sample size, useful for reconstructing the numbers behind a reported figure.' },
+    ],
+  },
+
+  {
     id: 'appraisal-clinical-significance',
     category: 'Critical Appraisal of the Literature',
     title: 'Statistical Significance vs. Clinical Significance',
@@ -16033,4 +16076,313 @@ const GUIDES = [
     ],
   },
 
+
+  {
+    id: 'appraisal-appraising-rcts',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Randomized Controlled Trials',
+    blurb: 'Randomization solves confounding in principle — whether a specific trial delivers on that promise depends on a handful of design details worth checking every time.',
+    dek: `Randomized controlled trials sit at the top of most evidence hierarchies because, done well, they balance both known and unknown confounders between groups. But "randomized" is not a single guarantee &mdash; it is a bundle of design choices, several of which can quietly fail without making the trial look any less rigorous on the surface. This guide walks through what to check.`,
+    sections: [
+      {
+        heading: 'Randomization: sequence generation and allocation concealment',
+        html: `<p>Two distinct things have to go right here, and reports often blur them together. Sequence generation is the method used to decide the order of assignments &mdash; a computer-generated random sequence, for instance, versus alternating assignment or assignment by day of the week (neither of which is truly random, despite sometimes being described informally as "randomized"). Allocation concealment is a separate, and arguably more important, safeguard: whether the person enrolling a participant could predict or influence which group that participant would be assigned to before the assignment was made. A trial can have a perfectly random sequence and still be compromised if that sequence was knowable in advance &mdash; for example, if it was printed on a visible list rather than held in sealed, opaque, sequentially numbered envelopes or a remote randomization service. When a trial report does not describe allocation concealment at all, that omission is itself worth noting, since it is one of the most common sources of exaggerated treatment effects in the trial literature.</p>`,
+      },
+      {
+        heading: 'Blinding: who did not know the assignment, and does it matter for this outcome',
+        html: `<p>Blinding (masking) can apply to participants, treating clinicians, outcome assessors, and analysts, and a trial can be blinded for some of these roles and not others. Whether unblinding matters depends heavily on the outcome being measured. For a hard, objective outcome &mdash; all-cause mortality, for instance &mdash; lack of blinding is a smaller concern, since there is little room for expectation to influence the outcome itself. For a subjective outcome &mdash; pain scores, symptom questionnaires, clinician-rated global impression &mdash; unblinding can meaningfully bias results in the direction of the hypothesis, in either direction depending on who holds the expectation. The practical question when appraising a trial is not simply "was it blinded" but "was the specific role that most affects this specific outcome blinded."</p>`,
+      },
+      {
+        heading: 'Intention-to-treat versus per-protocol analysis',
+        html: `<p>Intention-to-treat (ITT) analysis includes every randomized participant in the group they were originally assigned to, regardless of whether they actually received, adhered to, or completed the assigned treatment. Per-protocol analysis restricts the comparison to participants who adhered reasonably closely to their assigned treatment. ITT analysis preserves the balance that randomization created and is generally considered the more conservative, less bias-prone approach for estimating the effect of assigning a treatment. Per-protocol analysis can answer a different, narrower question &mdash; the effect of actually receiving the treatment as intended &mdash; but it does so by discarding some of randomization's protection, since the reasons people drop out or fail to adhere are rarely random. A trial that reports only a per-protocol result, without an accompanying ITT analysis, warrants a closer look at why.</p>`,
+      },
+      {
+        heading: 'Completeness of follow-up and how missing outcomes were handled',
+        html: `<p>A meaningful and unbalanced loss to follow-up between groups can bias a trial even when randomization and blinding were otherwise sound, particularly if the reasons for dropout differ by group (for example, if participants leave the treatment arm because of side effects and leave the control arm for unrelated reasons). Worth checking: how much loss occurred in each arm, whether it was similar between arms, and how missing outcome data were handled in the analysis &mdash; through multiple imputation, a worst-case sensitivity analysis, or simply excluding those participants, which is the least robust option and can meaningfully distort results if losses were not random.</p>`,
+      },
+      {
+        heading: 'A structured checklist: CONSORT',
+        html: `<p>The CONSORT (Consolidated Standards of Reporting Trials) statement is the most widely adopted reporting guideline for randomized trials, and its central visual element &mdash; the participant flow diagram, tracking everyone from screening through randomization, follow-up, and final analysis &mdash; is one of the fastest ways to spot the issues above. A trial report that includes a complete CONSORT flow diagram makes losses to follow-up, exclusions, and per-protocol deviations visible at a glance; a report without one often makes those numbers hard to reconstruct from the text alone.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted RCT can support a causal claim about the effect of assigning a specific intervention, within the population actually enrolled, over the follow-up period studied. It cannot, on its own, establish how well that effect generalizes to patients who would have been excluded by the trial's eligibility criteria, and it says nothing about mechanism &mdash; why the treatment worked, if it did. Nor can a single trial, however well conducted, rule out chance as the explanation for its result; that requires either adequate power to begin with (see the power and sample size guide) or independent replication.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When appraising an RCT, look first at the methods section for allocation concealment and the flow diagram for losses to follow-up before reading the results &mdash; these two items are the fastest predictors of whether the headline effect size can be trusted at face value.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-confounding-bias', why: 'Explains why randomization is the mechanism this guide assumes — and what breaks when it fails.' },
+      { id: 'appraisal-study-design', why: 'Places RCTs within the broader design hierarchy this guide zooms into.' },
+      { id: 'appraisal-power-sample-size', why: 'A trial can be well-randomized and still underpowered — this guide covers that separate failure mode.' },
+      { id: 'appraisal-pilot-studies', why: 'Covers the smaller-scale study that often precedes a full RCT, and what it can and cannot establish.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-observational',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Cohort and Case-Control Studies',
+    blurb: 'Without randomization, appraisal shifts almost entirely to one question: how convincingly did this study rule out alternative explanations for what it found?',
+    dek: `Cohort and case-control studies cannot rely on randomization to balance confounders, which means appraising them is largely an exercise in checking how selection, measurement, and confounding were handled &mdash; and in recognizing that the two designs are vulnerable to somewhat different versions of these problems.`,
+    sections: [
+      {
+        heading: 'Selection bias: how were participants brought into the study',
+        html: `<p>In a cohort study, selection bias can arise if exposed and unexposed groups are drawn from different underlying populations &mdash; for instance, comparing patients treated at a specialty referral center against patients managed in general practice, where the two groups may differ systematically in disease severity or other characteristics that also affect the outcome. In a case-control study, the corresponding concern is control selection: whether controls were sampled from the same source population that produced the cases, and using the same criteria. A classic failure is selecting controls from a hospitalized population when cases were drawn from the general community, since hospitalized controls typically differ from the general population in ways that can distort the exposure-outcome association being studied.</p>`,
+      },
+      {
+        heading: 'Information bias and, in case-control studies, recall bias specifically',
+        html: `<p>Information bias occurs when exposure or outcome status is measured differently, or with different accuracy, between comparison groups. Case-control studies carry a specific version of this problem worth naming on its own: recall bias, where participants who have experienced an outcome (cases) may remember or report past exposures differently &mdash; often more thoroughly &mdash; than controls who have not experienced that outcome, purely because having the outcome prompts more careful reflection on possible causes. This is a structural feature of asking people to recall exposure after the outcome has already occurred, and it is one of the reasons case-control studies are generally considered more vulnerable to bias than prospective cohort studies, even though both are observational.</p>`,
+      },
+      {
+        heading: 'Confounding control: what was adjusted for, and how',
+        html: `<p>Because observational studies cannot rely on randomization, confounding control has to be built into either the design (matching, restriction) or the analysis (stratification, multivariable regression, propensity score methods). None of these eliminates confounding by unmeasured variables &mdash; a limitation worth stating plainly rather than glossing over, since even a carefully adjusted observational study cannot rule out bias from a confounder the investigators did not think to measure. When appraising the adjustment strategy, it is worth checking not just that adjustment was done, but whether the variables adjusted for are the ones a subject-matter expert would actually expect to confound the specific exposure-outcome relationship being studied &mdash; adjustment for the wrong or insufficient set of variables gives a false sense of rigor without removing the bias.</p>`,
+      },
+      {
+        heading: 'Temporality: did the exposure clearly precede the outcome',
+        html: `<p>This is more often a design feature than something to individually assess, but it is worth confirming rather than assuming. Prospective cohort studies establish temporality by design, since exposure is measured before the outcome occurs. Case-control studies, and especially cross-sectional or retrospective designs, can blur this &mdash; for example, when exposure status is measured or reconstructed after the outcome is already known, raising the possibility of reverse causation (the outcome influencing the recorded exposure, rather than the reverse).</p>`,
+      },
+      {
+        heading: 'A structured checklist: STROBE',
+        html: `<p>The STROBE (Strengthening the Reporting of Observational Studies in Epidemiology) statement is the standard reporting guideline for cohort, case-control, and cross-sectional studies. Its checklist items map closely onto the concerns above: how participants were selected, how exposures and outcomes were defined and measured, which confounders were addressed and how, and &mdash; importantly &mdash; a stated discussion of the study's limitations and potential sources of bias. A report that addresses these items explicitly is easier to appraise than one that leaves them to be inferred.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted cohort or case-control study can support an association between exposure and outcome, and, with sufficiently careful confounding control, a reasonably confident causal claim &mdash; but that confidence is always conditional on having measured and appropriately adjusted for the relevant confounders, something that can never be fully verified from the data itself. These designs are frequently the only feasible way to study rare outcomes, long latency periods, or exposures that could not ethically be randomized (genuinely harmful ones, for instance) &mdash; a real strength, not merely a fallback for when a trial isn't possible &mdash; but they cannot match a well-conducted RCT's confidence that alternative explanations have been ruled out.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Ask, for any observational finding: what confounder, if it existed and went unmeasured, would fully explain this result away? If a plausible one comes to mind quickly and the study does not address it, that is the single most useful piece of appraisal a reader can do without any specialized checklist.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-confounding-bias', why: 'The mechanism this guide\'s appraisal questions are built around.' },
+      { id: 'appraisal-effect-measures', why: 'Case-control studies can only estimate the odds ratio, not relative risk — covered there.' },
+      { id: 'appraisal-study-design', why: 'Places cohort and case-control designs within the broader hierarchy.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-systematic-reviews',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Systematic Reviews and Meta-Analyses',
+    blurb: 'A systematic review is only as trustworthy as the individual studies it pools — appraisal here means checking both the review\'s own conduct and its handling of the evidence underneath it.',
+    dek: `A systematic review sits one level above individual studies, which means appraising one involves two layers: whether the review itself was conducted rigorously, and whether it adequately accounted for the strengths and weaknesses of the primary studies it combines. This guide covers both.`,
+    sections: [
+      {
+        heading: 'Protocol registration and a pre-specified question',
+        html: `<p>A rigorously conducted systematic review typically registers its protocol in advance &mdash; commonly on PROSPERO for health-related reviews &mdash; specifying the research question, eligibility criteria, search strategy, and planned analysis before the review is carried out. Pre-registration matters because it constrains the ability to adjust inclusion criteria or outcomes after seeing which studies would produce a more favorable result, a form of bias that is otherwise very difficult for a reader to detect after the fact. A published review that references its own registration number allows a reader to check whether the final report matches the original plan.</p>`,
+      },
+      {
+        heading: 'Search strategy and the risk of missing relevant studies',
+        html: `<p>A comprehensive search typically spans multiple databases (rather than a single one), includes a search of the grey literature (conference abstracts, trial registries, dissertations) to reduce publication bias, and is reported in enough detail &mdash; search terms, dates, databases &mdash; that it could in principle be reproduced. A narrow or single-database search raises the possibility that relevant studies, particularly unpublished ones with null results, were systematically missed.</p>`,
+      },
+      {
+        heading: 'Risk-of-bias assessment of the included studies',
+        html: `<p>This is the layer most specific to systematic reviews: rather than appraising one study, the review should have appraised every included study, using a validated tool matched to study design. For randomized trials, the standard tool is RoB 2 (Risk of Bias 2), which assesses bias across several domains including the randomization process, deviations from intended interventions, missing outcome data, outcome measurement, and selective reporting. For non-randomized studies, the analogous tool is ROBINS-I (Risk Of Bias In Non-randomized Studies of Interventions), which additionally assesses bias due to confounding and selection into the study, given that these designs lack randomization's protection. A review that pools studies of dramatically different risk-of-bias ratings without addressing that difference &mdash; through subgroup analysis, sensitivity analysis, or at minimum explicit discussion &mdash; is combining evidence of uneven quality as though it were uniform.</p>`,
+      },
+      {
+        heading: 'Heterogeneity: are the pooled studies answering close enough to the same question',
+        html: `<p>Statistical heterogeneity (covered in more depth in the companion guide on reading a forest plot) is one signal, but clinical and methodological heterogeneity matter just as much for appraisal: whether the pooled studies used similar populations, interventions, comparators, and outcome definitions. A low statistical heterogeneity score does not certify that pooling was conceptually appropriate &mdash; a small number of similar-looking studies can produce a low heterogeneity statistic while still differing in ways that matter clinically, such as dose, duration, or the specific patient population enrolled.</p>`,
+      },
+      {
+        heading: 'Publication bias and small-study effects',
+        html: `<p>Because studies with statistically significant or favorable results are more likely to be published, submitted, or published quickly, a meta-analysis restricted to published studies can systematically overestimate an effect. A funnel plot &mdash; a scatter of each study's effect estimate against its precision &mdash; is the most common visual check; marked asymmetry, particularly a gap where small studies with null or unfavorable results would be expected to appear, is the classic pattern suggesting publication bias, though funnel plot asymmetry can also arise from genuine heterogeneity and should not be read as proof of publication bias on its own.</p>`,
+      },
+      {
+        heading: 'A structured reporting checklist: PRISMA',
+        html: `<p>The PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) statement is the standard reporting guideline, and its flow diagram &mdash; tracking records identified, screened, excluded (with reasons), and ultimately included &mdash; is the fastest way to see how a review arrived at its final study set and how many potentially relevant studies were excluded and why.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted systematic review and meta-analysis can produce the most precise and broadly generalizable estimate of an effect available from the existing literature, and can reveal whether that effect is consistent across studies or varies meaningfully by context. It cannot, however, produce evidence of higher quality than the primary studies feeding into it &mdash; pooling biased or underpowered trials produces a more precise biased estimate, not a corrected one, which is why appraising the review is inseparable from appraising what went into it.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before trusting a pooled effect, check three things in order: whether the protocol was registered, whether risk of bias was formally assessed for each included study (and how that bias profile might have shifted the pooled result), and whether a funnel plot or equivalent was reported. A review that skips all three is not necessarily wrong, but it is asking the reader to take considerably more on faith.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-meta-analysis-reading', why: 'Covers the statistical side — heterogeneity statistics, prediction intervals, and forest plot interpretation — that this guide assumes.' },
+      { id: 'reading-forest-plots', why: 'The visual companion for reading the pooled estimate this guide discusses appraising.' },
+      { id: 'appraisal-appraising-scoping-reviews', why: 'Covers the related but distinct review type used to map a body of literature rather than pool its effect estimates.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-scoping-reviews',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Scoping Reviews',
+    blurb: 'A scoping review answers "what has been studied, and how" — not "what works" — and appraising one means checking whether it stayed true to that different purpose.',
+    dek: `Scoping reviews are often mistaken for a lighter-weight systematic review, but they are built to answer a different kind of question. Appraisal here starts with checking whether the review's stated purpose actually matches a scoping review's strengths, rather than applying systematic-review standards to a document that was never meant to produce a pooled effect estimate.`,
+    sections: [
+      {
+        heading: 'What a scoping review is actually for',
+        html: `<p>A scoping review maps the extent, range, and nature of research activity on a topic &mdash; what has been studied, using what designs, in what populations, and where the gaps in the literature lie. This is a genuinely different objective from a systematic review's goal of synthesizing evidence to answer a focused clinical or policy question. A scoping review is a reasonable choice when a research question is still broad or emerging, when the literature has not yet been mapped, or when the goal is to identify gaps for future primary research or a future systematic review &mdash; not when the goal is to determine whether a specific intervention works.</p>`,
+      },
+      {
+        heading: 'Why formal risk-of-bias grading is typically absent — and why that is not a flaw',
+        html: `<p>Most scoping reviews do not formally appraise the methodological quality of included studies, and current guidance (including the PRISMA extension for scoping reviews) does not require it. This is appropriate to the review's purpose: since a scoping review is not pooling results into an effect estimate that quality could distort, and is instead cataloguing what exists, a missing risk-of-bias assessment is not a defect the way it would be in a systematic review. The appraisal question is not "did they grade study quality" but "did they claim to answer a question &mdash; like whether a treatment works &mdash; that would have required doing so."</p>`,
+      },
+      {
+        heading: 'Was the eligibility criteria and search strategy still rigorous',
+        html: `<p>Even without pooling or quality grading, a scoping review should still meet the same bar as a systematic review for a transparent, reproducible search &mdash; multiple databases, grey literature where relevant, and clearly stated inclusion and exclusion criteria &mdash; because the review's core claim (this is the shape and extent of what has been studied) depends entirely on having actually found the relevant literature. A scoping review with a narrow, poorly documented search cannot credibly claim to have mapped anything.</p>`,
+      },
+      {
+        heading: 'Does the review overreach beyond mapping',
+        html: `<p>The most common appraisal red flag for a scoping review is language that drifts from describing the literature into making conclusions about effectiveness or recommending clinical practice &mdash; conclusions that would require the quality appraisal and outcome pooling the review did not perform. A well-conducted scoping review is explicit about this boundary, typically concluding with a description of the evidence landscape and identified gaps rather than a recommendation for practice.</p>`,
+      },
+      {
+        heading: 'A structured checklist: PRISMA-ScR',
+        html: `<p>The PRISMA-ScR (PRISMA extension for Scoping Reviews) checklist adapts the standard PRISMA items to this different purpose &mdash; for instance, replacing risk-of-bias and synthesis-of-results items with items on charting the data and summarizing the range of evidence found. A scoping review that follows PRISMA-ScR (and states that it does) is easier to appraise on its own terms, since the reader knows which quality bar is actually being claimed.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A scoping review can tell you how much has been studied, using what methods, in what populations, and where the evident gaps lie &mdash; genuinely useful groundwork for planning future primary research or a future systematic review. It cannot tell you whether any given intervention works, how large an effect is, or which included findings are most trustworthy, since it neither appraises study quality nor pools results &mdash; treat any claim of that kind found in a scoping review's conclusions with more caution than the review's own methods can support.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When reading a scoping review, check the conclusion section specifically for language implying "this works" or "this should be done" &mdash; that language belongs to a systematic review or clinical guideline, not a scoping review, and its presence suggests the authors may be asking the reader to draw a conclusion the review's own methods cannot support.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-systematic-reviews', why: 'The related review type built to answer a narrower, effect-focused question — and the one scoping reviews are often confused with.' },
+      { id: 'appraisal-study-design', why: 'Places scoping reviews within the broader landscape of review and study types.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-diagnostic-studies',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Diagnostic Accuracy Studies',
+    blurb: 'Sensitivity and specificity look like fixed properties of a test — but how a study selected its patients and defined its reference standard can shift both numbers substantially.',
+    dek: `Diagnostic accuracy studies carry their own distinctive appraisal concerns, separate from the confounding-focused questions that apply to studies of treatment effect. Most of them come down to two questions: was the reference standard actually adequate, and were the patients studied representative of who the test would actually be used on.`,
+    sections: [
+      {
+        heading: 'Adequacy of the reference standard',
+        html: `<p>Every diagnostic accuracy study depends on comparing the test under evaluation against a reference standard (sometimes called a gold standard) assumed to reliably establish true disease status. If the reference standard itself is imperfect &mdash; imaging read by a single, non-blinded reader, or a clinical diagnosis without confirmatory testing &mdash; errors in the reference standard get misattributed to the index test, an issue formally referred to as imperfect reference standard bias. Worth checking specifically: whether the same reference standard was applied to all participants, and whether it was interpreted without knowledge of the index test result (since knowing the test result can influence how ambiguous reference-standard findings get interpreted).</p>`,
+      },
+      {
+        heading: 'Spectrum bias: were the patients studied representative of who the test is actually used on',
+        html: `<p>A test's sensitivity and specificity are not fixed properties independent of the population tested &mdash; they can shift substantially depending on the mix of disease severity and the presence of conditions that mimic the target disease in the study population. A diagnostic study that enrolls clearly diseased patients and obviously healthy controls (a common shortcut) will typically report inflated accuracy compared with performance in the actual clinical population the test is meant to serve, where cases are often milder or earlier-stage and healthy patients may have other conditions that produce similar symptoms. The appraisal question is whether the study population resembles the population in which the test would actually be applied in practice.</p>`,
+      },
+      {
+        heading: 'Verification bias: did everyone actually get the reference standard',
+        html: `<p>Verification bias (also called workup bias) occurs when the decision to perform the reference standard is influenced by the index test result &mdash; for example, when patients with a positive index test are preferentially sent for definitive confirmatory testing, while patients with a negative index test are not. This selectively removes certain outcomes from the analysis in a way that is not random with respect to the index test, and it can bias accuracy estimates in either direction depending on the pattern of selective verification.</p>`,
+      },
+      {
+        heading: 'Flow and timing: how much time elapsed, and did everyone follow the same pathway',
+        html: `<p>If a meaningful interval elapses between the index test and the reference standard, the underlying disease status can change in that window (either resolving or progressing), which introduces a mismatch unrelated to either test's actual accuracy. Similarly, if different subgroups of participants followed different diagnostic pathways &mdash; some receiving the reference standard immediately, others only after an ambiguous index test result &mdash; that differential flow can distort the final accuracy figures independent of anything about the tests themselves.</p>`,
+      },
+      {
+        heading: 'A structured tool: QUADAS-2',
+        html: `<p>QUADAS-2 (Quality Assessment of Diagnostic Accuracy Studies 2) is the standard tool for structuring this appraisal, organized around four domains: patient selection, the index test, the reference standard, and flow and timing &mdash; each rated for risk of bias and, separately, for applicability to the review question at hand. The applicability ratings are worth noting specifically, since a diagnostic study can be low-risk-of-bias by QUADAS-2's bias criteria while still being a poor match for the population or setting a reader actually cares about.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted diagnostic accuracy study can tell you how well a test discriminates between people with and without a condition, in a population resembling the one studied. It cannot, on its own, tell you whether using that test actually improves patient outcomes &mdash; that requires a separate study, often a randomized trial, of the test's downstream clinical impact, since more accurate classification does not automatically translate into better decisions or better outcomes.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When appraising a diagnostic accuracy study, ask first whether the enrolled population resembles patients who would realistically be tested in practice (rather than a clean, obviously-diseased-versus-obviously-healthy comparison), and second whether every enrolled patient received the same reference standard regardless of their index test result. These two checks catch the majority of diagnostic accuracy studies whose reported sensitivity and specificity will not hold up in real clinical use.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-diagnostic-tests-prevalence', why: 'Covers how prevalence affects predictive value once accuracy figures like sensitivity and specificity are established — this guide covers whether those figures are trustworthy in the first place.' },
+      { id: 'appraisal-study-design', why: 'Places diagnostic accuracy studies within the broader design landscape.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-pilot-studies',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Pilot and Feasibility Studies',
+    blurb: 'Pilot studies are almost never adequately powered to detect the effect they may report — reading one as if it were is one of the most common misreadings in the literature.',
+    dek: `A pilot or feasibility study asks a fundamentally different question than the full-scale trial it is meant to precede: not "does this work," but "can this be done, and is it worth doing at full scale." Appraising one well starts with recognizing which of those two questions it is actually answering.`,
+    sections: [
+      {
+        heading: 'What a pilot study is actually for',
+        html: `<p>A pilot or feasibility study exists to test the practical machinery of a future, larger trial: whether enough eligible participants can be recruited within a reasonable timeframe, whether they can be retained through follow-up, whether the intervention is acceptable and deliverable as planned, and whether outcome measures and data collection procedures work as intended. These are operational questions about whether a full-scale trial is achievable and worth funding &mdash; not questions about whether the intervention itself is effective.</p>`,
+      },
+      {
+        heading: 'Underpowered by design, not by flaw',
+        html: `<p>Pilot studies are deliberately sized to answer feasibility questions, not to detect a clinically meaningful treatment effect, so their sample sizes are typically far too small to draw any reliable conclusion about efficacy. This matters for appraisal because a pilot's effect estimate &mdash; whether it happens to look promising or null &mdash; is not informative on its own about whether the intervention actually works; the confidence interval around it is usually wide enough to be consistent with anything from meaningful benefit to meaningful harm. Treating a small pilot's point estimate as preliminary evidence of effectiveness, rather than as feasibility data, is a design mismatch, not a matter of the pilot needing to have been "bigger."</p>`,
+      },
+      {
+        heading: 'Pre-specified progression criteria',
+        html: `<p>A well-designed pilot states, in advance, the specific feasibility thresholds that will determine whether and how the full trial proceeds &mdash; for example, a minimum recruitment rate per month, or a maximum acceptable dropout rate &mdash; sometimes formalized as a traffic-light (red/amber/green) framework. A pilot that reports only whether the intervention "looked promising," without pre-specified feasibility criteria, has less to say about whether proceeding to a full trial is actually justified.</p>`,
+      },
+      {
+        heading: 'A common misuse worth watching for',
+        html: `<p>The most frequent appraisal problem with pilot studies is not in the pilot itself but in how it gets used afterward: effect estimates from a pilot are sometimes cited as if they were confirmatory evidence of efficacy, or included in a meta-analysis alongside adequately powered trials without any adjustment for the mismatch in precision and purpose. A pilot's effect estimate can reasonably inform a sample size calculation for the full trial that follows it &mdash; that is a legitimate and common use &mdash; but it is a different use than treating that same estimate as evidence the intervention works.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A pilot or feasibility study can tell you whether recruitment, retention, adherence, and data collection are workable at the scale planned, and it can generate an effect estimate useful for planning &mdash; most commonly, for calculating the sample size of the definitive trial that follows. It cannot tell you whether the intervention works: its effect estimate is typically too imprecise to distinguish a real effect from chance, and should be read as a planning input rather than as evidence of efficacy.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Check whether the abstract or conclusion overstates the pilot's effect finding &mdash; language like "promising" or "encouraging" attached to a wide confidence interval that comfortably crosses the null is one of the more common overreaches in pilot study writeups, and is worth mentally downgrading back to "feasibility was demonstrated; efficacy remains untested."</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-rcts', why: 'The full-scale trial a pilot is typically designed to prepare for.' },
+      { id: 'appraisal-power-sample-size', why: 'Explains why a pilot\'s small sample size cannot support efficacy claims, and how pilot data feeds into a proper sample size calculation.' },
+      { id: 'appraisal-study-design', why: 'Places pilot and feasibility studies within the broader design landscape.' },
+    ],
+  },
+
+  {
+    id: 'reference-glossary-abbreviations',
+    category: 'Reference',
+    title: 'Glossary of Statistical Abbreviations and Symbols',
+    blurb: 'A quick lookup for the abbreviations and symbols used throughout this site — grouped by topic, with links to the fuller guide or calculator where one exists.',
+    dek: `This page is a reference, not a guided walkthrough: use it to look up an abbreviation you've run into, then follow the link to the calculator or Learn guide that covers it in depth. Terms are grouped by topic rather than alphabetically, since most lookups start from "what kind of stat is this" rather than the letter it begins with.`,
+    sections: [
+      {
+        heading: 'Probability & Distributions',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>PMF</td><td>Probability Mass Function</td><td style="text-align:left;">Gives the probability of each possible outcome of a discrete random variable (e.g., the probability of exactly 3 successes out of 10 trials).</td><td style="text-align:left;">Binomial Probability Calculator</td></tr><tr><td>PDF</td><td>Probability Density Function</td><td style="text-align:left;">The continuous analogue of a PMF. The height of the curve is not itself a probability &mdash; only the area under the curve over an interval is.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>CDF</td><td>Cumulative Distribution Function</td><td style="text-align:left;">The probability that a random variable takes a value less than or equal to a given value x.</td><td style="text-align:left;">z-Distribution Table, t-Distribution Table</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Descriptive Statistics',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>SD</td><td>Standard Deviation</td><td style="text-align:left;">Typical distance of individual values from the mean, in the original units of measurement.</td><td style="text-align:left;">Variance &amp; Standard Deviation</td></tr><tr><td>Var</td><td>Variance</td><td style="text-align:left;">The squared standard deviation; expressed in squared units, which is why SD is usually reported instead.</td><td style="text-align:left;">Variance &amp; Standard Deviation</td></tr><tr><td>SE / SEM</td><td>Standard Error (of the Mean)</td><td style="text-align:left;">The standard deviation of a sampling distribution &mdash; how much a statistic (usually a mean) would vary from sample to sample. Not the same as SD, which describes spread within one sample.</td><td style="text-align:left;">Standard Error of the Mean</td></tr><tr><td>CV</td><td>Coefficient of Variation</td><td style="text-align:left;">SD divided by the mean, usually expressed as a percentage &mdash; used to compare variability across variables measured on different scales.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>IQR</td><td>Interquartile Range</td><td style="text-align:left;">The range of the middle 50% of the data (the 75th percentile minus the 25th percentile).</td><td style="text-align:left;">Interquartile Range (IQR)</td></tr><tr><td>n / N</td><td>Sample size / population size</td><td style="text-align:left;">Lowercase n conventionally denotes a sample; uppercase N a full population &mdash; a convention this site follows but which is not universal.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>df</td><td>Degrees of Freedom</td><td style="text-align:left;">The number of values in a calculation that are free to vary once certain constraints (like a fixed mean) are set.</td><td style="text-align:left;">&mdash;</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Hypothesis Testing & Inference',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>H0 / Ha (H1)</td><td>Null / Alternative Hypothesis</td><td style="text-align:left;">H0 typically states "no effect" or "no difference"; Ha (or H1) states the effect the study is designed to detect.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>α (alpha)</td><td>Significance level</td><td style="text-align:left;">The pre-specified threshold (conventionally 0.05) for the Type I error rate &mdash; the chance of rejecting a true null hypothesis.</td><td style="text-align:left;">Type I &amp; Type II Error Explorer</td></tr><tr><td>β (beta)</td><td>Type II error rate</td><td style="text-align:left;">The chance of failing to reject a false null hypothesis. Power = 1 &minus; β.</td><td style="text-align:left;">Type I &amp; Type II Error Explorer, Power Calculations</td></tr><tr><td>p</td><td>p-value</td><td style="text-align:left;">The probability of seeing a result at least as extreme as the observed one, if the null hypothesis were true. Not the probability that the null hypothesis is true.</td><td style="text-align:left;">What a P-Value Actually Means (Learn guide)</td></tr><tr><td>CI</td><td>Confidence Interval</td><td style="text-align:left;">A range constructed so that, over many repeated studies, that construction method would capture the true value a stated percentage (e.g., 95%) of the time.</td><td style="text-align:left;">Confidence Intervals: What "95%" Actually Covers (Learn guide)</td></tr><tr><td>CrI</td><td>Credible Interval</td><td style="text-align:left;">The Bayesian counterpart to a CI. Unlike a CI, it does support a direct probability statement &mdash; but only relative to the prior used.</td><td style="text-align:left;">Bayesian Credible Intervals; Confidence Interval, Credible Interval, or Prediction Interval? (Learn guide)</td></tr><tr><td>PI</td><td>Prediction Interval</td><td style="text-align:left;">Where one new study or one new individual observation would plausibly fall &mdash; always at least as wide as the corresponding CI.</td><td style="text-align:left;">Meta-Analysis (Q, τ², I², PI); interval-types Learn guide</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Effect Measures (Epidemiology & Clinical Research)',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>RR</td><td>Relative Risk</td><td style="text-align:left;">Risk of an outcome in an exposed/treated group divided by risk in an unexposed/control group. Estimable directly in RCTs and cohort studies.</td><td style="text-align:left;">Measures of Association; Understanding Effect Measures (Learn guide)</td></tr><tr><td>OR</td><td>Odds Ratio</td><td style="text-align:left;">Ratio of the odds of an outcome between two groups. The only measure estimable from a case-control study; approximates RR when the outcome is rare.</td><td style="text-align:left;">Odds Ratio to Risk Ratio; Understanding Effect Measures (Learn guide)</td></tr><tr><td>HR</td><td>Hazard Ratio</td><td style="text-align:left;">The ratio of the instantaneous event rate (hazard) between two groups over time &mdash; the standard effect measure from Cox regression and survival analysis.</td><td style="text-align:left;">Cox Proportional Hazards (Hazard Ratio)</td></tr><tr><td>ARR</td><td>Absolute Risk Reduction</td><td style="text-align:left;">The plain difference between two absolute risks (control risk minus treated risk), in percentage points.</td><td style="text-align:left;">Understanding Effect Measures (Learn guide)</td></tr><tr><td>RRR</td><td>Relative Risk Reduction</td><td style="text-align:left;">(Control risk &minus; treated risk) &divide; control risk. Tends to look larger than ARR and is more often highlighted in abstracts.</td><td style="text-align:left;">Understanding Effect Measures (Learn guide)</td></tr><tr><td>NNT</td><td>Number Needed to Treat</td><td style="text-align:left;">1 &divide; ARR (as a decimal). How many patients must be treated for one to benefit.</td><td style="text-align:left;">OR to NNT &amp; NNH</td></tr><tr><td>NNH</td><td>Number Needed to Harm</td><td style="text-align:left;">The same logic as NNT, applied to an adverse effect instead of a benefit.</td><td style="text-align:left;">OR to NNT &amp; NNH</td></tr><tr><td>AF / PAF</td><td>Attributable Fraction / Population Attributable Fraction</td><td style="text-align:left;">The proportion of cases (among the exposed, or the whole population) that would not have occurred without the exposure.</td><td style="text-align:left;">Attributable Fraction (AFe &amp; PAF); Population Attributable Risk</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Diagnostic Testing',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>Sens / Spec</td><td>Sensitivity / Specificity</td><td style="text-align:left;">Sensitivity: proportion of true positives correctly identified. Specificity: proportion of true negatives correctly identified.</td><td style="text-align:left;">Sensitivity, Specificity &amp; LR</td></tr><tr><td>PPV / NPV</td><td>Positive / Negative Predictive Value</td><td style="text-align:left;">The probability that a positive (or negative) test result is correct &mdash; unlike sensitivity/specificity, these depend heavily on prevalence.</td><td style="text-align:left;">PPV/NPV vs Prevalence; Diagnostic Tests Depend on Prevalence (Learn guide)</td></tr><tr><td>LR+ / LR&minus;</td><td>Positive / Negative Likelihood Ratio</td><td style="text-align:left;">How much a positive (or negative) result shifts the odds of disease &mdash; combines sensitivity and specificity into a single ratio.</td><td style="text-align:left;">Sensitivity, Specificity &amp; LR</td></tr><tr><td>AUC</td><td>Area Under the (ROC) Curve</td><td style="text-align:left;">A single-number summary of a test's discriminative ability across all possible thresholds; 0.5 = no better than chance, 1.0 = perfect discrimination.</td><td style="text-align:left;">ROC Curve &amp; AUC</td></tr><tr><td>ROC</td><td>Receiver Operating Characteristic (curve)</td><td style="text-align:left;">Plots true positive rate against false positive rate across every possible test threshold.</td><td style="text-align:left;">ROC Curve &amp; AUC</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Agreement & Correlation',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>ICC</td><td>Intraclass Correlation Coefficient</td><td style="text-align:left;">Measures agreement/reliability between raters or repeated measurements on a continuous scale.</td><td style="text-align:left;">Intraclass Correlation (ICC)</td></tr><tr><td>κ (kappa)</td><td>Cohen's Kappa</td><td style="text-align:left;">Chance-corrected agreement between two raters on a categorical outcome.</td><td style="text-align:left;">Weighted Kappa</td></tr><tr><td>r / ρ</td><td>Pearson's r / Spearman's rho</td><td style="text-align:left;">r measures linear correlation between two continuous variables; ρ (rho) is its rank-based, non-parametric counterpart.</td><td style="text-align:left;">Standard Error of a Correlation Coefficient</td></tr><tr><td>τ (Kendall's tau)</td><td>Kendall's tau</td><td style="text-align:left;">A rank correlation coefficient &mdash; a different quantity from τ² (tau-squared) below, despite the shared Greek letter; worth not confusing the two.</td><td style="text-align:left;">&mdash;</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Meta-Analysis',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>Q</td><td>Cochran's Q</td><td style="text-align:left;">A statistical test for heterogeneity across pooled studies &mdash; tests whether observed variation exceeds what chance alone would produce.</td><td style="text-align:left;">Meta-Analysis (Q, τ², I², PI)</td></tr><tr><td>τ² (tau-squared)</td><td>Between-study variance</td><td style="text-align:left;">An estimate of true variation in effect size across studies, beyond sampling error &mdash; the basis for random-effects weighting.</td><td style="text-align:left;">Meta-Analysis (Q, τ², I², PI)</td></tr><tr><td>I²</td><td>I-squared</td><td style="text-align:left;">The percentage of total variability across studies attributable to heterogeneity rather than chance, rather than an absolute quantity like τ².</td><td style="text-align:left;">Meta-Analysis (Q, τ², I², PI)</td></tr><tr><td>HKSJ</td><td>Hartung-Knapp-Sidik-Jonkman method</td><td style="text-align:left;">An adjustment to random-effects meta-analysis that widens confidence intervals to better reflect uncertainty when the number of pooled studies is small.</td><td style="text-align:left;">Hartung-Knapp-Sidik-Jonkman (HKSJ) Method</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Regression & Modeling',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>GLM</td><td>Generalized Linear Model</td><td style="text-align:left;">A family of regression models (including logistic and Poisson regression) that extends linear regression to outcomes that aren't normally distributed.</td><td style="text-align:left;">Logistic Regression (2&times;2); Poisson &amp; Negative Binomial</td></tr><tr><td>GLMM</td><td>Generalized Linear Mixed Model</td><td style="text-align:left;">A GLM that additionally includes random effects &mdash; used here for meta-analysis models that account for both within- and between-study variation.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>ANOVA / ANCOVA / MANOVA</td><td>Analysis of Variance / Covariance / Multiple outcomes</td><td style="text-align:left;">ANOVA compares means across 3+ groups; ANCOVA adds a continuous covariate; MANOVA extends the comparison to multiple outcome variables at once.</td><td style="text-align:left;">1-Way ANOVA; Multi-Factor ANOVA; Repeated Measures ANOVA</td></tr><tr><td>ART ANOVA</td><td>Aligned Rank Transform ANOVA</td><td style="text-align:left;">A non-parametric alternative to factorial ANOVA for data that doesn't meet normality assumptions.</td><td style="text-align:left;">Aligned Rank Transform (ART) ANOVA</td></tr><tr><td>ATE</td><td>Average Treatment Effect</td><td style="text-align:left;">The average effect of a treatment across a population, often estimated from observational data using weighting methods to approximate randomization.</td><td style="text-align:left;">IPW &amp; ATE</td></tr><tr><td>IPW</td><td>Inverse Probability Weighting</td><td style="text-align:left;">A method that reweights observational data by the inverse of each participant's estimated probability of receiving the treatment they actually received, to reduce confounding.</td><td style="text-align:left;">IPW &amp; ATE</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Study Design & Reporting Checklists',
+        html: `<div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>RCT</td><td>Randomized Controlled Trial</td><td style="text-align:left;">A study in which participants are randomly assigned to intervention or control groups.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>ITT / PP</td><td>Intention-to-Treat / Per-Protocol (analysis)</td><td style="text-align:left;">ITT analyzes participants by their assigned group regardless of adherence; PP restricts analysis to those who adhered to the assigned protocol.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>CONSORT</td><td>Consolidated Standards of Reporting Trials</td><td style="text-align:left;">The standard reporting guideline for randomized trials, including the participant flow diagram.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>STROBE</td><td>Strengthening the Reporting of Observational Studies in Epidemiology</td><td style="text-align:left;">The standard reporting guideline for cohort, case-control, and cross-sectional studies.</td><td style="text-align:left;">Appraising Cohort and Case-Control Studies (Learn guide)</td></tr><tr><td>PRISMA</td><td>Preferred Reporting Items for Systematic Reviews and Meta-Analyses</td><td style="text-align:left;">The standard reporting guideline for systematic reviews, including the study-selection flow diagram.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>PRISMA-ScR</td><td>PRISMA extension for Scoping Reviews</td><td style="text-align:left;">Adapts PRISMA's reporting items to a scoping review's different purpose &mdash; mapping evidence rather than pooling it.</td><td style="text-align:left;">Appraising Scoping Reviews (Learn guide)</td></tr><tr><td>RoB 2</td><td>Risk of Bias 2</td><td style="text-align:left;">The standard tool for assessing risk of bias in randomized trials, across five domains.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>ROBINS-I</td><td>Risk Of Bias In Non-randomized Studies of Interventions</td><td style="text-align:left;">The analogous risk-of-bias tool for non-randomized studies, which additionally assesses confounding and selection into the study.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>QUADAS-2</td><td>Quality Assessment of Diagnostic Accuracy Studies 2</td><td style="text-align:left;">The standard risk-of-bias and applicability tool for diagnostic accuracy studies, across four domains.</td><td style="text-align:left;">Appraising Diagnostic Accuracy Studies (Learn guide)</td></tr><tr><td>GRADE</td><td>Grading of Recommendations Assessment, Development and Evaluation</td><td style="text-align:left;">A widely used framework for rating the overall certainty of a body of evidence, commonly used in systematic reviews and clinical guidelines.</td><td style="text-align:left;">&mdash;</td></tr></tbody></table></div>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-effect-measures', why: 'Full explanation of the RR/OR/AR terms defined here.' },
+      { id: 'appraisal-confidence-intervals', why: 'Full explanation of the CI, CrI, and PI terms defined here.' },
+      { id: 'appraisal-sd-vs-se', why: 'Full explanation of the SD vs. SE distinction defined here.' },
+      { id: 'standard-error', why: 'Computes SE directly, if you need the number rather than just the definition.' },
+    ],
+  },
 ];

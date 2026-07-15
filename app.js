@@ -71,24 +71,18 @@ function route() {
   calc ? renderCalculator(calc) : renderHome();
 }
 
-// Which sidebar categories are expanded — collapsed by default so
-// the 85-calculator list reads as 12 scannable headers rather than
-// one long scroll. Only changes when a header is clicked — nothing
-// expands or collapses on its own, so the sidebar always shows
-// exactly what you last set it to.
-const expandedCategories = new Set();
-
 // Same idea for the home/"Full Calculator Index" page, but inverted:
 // that page is a browsable directory, so categories default OPEN
-// (unlike the sidebar's default-closed) and this only tracks the
-// ones a user has manually collapsed.
+// (unlike the sidebar, which no longer renders a category list at
+// rest at all — see buildNav) and this only tracks the ones a user
+// has manually collapsed.
 const collapsedHomeCategories = new Set();
 
-// Same idea again, but for the Learn hub's three category sections
-// (Data Types / Reading and Understanding Graphs / Critical Appraisal
-// of the Literature) — tracked separately from collapsedHomeCategories,
-// and inverted: the Learn hub defaults CLOSED (like the sidebar's
-// expandedCategories) rather than open (like the Full Calculator
+// Same idea again, but for the Learn hub's category sections (Data
+// Types, Reading and Understanding Graphs, Critical Appraisal of the
+// Literature, Appraising Studies by Design, Reference) — tracked
+// separately from collapsedHomeCategories, and inverted: the Learn
+// hub defaults CLOSED rather than open (like the Full Calculator
 // Index), so this Set holds categories the user has explicitly opened.
 const expandedLearnCategories = new Set();
 
@@ -132,41 +126,40 @@ function buildNav(filter) {
   const list = document.getElementById('nav-list');
   list.innerHTML = '';
 
-  const filterWords = filter ? filter.split(/\s+/).filter(w => w.length > 1) : [];
+  // Resting state (no active search): the sidebar no longer duplicates
+  // the home page's full, always-open category index here. The list
+  // only earns its keep as a live search-results view, so leave it
+  // empty until the person actually types something.
+  if (!filter) return;
+
+  const filterWords = filter.split(/\s+/).filter(w => w.length > 1);
   const scores = new Map();
 
   const groups = {};
   for (const calc of CALCULATORS) {
-    if (filter) {
-      const score = searchScore(calc, filter, filterWords);
-      if (score <= 0) continue;
-      scores.set(calc.id, score);
-    }
+    const score = searchScore(calc, filter, filterWords);
+    if (score <= 0) continue;
+    scores.set(calc.id, score);
     (groups[calc.category] = groups[calc.category] || []).push(calc);
   }
 
+  // Best matches first: sort calculators within each category by score,
+  // then sort categories themselves by their single best-scoring
+  // calculator, so the most relevant results surface at the very top
+  // instead of being buried under unrelated categories.
   let entries = Object.entries(groups);
-  if (filter) {
-    // Best matches first: sort calculators within each category by score,
-    // then sort categories themselves by their single best-scoring
-    // calculator, so the most relevant results surface at the very top
-    // instead of being buried under unrelated categories.
-    for (const calcs of Object.values(groups)) {
-      calcs.sort((a, b) => scores.get(b.id) - scores.get(a.id));
-    }
-    entries = entries.sort(([, a], [, b]) => scores.get(b[0].id) - scores.get(a[0].id));
+  for (const calcs of Object.values(groups)) {
+    calcs.sort((a, b) => scores.get(b.id) - scores.get(a.id));
   }
+  entries = entries.sort(([, a], [, b]) => scores.get(b[0].id) - scores.get(a[0].id));
 
   for (const [cat, calcs] of entries) {
-    // While searching, force every matching category open so results
-    // are visible — but don't touch expandedCategories itself, so the
-    // manually-chosen collapse state is restored once the search clears.
-    const isOpen = !!filter || expandedCategories.has(cat);
-
+    // Always force-open while searching, since every category shown
+    // here is a category with matches — nothing to collapse.
     const header = document.createElement('button');
     header.type = 'button';
-    header.className = 'nav-category' + (isOpen ? ' open' : '');
-    header.setAttribute('aria-expanded', String(isOpen));
+    header.className = 'nav-category open';
+    header.setAttribute('aria-expanded', 'true');
     header.innerHTML = `
       <span class="nav-category-chevron">▸</span>
       <span class="nav-category-name">${esc(cat)}</span>
@@ -175,7 +168,7 @@ function buildNav(filter) {
     list.appendChild(header);
 
     const group = document.createElement('div');
-    group.className = 'nav-group' + (isOpen ? ' open' : '');
+    group.className = 'nav-group open';
     group.setAttribute('role', 'list');
 
     for (const calc of calcs) {
@@ -192,17 +185,8 @@ function buildNav(filter) {
     }
     list.appendChild(group);
 
-    // Only toggleable when not searching — while searching, categories
-    // are force-open to show matches, so a click would have nothing to do.
-    if (!filter) {
-      header.addEventListener('click', () => {
-        const nowOpen = !expandedCategories.has(cat);
-        nowOpen ? expandedCategories.add(cat) : expandedCategories.delete(cat);
-        header.classList.toggle('open', nowOpen);
-        header.setAttribute('aria-expanded', String(nowOpen));
-        group.classList.toggle('open', nowOpen);
-      });
-    }
+    // No click-to-toggle handler needed here — while searching, every
+    // rendered category is already force-open to show its matches.
   }
 }
 
