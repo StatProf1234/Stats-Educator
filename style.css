@@ -1409,6 +1409,10 @@ body {
   border-right: 1px solid var(--border);
 }
 
+.ref-table-left th:not(:first-child), .ref-table-left td:not(:first-child) {
+  text-align: left;
+}
+
 .ref-table thead th {
   background: var(--ground);
   color: var(--text-3);
