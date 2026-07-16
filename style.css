@@ -691,16 +691,6 @@ body {
   margin-bottom: 8px;
 }
 
-/* Neutral/outlined variant — distinguishes a calculator card from a
-   Learn Guide card (solid accent badge) in a guide's "Related" list,
-   without reusing --amber, which already means "highlighted result"
-   in the results table. */
-.wizard-result-badge.calc {
-  color: var(--text-3);
-  background: transparent;
-  border: 1.5px solid var(--border);
-}
-
 .wizard-result-name {
   font-family: var(--font-display);
   font-size: 16px;
