@@ -103,14 +103,7 @@ function applyActiveState() {
 // synonym list (calculators.js) — common ways to describe a problem,
 // like "two independent groups" — outranks the calculator's own name,
 // which outranks its hint/description/category.
-function searchScore(calc, filter, filterWords) {
-  const fields = [
-    { text: calc.name.toLowerCase(),                                  weight: 10 },
-    { text: (SEARCH_KEYWORDS[calc.id] || []).join(' ').toLowerCase(), weight: 12 },
-    { text: calc.hint.toLowerCase(),                                  weight: 4 },
-    { text: (calc.description || '').toLowerCase(),                   weight: 2 },
-    { text: calc.category.toLowerCase(),                              weight: 2 },
-  ];
+function scoreWeightedFields(fields, filter, filterWords) {
   let score = 0;
   for (const { text, weight } of fields) {
     if (!text) continue;
@@ -120,6 +113,34 @@ function searchScore(calc, filter, filterWords) {
     }
   }
   return score;
+}
+
+function searchScore(calc, filter, filterWords) {
+  const fields = [
+    { text: calc.name.toLowerCase(),                                  weight: 10 },
+    { text: (SEARCH_KEYWORDS[calc.id] || []).join(' ').toLowerCase(), weight: 12 },
+    { text: calc.hint.toLowerCase(),                                  weight: 4 },
+    { text: (calc.description || '').toLowerCase(),                   weight: 2 },
+    { text: calc.category.toLowerCase(),                              weight: 2 },
+  ];
+  return scoreWeightedFields(fields, filter, filterWords);
+}
+
+// Same idea for a Learn guide: title outranks the blurb/dek, which
+// outrank its category, which outranks a low-weight sweep of every
+// section's heading/body — that last field exists so a guide is
+// still findable by a specific term (e.g. "ROBIS") that only appears
+// deep in its prose, not in the title or teaser copy.
+function searchScoreGuide(guide, filter, filterWords) {
+  const bodyText = (guide.sections || []).map(s => `${s.heading} ${s.html}`).join(' ').toLowerCase();
+  const fields = [
+    { text: guide.title.toLowerCase(),        weight: 10 },
+    { text: (guide.blurb || '').toLowerCase(), weight: 4 },
+    { text: (guide.dek || '').toLowerCase(),   weight: 3 },
+    { text: guide.category.toLowerCase(),      weight: 2 },
+    { text: bodyText,                          weight: 1 },
+  ];
+  return scoreWeightedFields(fields, filter, filterWords);
 }
 
 function buildNav(filter) {
@@ -135,25 +156,43 @@ function buildNav(filter) {
   const filterWords = filter.split(/\s+/).filter(w => w.length > 1);
   const scores = new Map();
 
-  const groups = {};
+  // Calculators and Learn guides are scored separately (different
+  // fields, different weights) but rendered through the same grouped
+  // nav-category/nav-item markup below, so each is normalized here to
+  // a common { id, href, name, hint, category, isGuide } shape.
+  // Category names never collide between the two (see calculators.js:
+  // CALCULATORS uses subject-matter categories like "ANOVA", GUIDES
+  // uses hub sections like "Reference"), so both can share one grouping
+  // pass without their results getting jumbled into the same category.
+  const items = [];
   for (const calc of CALCULATORS) {
     const score = searchScore(calc, filter, filterWords);
     if (score <= 0) continue;
-    scores.set(calc.id, score);
-    (groups[calc.category] = groups[calc.category] || []).push(calc);
+    items.push({ id: calc.id, href: '#' + calc.id, name: calc.name, hint: calc.hint, category: calc.category, isGuide: false, score });
+  }
+  for (const guide of GUIDES) {
+    const score = searchScoreGuide(guide, filter, filterWords);
+    if (score <= 0) continue;
+    items.push({ id: guide.id, href: '#learn/' + guide.id, name: guide.title, hint: guide.blurb, category: guide.category, isGuide: true, score });
   }
 
-  // Best matches first: sort calculators within each category by score,
-  // then sort categories themselves by their single best-scoring
-  // calculator, so the most relevant results surface at the very top
-  // instead of being buried under unrelated categories.
+  const groups = {};
+  for (const item of items) {
+    scores.set(item.id, item.score);
+    (groups[item.category] = groups[item.category] || []).push(item);
+  }
+
+  // Best matches first: sort items within each category by score, then
+  // sort categories themselves by their single best-scoring item, so
+  // the most relevant results surface at the very top instead of being
+  // buried under unrelated categories.
   let entries = Object.entries(groups);
-  for (const calcs of Object.values(groups)) {
-    calcs.sort((a, b) => scores.get(b.id) - scores.get(a.id));
+  for (const groupItems of Object.values(groups)) {
+    groupItems.sort((a, b) => scores.get(b.id) - scores.get(a.id));
   }
   entries = entries.sort(([, a], [, b]) => scores.get(b[0].id) - scores.get(a[0].id));
 
-  for (const [cat, calcs] of entries) {
+  for (const [cat, groupItems] of entries) {
     // Always force-open while searching, since every category shown
     // here is a category with matches — nothing to collapse.
     const header = document.createElement('button');
@@ -163,7 +202,7 @@ function buildNav(filter) {
     header.innerHTML = `
       <span class="nav-category-chevron">▸</span>
       <span class="nav-category-name">${esc(cat)}</span>
-      <span class="nav-category-count">${calcs.length}</span>
+      <span class="nav-category-count">${groupItems.length}</span>
     `;
     list.appendChild(header);
 
@@ -171,15 +210,15 @@ function buildNav(filter) {
     group.className = 'nav-group open';
     group.setAttribute('role', 'list');
 
-    for (const calc of calcs) {
+    for (const item of groupItems) {
       const a = document.createElement('a');
       a.className  = 'nav-item';
-      a.href       = '#' + calc.id;
-      a.dataset.id = calc.id;
+      a.href       = item.href;
+      a.dataset.id = item.href.slice(1); // matches location.hash.slice(1) in applyActiveState — 'learn/xyz' for guides, plain id for calculators
       a.setAttribute('role', 'listitem');
       a.innerHTML  = `
-        <span class="nav-item-name">${esc(calc.name)}</span>
-        <span class="nav-item-hint">${esc(calc.hint)}</span>
+        <span class="nav-item-name">${esc(item.name)}${item.isGuide ? '<span class="nav-item-badge">Learn guide</span>' : ''}</span>
+        <span class="nav-item-hint">${esc(item.hint)}</span>
       `;
       group.appendChild(a);
     }
@@ -474,15 +513,32 @@ function renderGuide(guide) {
     </details>
   `).join('');
 
+  // A `related` entry can point at either a calculator or another Learn
+  // guide (guides cross-link each other constantly — e.g. Cohort ↔
+  // Case-Control, or the GRADE guide ↔ the design guides that mention
+  // it), so both id spaces are checked here rather than just CALCULATORS.
   const relatedHtml = (guide.related || []).map(r => {
     const calc = CALCULATORS.find(c => c.id === r.id);
-    if (!calc) return '';
-    return `
-      <a class="wizard-result-card" href="#${calc.id}">
-        <div class="wizard-result-name">${esc(calc.name)}</div>
-        <div class="wizard-result-hint">${esc(calc.hint)}</div>
-        <div class="wizard-result-why">${esc(r.why)}</div>
-      </a>`;
+    if (calc) {
+      return `
+        <a class="wizard-result-card" href="#${calc.id}">
+          <div class="wizard-result-badge calc">Calculator</div>
+          <div class="wizard-result-name">${esc(calc.name)}</div>
+          <div class="wizard-result-hint">${esc(calc.hint)}</div>
+          <div class="wizard-result-why">${esc(r.why)}</div>
+        </a>`;
+    }
+    const relGuide = GUIDES.find(g => g.id === r.id);
+    if (relGuide) {
+      return `
+        <a class="wizard-result-card" href="#learn/${relGuide.id}">
+          <div class="wizard-result-badge">Learn Guide</div>
+          <div class="wizard-result-name">${esc(relGuide.title)}</div>
+          <div class="wizard-result-hint">${esc(relGuide.blurb)}</div>
+          <div class="wizard-result-why">${esc(r.why)}</div>
+        </a>`;
+    }
+    return '';
   }).join('');
 
   view().innerHTML = `
@@ -497,7 +553,7 @@ function renderGuide(guide) {
     </div>` : ''}
     <div class="guide-accordion">${sectionsHtml}</div>
     ${relatedHtml ? `
-      <h2 class="guide-section-title">Related Calculators</h2>
+      <h2 class="guide-section-title">Related</h2>
       <div class="wizard-results">${relatedHtml}</div>
     ` : ''}
   `;

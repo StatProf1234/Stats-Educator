@@ -13845,23 +13845,23 @@ const SEARCH_KEYWORDS = {
 
   // T-Tests & Z-Tests
   'one-sample-t-test':             ['one sample t-test', 'compare a mean to a hypothesized value', 'single group mean test'],
-  'unpaired-t-test':                ['independent t-test', 'two sample t-test', 'compare two independent means', 'unpaired groups', 'two groups continuous data'],
-  'equivalence-test':               ['tost', 'two one-sided tests', 'equivalence test', 'non-inferiority test', 'bioequivalence', 'generic vs brand-name drug'],
+  'unpaired-t-test':                ['independent t-test', 'two sample t-test', 'compare two independent means', 'unpaired groups', 'two groups continuous data', 'rct continuous outcome', 'randomized controlled trial'],
+  'equivalence-test':               ['tost', 'two one-sided tests', 'equivalence test', 'non-inferiority test', 'bioequivalence', 'generic vs brand-name drug', 'randomized controlled trial', 'rct non-inferiority'],
   'paired-t-test':                  ['paired t-test', 'before and after', 'matched pairs', 'dependent samples t-test', 'same subjects measured twice'],
   'se-mean-diff':                   ['standard error of the difference between two means'],
   'one-sample-z-test':              ['one sample z-test', 'known population standard deviation'],
   'two-sample-z-test':              ['two sample z-test', 'compare two means with known population sd'],
   'z-test-prop-1samp':              ['one sample proportion test', 'test a percentage against a hypothesized value'],
-  'z-test-prop-2samp':              ['two sample proportion test', 'compare two percentages', 'compare two independent proportions'],
+  'z-test-prop-2samp':              ['two sample proportion test', 'compare two percentages', 'compare two independent proportions', 'rct binary outcome', 'randomized controlled trial'],
   'binomial-hyp-test':              ['exact test for a proportion', 'small sample proportion test'],
   'single-sample-ci':               ['confidence interval for a mean', 'ci for one sample'],
   'confidence-interval-proportion': ['confidence interval for a proportion', 'ci for a percentage'],
 
   // Chi-Square & Categorical
-  'chi-square-2x2': ['chi-square test', '2x2 table', 'test of independence', 'categorical association', 'two by two table'],
+  'chi-square-2x2': ['chi-square test', '2x2 table', 'test of independence', 'categorical association', 'two by two table', 'rct binary outcome', 'randomized controlled trial', 'case-control study', 'cross-sectional study'],
   'chi-square-gof':  ['goodness of fit', 'observed vs expected frequencies', 'chi-square gof'],
-  'fishers-exact':   ["fisher's exact test", 'small cell counts', '2x2 table exact test', 'expected count below 5'],
-  'fragility-index': ['fragility index', 'fragility quotient', 'how robust is this result', 'reverse fragility index', 'walsh'],
+  'fishers-exact':   ["fisher's exact test", 'small cell counts', '2x2 table exact test', 'expected count below 5', 'case-control study', 'cross-sectional study'],
+  'fragility-index': ['fragility index', 'fragility quotient', 'how robust is this result', 'reverse fragility index', 'walsh', 'rct robustness', 'randomized controlled trial'],
   'mcnemars-test':   ["mcnemar's test", 'paired categorical data', 'before and after yes no', 'matched binary outcome'],
   'cochrans-q':      ["cochran's q test", 'three or more matched binary measurements', 'repeated binary outcome'],
   'monte-carlo-exact-test': ['monte carlo exact test', 'exact test larger than 2x2', 'expected count below 5 r by c table', 'fisher-freeman-halton', 'simulated p-value contingency table', 'sparse contingency table', 'small cell counts larger table', 'r2dtable', 'exact chi-square'],
@@ -13897,7 +13897,7 @@ const SEARCH_KEYWORDS = {
   // Effect Sizes & Agreement
   'cohens-d':        ["cohen's d", 'effect size for a mean difference'],
   'cramers-v':       ["cramer's v", 'effect size for chi-square', 'association strength categorical', 'r by c table'],
-  'phi-coefficient': ['phi coefficient', 'effect size for a 2x2 table'],
+  'phi-coefficient': ['phi coefficient', 'effect size for a 2x2 table', 'case-control study'],
   'cohens-kappa':    ["cohen's kappa", 'inter-rater agreement', 'agreement between two raters categorical', 'unordered categories'],
   'weighted-kappa':  ['weighted kappa', 'ordinal agreement between raters', 'agreement ordered categories'],
   'icc':             ['intraclass correlation coefficient', 'reliability across three or more raters'],
@@ -13911,9 +13911,9 @@ const SEARCH_KEYWORDS = {
   'power-vs-es-alpha':  ['power curves', 'power across a range of effect sizes'],
   'posthoc-power':      ['post hoc power', 'achieved power', 'observed power', 'power after study completed'],
   'sample-size-1mean':  ['sample size for one mean', 'sample size calculation one group'],
-  'sample-size-2mean':  ['sample size for two means', 'sample size two groups', 'sample size two independent means'],
+  'sample-size-2mean':  ['sample size for two means', 'sample size two groups', 'sample size two independent means', 'rct sample size', 'randomized controlled trial sample size', 'cohort study sample size'],
   'sample-size-1prop':  ['sample size for one proportion'],
-  'sample-size-2prop':  ['sample size for two proportions', 'sample size two independent proportions'],
+  'sample-size-2prop':  ['sample size for two proportions', 'sample size two independent proportions', 'rct sample size', 'randomized controlled trial sample size', 'cohort study sample size'],
   'sample-size-anova-f': ['sample size for anova', "cohen's f sample size", 'a priori power analysis anova', 'sample size main effect', 'sample size interaction', 'sample size factorial design', 'gpower anova', 'noncentral f sample size', 'how many per group anova'],
   'sample-size-survey': ['survey sample size', 'how many people to survey', 'margin of error', 'estimate a proportion', 'poll sample size', 'questionnaire sample size', 'response rate'],
   'power-ppv-fpp':      ['false positive risk', 'positive predictive value of a significant result'],
@@ -13921,40 +13921,41 @@ const SEARCH_KEYWORDS = {
   'type1-type2-errors': ['type i error', 'type ii error', 'false positive', 'false negative', 'decision matrix', 'alpha beta tradeoff', 'confusion matrix hypothesis test'],
 
   // Epidemiology & Risk
-  'measures-of-association': ['relative risk', 'odds ratio', 'risk difference', '2x2 exposure outcome table'],
-  'se-lnrr-lnor':            ['standard error of log relative risk', 'se of log odds ratio'],
-  'se-rate':                 ['standard error of an incidence rate'],
-  'se-rate-ratio':           ['standard error of a rate ratio'],
-  'or-to-nnt-nnh':           ['convert odds ratio to number needed to treat', 'nnt', 'nnh', 'number needed to harm'],
-  'or-to-rr':                ['convert odds ratio to relative risk'],
-  'attributable-fraction':   ['attributable fraction', 'fraction of disease due to exposure'],
-  'par':                     ['population attributable risk', 'absolute disease burden'],
-  'incidence-rate':          ['incidence rate', 'rate ratio', 'person-time data'],
-  'ipw-ate':                 ['inverse probability weighting', 'propensity score', 'average treatment effect', 'adjust for confounding'],
+  'measures-of-association': ['relative risk', 'odds ratio', 'risk difference', '2x2 exposure outcome table', 'rct treatment effect', 'randomized controlled trial results', 'arr', 'rrr', 'cohort study', 'case-control study'],
+  'se-lnrr-lnor':            ['standard error of log relative risk', 'se of log odds ratio', 'cohort study', 'case-control study'],
+  'se-rate':                 ['standard error of an incidence rate', 'cohort study'],
+  'se-rate-ratio':           ['standard error of a rate ratio', 'cohort study'],
+  'or-to-nnt-nnh':           ['convert odds ratio to number needed to treat', 'nnt', 'nnh', 'number needed to harm', 'rct number needed to treat', 'randomized controlled trial'],
+  'or-to-rr':                ['convert odds ratio to relative risk', 'case-control study', 'case-control odds ratio'],
+  'attributable-fraction':   ['attributable fraction', 'fraction of disease due to exposure', 'cohort study'],
+  'par':                     ['population attributable risk', 'absolute disease burden', 'cohort study'],
+  'incidence-rate':          ['incidence rate', 'rate ratio', 'person-time data', 'cohort study'],
+  'ipw-ate':                 ['inverse probability weighting', 'propensity score', 'average treatment effect', 'adjust for confounding', 'cohort study'],
   'assoc-pred-intervals':    ['prediction interval for odds ratio', 'pool multiple studies or rr'],
   'interaction-test':        ['interaction test', 'subgroup analysis', 'effect modification', 'compare two subgroups', 'test for interaction', 'table 2 fallacy'],
 
   // Diagnostic Testing
-  'sensitivity-specificity': ['sensitivity', 'specificity', 'likelihood ratios', 'diagnostic test properties'],
-  'diagnostic-accuracy':     ['diagnostic accuracy', 'ppv', 'npv', 'positive predictive value', 'negative predictive value'],
+  'sensitivity-specificity': ['sensitivity', 'specificity', 'likelihood ratios', 'diagnostic test properties', 'diagnostic accuracy study'],
+  'diagnostic-accuracy':     ['diagnostic accuracy', 'ppv', 'npv', 'positive predictive value', 'negative predictive value', 'diagnostic accuracy study'],
   'post-test-probability':   ['post-test probability', 'pre-test probability', 'bayesian update for a diagnostic test'],
-  'roc-auc':                 ['roc curve', 'area under the curve', 'auc', 'continuous test cutoff'],
+  'roc-auc':                 ['roc curve', 'area under the curve', 'auc', 'continuous test cutoff', 'diagnostic accuracy study'],
   'serial-parallel-testing': ['combining two diagnostic tests', 'series testing', 'parallel testing'],
-  'ppv-npv-vs-prevalence':   ['ppv npv vs prevalence', 'how prevalence affects predictive value'],
+  'ppv-npv-vs-prevalence':   ['ppv npv vs prevalence', 'how prevalence affects predictive value', 'diagnostic accuracy study'],
 
   // Bayesian & Meta-Analysis
   'bayes-theorem':  ["bayes' theorem", 'update a probability with new evidence', 'posterior probability'],
   'bayesian-cri':   ['credible interval', 'bayesian proportion estimate'],
   'bayes-factor':   ['bayes factor', 'convert a p-value to evidence strength'],
-  'meta-analysis':  ['meta-analysis', 'pooled effect size', 'heterogeneity', 'forest plot', 'pool multiple studies'],
-  'hksj-meta-analysis': ['hartung-knapp', 'hartung knapp sidik jonkman', 'hksj', 'knapp-hartung', 'sidik-jonkman', 'refined variance random effects', 't-distribution meta-analysis', 'wider confidence interval meta-analysis'],
-  'meta-analysis-proportions': ['meta-analysis for proportions', 'pooled prevalence', 'pooled proportion', 'pooled event rate', 'arcsine transformation', 'freeman-tukey', 'logit transformation proportion', 'prevalence meta-analysis', 'pooling percentages', 'glmm meta-analysis', 'generalized linear mixed model', 'binomial-normal model', 'one-stage meta-analysis', 'logit glmm'],
-  'network-meta-analysis': ['network meta-analysis', 'nma', 'indirect comparison', 'mixed treatment comparison', 'bucher method', 'league table', 'multiple treatments comparison', 'p-score', 'sucra', 'ranking treatments', 'network diagram', 'network graph', 'network plot', 'evidence web', 'network geometry'],
-  'meta-analysis-correlations': ['meta-analysis for correlations', 'pooled correlation', 'pooled r', 'fisher z transformation', 'pooling correlation coefficients', 'combine correlations across studies', 'correlation meta-analysis prediction interval'],
+  'meta-analysis':  ['meta-analysis', 'pooled effect size', 'heterogeneity', 'forest plot', 'pool multiple studies', 'systematic review'],
+  'hksj-meta-analysis': ['hartung-knapp', 'hartung knapp sidik jonkman', 'hksj', 'knapp-hartung', 'sidik-jonkman', 'refined variance random effects', 't-distribution meta-analysis', 'wider confidence interval meta-analysis', 'systematic review'],
+  'meta-analysis-proportions': ['meta-analysis for proportions', 'pooled prevalence', 'pooled proportion', 'pooled event rate', 'arcsine transformation', 'freeman-tukey', 'logit transformation proportion', 'prevalence meta-analysis', 'pooling percentages', 'glmm meta-analysis', 'generalized linear mixed model', 'binomial-normal model', 'one-stage meta-analysis', 'logit glmm', 'systematic review'],
+  'network-meta-analysis': ['network meta-analysis', 'nma', 'indirect comparison', 'mixed treatment comparison', 'bucher method', 'league table', 'multiple treatments comparison', 'p-score', 'sucra', 'ranking treatments', 'network diagram', 'network graph', 'network plot', 'evidence web', 'network geometry', 'systematic review'],
+  'meta-analysis-correlations': ['meta-analysis for correlations', 'pooled correlation', 'pooled r', 'fisher z transformation', 'pooling correlation coefficients', 'combine correlations across studies', 'correlation meta-analysis prediction interval', 'systematic review'],
 
   // Survival Analysis
-  'kaplan-meier':  ['kaplan-meier curve', 'survival curve', 'time to event data', 'censored data'],
-  'log-rank-test': ['log-rank test', 'compare survival curves', 'compare two groups survival'],
+  'kaplan-meier':  ['kaplan-meier curve', 'survival curve', 'time to event data', 'censored data', 'prognostic study', 'cohort study'],
+  'log-rank-test': ['log-rank test', 'compare survival curves', 'compare two groups survival', 'prognostic study', 'cohort study'],
+  'cox-ph':        ['cox proportional hazards', 'cox regression', 'hazard ratio', 'survival regression', 'time to event regression', 'prognostic study', 'cohort study'],
 
 };
 
@@ -15987,6 +15988,100 @@ const GUIDES = [
       { id: 'hksj-meta-analysis', why: 'Same pooling logic with the Hartung-Knapp-Sidik-Jonkman adjustment for few studies.' },
       { id: 'meta-analysis-proportions', why: 'Applies the same critical-reading questions to pooled proportions rather than pooled effect sizes.' },
       { id: 'network-meta-analysis', why: 'Extends heterogeneity and pooling concepts to comparisons across three or more treatments at once.' },
+      { id: 'appraisal-grade', why: 'Covers the certainty-of-evidence framework this guide gestures at when it mentions risk-of-bias assessment feeding into interpretation.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-bias-tools',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Reporting Guideline, Risk-of-Bias Tool, or Certainty Framework? Four Different Jobs',
+    blurb: 'CONSORT, RoB 2, AMSTAR-2, and GRADE all get invoked in the same breath, but they check four completely different things — and a study can pass one perfectly while failing another.',
+    dek: `The critical-appraisal literature is full of acronyms that get used almost interchangeably in casual conversation, but each actually answers a different question: did the report describe itself completely, was the underlying study well-conducted, was a review or guideline that synthesizes other work itself put together rigorously, and how much confidence should the resulting evidence carry. This guide sorts the major tools into those four categories and maps each to the study design it applies to.`,
+    sections: [
+      {
+        heading: 'Four different jobs, one shared vocabulary',
+        html: `<p>Every tool discussed across this site's design-specific appraisal guides falls into one of four categories, and mixing them up is one of the more common ways a reader over-credits a study. Reporting guidelines ask whether the authors described what they did completely enough to be evaluated at all &mdash; CONSORT, STROBE, PRISMA, and PRISMA-ScR. Risk-of-bias tools ask whether, given that description, the underlying study was actually conducted in a way that protects against bias &mdash; RoB 2, ROBINS-I, the Newcastle-Ottawa Scale, QUADAS-2, and QUIPS. Review-conduct tools ask a question one level up: for a document that itself synthesizes several other studies or recommendations, was that synthesis process rigorous &mdash; AMSTAR-2 for systematic reviews, AGREE II for clinical practice guidelines. And certainty frameworks ask, having weighed all of the above, how much confidence the resulting body of evidence should actually carry &mdash; GRADE. A trial can satisfy the first category perfectly, reporting every method in exhaustive detail, while still failing badly on the second, since a complete description of a flawed method is still a flawed method &mdash; "the study followed CONSORT" is not the same claim as "the study was well-conducted," even though the two get conflated constantly.</p>`,
+      },
+      {
+        heading: 'Reporting guidelines: did they describe it completely',
+        html: `<p>CONSORT (randomized trials), STROBE (cohort, case-control, and cross-sectional studies), PRISMA (systematic reviews), and PRISMA-ScR (scoping reviews) are each a checklist of items a complete report should include &mdash; a description of how randomization was generated, a flow diagram tracking participants from enrollment to final analysis, a stated search strategy, and so on. Their job is completeness of description, not quality of conduct. A trial can follow CONSORT to the letter, reporting in full detail that allocation was not concealed, and still have been poorly randomized as a result &mdash; CONSORT's contribution is making that flaw visible in the report rather than letting it hide behind an omission, not certifying that no such flaw exists.</p>`,
+      },
+      {
+        heading: 'Risk-of-bias tools: was the underlying study well-conducted',
+        html: `<p>RoB 2 (randomized trials), ROBINS-I (non-randomized intervention studies), the Newcastle-Ottawa Scale (cohort and case-control studies estimating an exposure-outcome association), AXIS (cross-sectional studies), QUADAS-2 (diagnostic accuracy studies), and QUIPS (prognostic factor studies) each rate the actual conduct of a study against the specific ways that design can go wrong &mdash; randomization and blinding for RoB 2, confounding and selection for ROBINS-I and the Newcastle-Ottawa Scale, sampling and response rate for AXIS, spectrum and verification bias for QUADAS-2, attrition and confounding for QUIPS. Each tool's domains map directly onto the design-specific concerns covered in this site's companion appraisal guides &mdash; the tool is simply a structured way to walk through the same questions a careful reader would already be asking one by one.</p>`,
+      },
+      {
+        heading: 'Review-conduct tools: was the synthesis itself done rigorously',
+        html: `<p>A systematic review or clinical guideline is a document built on top of other studies, which means it has its own conduct to appraise, separate from the risk of bias in whatever it pooled or recommended. AMSTAR-2 (A MeaSurement Tool to Assess systematic Reviews) appraises a systematic review's own methodological rigor &mdash; whether the eligibility criteria and search strategy were adequate, whether study selection and risk-of-bias assessment were done independently and in duplicate, and whether the review accounted for the risk of bias of its included studies when interpreting its results &mdash; overlapping with, but distinct from, PRISMA's narrower focus on whether the review reported these steps completely. ROBIS (Risk Of Bias In Systematic reviews) asks a related but narrower question within the same review: not whether the overall process was conducted well, but whether that process introduced bias into the review's specific conclusions, working through eligibility, study identification, data collection, and synthesis in turn &mdash; a review can pass AMSTAR-2's conduct checklist while ROBIS still flags a bias concern in how the findings were synthesized. AGREE II plays the analogous review-conduct role for a clinical practice guideline, appraising its development process rather than the evidence underneath it.</p>`,
+      },
+      {
+        heading: 'A parallel universe of tools: the Joanna Briggs Institute',
+        html: `<p>Every tool named so far belongs to what is loosely the Cochrane-descended tradition of critical appraisal, but it is not the only one in wide use. The Joanna Briggs Institute (JBI) publishes its own family of critical appraisal checklists covering nearly the same span of designs &mdash; randomized trials, quasi-experimental studies, cohort studies, case-control studies, cross-sectional studies, case series and case reports, diagnostic test accuracy studies, systematic reviews, and qualitative research, among others &mdash; and is the more commonly taught standard in some nursing, allied health, and evidence-based-practice programs. The JBI checklists ask substantially the same underlying questions as the tools above (was the sample representative, was there an appropriate comparison group, were confounders addressed, and so on), just packaged as their own numbered checklist per design rather than mapped onto RoB 2 / ROBINS-I / QUADAS-2-style domains. If a course or journal specifies JBI, it is not asking a different appraisal question than this guide covers &mdash; just asking it through a different, equally legitimate checklist.</p>`,
+      },
+      {
+        heading: 'Certainty frameworks: how much confidence should the result actually carry',
+        html: `<p>GRADE sits above the other three categories, synthesizing the risk of bias in the included studies, the consistency and precision of their pooled result, and the directness of the evidence to the specific question asked into a single certainty rating &mdash; and, for a guideline, translating that certainty rating into a recommendation strength alongside the balance of benefits, harms, and patient values. See the companion guide for the full framework; the short version here is that GRADE is downstream of, and depends on, the risk-of-bias and review-conduct tools above having already been applied correctly &mdash; a certainty rating is only as good as the bias assessment feeding into it.</p>`,
+      },
+      {
+        heading: 'Which tool applies to which document',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Document</th><th style="text-align:left;">Reporting Guideline</th><th style="text-align:left;">Risk-of-Bias / Conduct Tool</th></tr></thead><tbody><tr><td>Randomized controlled trial</td><td style="text-align:left;">CONSORT</td><td style="text-align:left;">RoB 2</td></tr><tr><td>Cohort study</td><td style="text-align:left;">STROBE</td><td style="text-align:left;">Newcastle-Ottawa Scale (cohort version)</td></tr><tr><td>Case-control study</td><td style="text-align:left;">STROBE</td><td style="text-align:left;">Newcastle-Ottawa Scale (case-control version)</td></tr><tr><td>Cross-sectional study</td><td style="text-align:left;">STROBE</td><td style="text-align:left;">AXIS</td></tr><tr><td>Diagnostic accuracy study</td><td style="text-align:left;">&mdash;</td><td style="text-align:left;">QUADAS-2</td></tr><tr><td>Prognostic study</td><td style="text-align:left;">&mdash;</td><td style="text-align:left;">QUIPS</td></tr><tr><td>Systematic review / meta-analysis</td><td style="text-align:left;">PRISMA</td><td style="text-align:left;">RoB 2 / ROBINS-I for included studies; AMSTAR-2 or ROBIS for the review itself</td></tr><tr><td>Scoping review</td><td style="text-align:left;">PRISMA-ScR</td><td style="text-align:left;">&mdash; (not applicable; see the companion guide on why)</td></tr><tr><td>Clinical practice guideline</td><td style="text-align:left;">&mdash;</td><td style="text-align:left;">AGREE II</td></tr></tbody></table></div>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper cites one of these tools by name, ask which of the four jobs it was actually doing before crediting the study with more rigor than that tool actually certifies. "PRISMA-compliant" is a claim about the review's report, not its conclusions; of everything in this guide, only a GRADE certainty rating speaks directly to how much to trust the result.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-grade', why: 'The certainty framework this guide places downstream of the risk-of-bias and review-conduct tools.' },
+      { id: 'appraisal-appraising-rcts', why: 'Covers CONSORT and RoB 2 in the specific context of the biases they check for in a trial.' },
+      { id: 'appraisal-appraising-cross-sectional', why: 'Covers STROBE and AXIS in the specific context of the biases they check for in this design.' },
+      { id: 'appraisal-appraising-systematic-reviews', why: 'Covers PRISMA, RoB 2 / ROBINS-I, AMSTAR-2, and ROBIS in the specific context of appraising a review.' },
+      { id: 'appraisal-study-design', why: 'Places the study designs these tools apply to within the broader design hierarchy.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-grade',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Understanding GRADE: Certainty of Evidence vs. Strength of Recommendation',
+    blurb: 'GRADE rates two different things that are easy to collapse into one — how much to trust the evidence, and how strongly to act on it — and conflating them is one of the most common misreadings of a systematic review or guideline.',
+    dek: `GRADE (Grading of Recommendations Assessment, Development and Evaluation) is the most widely adopted framework for rating evidence in systematic reviews and clinical practice guidelines. It produces two related but distinct outputs &mdash; a certainty rating for a body of evidence, and a strength rating for a recommendation built on it &mdash; and reading either one correctly starts with keeping them apart.`,
+    sections: [
+      {
+        heading: 'Two different questions, not one',
+        html: `<p>GRADE is often summarized as "high, moderate, low, or very low quality evidence," but that phrase describes only half of what the framework actually produces. Certainty of evidence answers "how much confidence should I place in this specific effect estimate, for this specific outcome" &mdash; a property of the evidence itself, assessed once per outcome in a systematic review. Strength of recommendation answers a different question entirely: "how strongly should a clinician act on this evidence," which a guideline panel derives from the certainty rating plus the balance of benefits and harms, patient values and preferences, and resource considerations. High-certainty evidence can still support only a weak recommendation if benefits and harms are closely balanced, and low-certainty evidence can support a strong recommendation if the stakes are lopsided enough (a rare but catastrophic harm, for instance). Confusing the two &mdash; treating "strongly recommended" as a claim about evidence quality, or "low-certainty evidence" as a reason to dismiss a strong recommendation &mdash; is one of the most common misreadings of GRADE-rated literature.</p>`,
+      },
+      {
+        heading: 'Certainty of evidence starts by design, then moves in one direction per domain',
+        html: `<p>A body of evidence starts at high certainty if it comes from randomized trials, and at low certainty if it comes from observational studies &mdash; reflecting randomization's structural advantage in ruling out confounding. From that starting point, five domains can lower the certainty rating: risk of bias (methodological flaws in the individual studies), inconsistency (unexplained heterogeneity across studies), indirectness (the studied population, intervention, comparator, or outcome doesn't quite match the question being asked), imprecision (a confidence interval wide enough to be consistent with meaningfully different clinical decisions), and publication bias (a body of evidence that looks suspiciously selective). Each domain is rated separately, and a serious concern in any one of them can drop the certainty by a full level, so two bodies of evidence that both get called "moderate certainty" may have arrived there through entirely different weaknesses.</p>`,
+      },
+      {
+        heading: 'Why observational evidence can be upgraded',
+        html: `<p>Because observational studies start at low certainty by default, GRADE also allows three factors to move that rating back up: a large effect size (large enough that confounding alone is an implausible full explanation), a dose-response gradient (the outcome tracks with exposure intensity in a way confounding would not typically mimic), and a situation where plausible residual confounding would work against the observed effect rather than create it (meaning the true effect, if anything, is likely even larger). This matters for appraisal because it means "observational" is not automatically synonymous with "low certainty" in the final rating &mdash; a large, dose-dependent effect from a well-conducted cohort study can outrank a small, imprecise effect from an underpowered randomized trial.</p>`,
+      },
+      {
+        heading: 'From certainty to strength: what a guideline panel adds on top',
+        html: `<p>Turning a certainty rating into a recommendation strength requires judgments that go beyond the evidence itself. A panel considers the size of the benefit relative to the harms and burdens (a close balance points toward a weak/conditional recommendation regardless of certainty), how much variability exists in what patients would actually value (wide variation in preferences also favors a weaker recommendation, since one size is less likely to fit everyone), and the resources or feasibility required to act on it. A "strong" recommendation signals the panel judged that nearly all informed patients would make the same choice; a "weak" or "conditional" recommendation signals that a patient's individual values and circumstances should meaningfully shape the decision &mdash; which is itself a piece of information worth reading off a guideline, independent of the certainty rating sitting next to it.</p>`,
+      },
+      {
+        heading: 'Reading a GRADE Summary of Findings table',
+        html: `<p>Systematic reviews and guidelines that use GRADE typically present a Summary of Findings table with one row per outcome, showing the certainty rating (with the specific domain or domains downgraded, when applicable), the relative effect (such as a risk ratio), and the absolute effect (the difference in risk expressed in real terms, which is usually the more clinically meaningful number &mdash; see the companion guide on effect measures). Reading this table outcome by outcome, rather than looking for one overall "quality" verdict for the whole review, is the intended way to use it: a single review can be high-certainty for one outcome and low-certainty for another, and a recommendation built on it should be read with that same granularity.</p>`,
+      },
+      {
+        heading: 'What a GRADE rating can — and cannot — tell you',
+        html: `<p>A GRADE rating can tell you how much confidence to place in a specific effect estimate, and separately, how much room a specific recommendation leaves for individual clinical judgment. It cannot substitute for reading the underlying studies when a decision genuinely hinges on the details &mdash; a rating is a structured summary judgment, not a replacement for understanding why a domain was downgraded in the first place, and two reviewers applying GRADE to the same evidence can reasonably land on different ratings if their judgment calls within a domain differ.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When you see a recommendation, look for both numbers before deciding how to act on it: the certainty of the evidence behind it, and the strength of the recommendation itself. A "strong recommendation, low-certainty evidence" combination is not a contradiction &mdash; it usually means the panel judged the stakes too lopsided to wait for better evidence &mdash; but it is worth knowing that combination is what you are looking at.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-systematic-reviews', why: 'Covers appraising the review this certainty rating is built on — protocol registration, search strategy, risk-of-bias assessment.' },
+      { id: 'appraisal-appraising-guidelines', why: 'Covers appraising the recommendation this framework ultimately feeds into.' },
+      { id: 'appraisal-meta-analysis-reading', why: 'Covers the heterogeneity and precision concepts that feed directly into the inconsistency and imprecision domains here.' },
+      { id: 'appraisal-effect-measures', why: 'Covers the relative vs. absolute effect distinction referenced in a GRADE Summary of Findings table.' },
     ],
   },
 
@@ -16094,6 +16189,10 @@ const GUIDES = [
         html: `<p>Two distinct things have to go right here, and reports often blur them together. Sequence generation is the method used to decide the order of assignments &mdash; a computer-generated random sequence, for instance, versus alternating assignment or assignment by day of the week (neither of which is truly random, despite sometimes being described informally as "randomized"). Allocation concealment is a separate, and arguably more important, safeguard: whether the person enrolling a participant could predict or influence which group that participant would be assigned to before the assignment was made. A trial can have a perfectly random sequence and still be compromised if that sequence was knowable in advance &mdash; for example, if it was printed on a visible list rather than held in sealed, opaque, sequentially numbered envelopes or a remote randomization service. When a trial report does not describe allocation concealment at all, that omission is itself worth noting, since it is one of the most common sources of exaggerated treatment effects in the trial literature.</p>`,
       },
       {
+        heading: 'Baseline comparability: checking the table, not just the process',
+        html: `<p>Randomization guarantees that group assignment was unrelated to prognosis at the moment it happened &mdash; it does not guarantee that the two groups actually ended up balanced, particularly in smaller trials, where chance imbalance on an important prognostic factor is entirely possible even with a flawless randomization process. The practical check is the baseline characteristics table (commonly "Table 1"): scan it for any prognostic factor that differs meaningfully between arms, and consider whether that imbalance, if real, could plausibly explain part of the reported effect. Statistical significance testing of baseline differences is generally not a useful tool here &mdash; any difference between randomized groups is by definition due to chance, so a p-value does not tell you anything a formal hypothesis test is designed to answer; what matters is whether an imbalanced factor is prognostically important enough to matter, not whether it crosses a significance threshold.</p>`,
+      },
+      {
         heading: 'Blinding: who did not know the assignment, and does it matter for this outcome',
         html: `<p>Blinding (masking) can apply to participants, treating clinicians, outcome assessors, and analysts, and a trial can be blinded for some of these roles and not others. Whether unblinding matters depends heavily on the outcome being measured. For a hard, objective outcome &mdash; all-cause mortality, for instance &mdash; lack of blinding is a smaller concern, since there is little room for expectation to influence the outcome itself. For a subjective outcome &mdash; pain scores, symptom questionnaires, clinician-rated global impression &mdash; unblinding can meaningfully bias results in the direction of the hypothesis, in either direction depending on who holds the expectation. The practical question when appraising a trial is not simply "was it blinded" but "was the specific role that most affects this specific outcome blinded."</p>`,
       },
@@ -16106,8 +16205,16 @@ const GUIDES = [
         html: `<p>A meaningful and unbalanced loss to follow-up between groups can bias a trial even when randomization and blinding were otherwise sound, particularly if the reasons for dropout differ by group (for example, if participants leave the treatment arm because of side effects and leave the control arm for unrelated reasons). Worth checking: how much loss occurred in each arm, whether it was similar between arms, and how missing outcome data were handled in the analysis &mdash; through multiple imputation, a worst-case sensitivity analysis, or simply excluding those participants, which is the least robust option and can meaningfully distort results if losses were not random.</p>`,
       },
       {
+        heading: 'Trials stopped early for benefit',
+        html: `<p>Some trials include a formal interim-analysis plan and are stopped early by a Data and Safety Monitoring Board when the accumulating data cross a pre-specified boundary for benefit &mdash; an ethically motivated practice, since it avoids continuing to expose the control group to a treatment already shown to be inferior. But early stopping tends to inflate the reported effect size: a trial is more likely to cross a stopping boundary during a random high-water mark in the observed effect than during a low one, and the earlier a trial stops, the fewer events have accumulated and the more that high-water mark can reflect chance fluctuation rather than the treatment's true long-run effect. Worth checking: whether the stopping rule was specified in advance (for example, an O'Brien-Fleming boundary) rather than decided on an ad hoc basis, and how many events had actually accrued at the time of stopping &mdash; a trial that stopped very early, after only a small number of events, warrants added skepticism toward its headline effect size regardless of how statistically significant that interim result looked.</p>`,
+      },
+      {
         heading: 'A structured checklist: CONSORT',
-        html: `<p>The CONSORT (Consolidated Standards of Reporting Trials) statement is the most widely adopted reporting guideline for randomized trials, and its central visual element &mdash; the participant flow diagram, tracking everyone from screening through randomization, follow-up, and final analysis &mdash; is one of the fastest ways to spot the issues above. A trial report that includes a complete CONSORT flow diagram makes losses to follow-up, exclusions, and per-protocol deviations visible at a glance; a report without one often makes those numbers hard to reconstruct from the text alone.</p>`,
+        html: `<p>The CONSORT (Consolidated Standards of Reporting Trials) statement is the most widely adopted reporting guideline for randomized trials, and its central visual element &mdash; the participant flow diagram, tracking everyone from screening through randomization, follow-up, and final analysis &mdash; is one of the fastest ways to spot the issues above. A trial report that includes a complete CONSORT flow diagram makes losses to follow-up, exclusions, and per-protocol deviations visible at a glance; a report without one often makes those numbers hard to reconstruct from the text alone. CONSORT only certifies that a flaw would be visible if present, though &mdash; it says nothing about whether the trial was actually well-conducted.</p>`,
+      },
+      {
+        heading: 'A structured tool: RoB 2',
+        html: `<p>RoB 2 (Risk of Bias 2) is the standard tool for formally rating a randomized trial's actual risk of bias, as distinct from whether it was reported completely. It organizes the checks above into five domains &mdash; bias arising from the randomization process, bias due to deviations from the intended intervention, bias due to missing outcome data, bias in measuring the outcome, and bias in selecting the reported result &mdash; each rated separately as low risk, some concerns, or high risk, rather than collapsed into one overall verdict. A trial rated high risk of bias in even one domain (measurement of the outcome, say, due to unblinded assessors on a subjective endpoint) can still be rated low risk on every other domain, which is why the domain-by-domain rating is more informative than a single pass/fail label.</p>`,
       },
       {
         heading: 'What this design can — and cannot — tell you',
@@ -16127,45 +16234,152 @@ const GUIDES = [
   },
 
   {
-    id: 'appraisal-appraising-observational',
+    id: 'appraisal-appraising-cohort',
     category: 'Appraising Studies by Design',
-    title: 'Appraising Cohort and Case-Control Studies',
-    blurb: 'Without randomization, appraisal shifts almost entirely to one question: how convincingly did this study rule out alternative explanations for what it found?',
-    dek: `Cohort and case-control studies cannot rely on randomization to balance confounders, which means appraising them is largely an exercise in checking how selection, measurement, and confounding were handled &mdash; and in recognizing that the two designs are vulnerable to somewhat different versions of these problems.`,
+    title: 'Appraising Cohort Studies',
+    blurb: 'A cohort study follows exposed and unexposed groups forward through time — appraisal here means checking whether those two groups stayed comparable the whole way, not just at the start.',
+    dek: `A cohort study cannot rely on randomization to balance confounders, which means appraising one is largely an exercise in checking how the exposed and unexposed groups were assembled, measured, and followed &mdash; and whether anything happened along the way that would make them harder to compare by the study's end than they were at its start.`,
     sections: [
       {
-        heading: 'Selection bias: how were participants brought into the study',
-        html: `<p>In a cohort study, selection bias can arise if exposed and unexposed groups are drawn from different underlying populations &mdash; for instance, comparing patients treated at a specialty referral center against patients managed in general practice, where the two groups may differ systematically in disease severity or other characteristics that also affect the outcome. In a case-control study, the corresponding concern is control selection: whether controls were sampled from the same source population that produced the cases, and using the same criteria. A classic failure is selecting controls from a hospitalized population when cases were drawn from the general community, since hospitalized controls typically differ from the general population in ways that can distort the exposure-outcome association being studied.</p>`,
+        heading: 'Selection bias: were the exposed and unexposed groups drawn from the same source population',
+        html: `<p>Selection bias in a cohort study can arise if the exposed and unexposed groups come from different underlying populations &mdash; for instance, comparing patients treated at a specialty referral center against patients managed in general practice, where the two groups may differ systematically in disease severity or other characteristics that also affect the outcome. The appraisal question is whether both groups were identified using the same criteria from a shared source population, so that exposure status is the main thing distinguishing them rather than some other systematic difference in how they were found and enrolled.</p>`,
       },
       {
-        heading: 'Information bias and, in case-control studies, recall bias specifically',
-        html: `<p>Information bias occurs when exposure or outcome status is measured differently, or with different accuracy, between comparison groups. Case-control studies carry a specific version of this problem worth naming on its own: recall bias, where participants who have experienced an outcome (cases) may remember or report past exposures differently &mdash; often more thoroughly &mdash; than controls who have not experienced that outcome, purely because having the outcome prompts more careful reflection on possible causes. This is a structural feature of asking people to recall exposure after the outcome has already occurred, and it is one of the reasons case-control studies are generally considered more vulnerable to bias than prospective cohort studies, even though both are observational.</p>`,
+        heading: 'Information bias and surveillance bias specifically',
+        html: `<p>Information bias occurs when exposure or outcome status is measured differently, or with different accuracy, between the exposed and unexposed groups. Cohort studies carry a specific version of this problem worth naming on its own: surveillance (or detection) bias, where the exposed group is monitored more closely than the unexposed group &mdash; more frequent visits, more testing, more attention paid to subtle symptoms &mdash; simply because their exposure already puts investigators or clinicians on alert for the outcome. This makes the outcome more likely to be detected in the exposed group independent of whether it is actually occurring more often, and it is easy to miss because the extra surveillance is usually well-intentioned rather than an obvious design flaw.</p>`,
       },
       {
         heading: 'Confounding control: what was adjusted for, and how',
-        html: `<p>Because observational studies cannot rely on randomization, confounding control has to be built into either the design (matching, restriction) or the analysis (stratification, multivariable regression, propensity score methods). None of these eliminates confounding by unmeasured variables &mdash; a limitation worth stating plainly rather than glossing over, since even a carefully adjusted observational study cannot rule out bias from a confounder the investigators did not think to measure. When appraising the adjustment strategy, it is worth checking not just that adjustment was done, but whether the variables adjusted for are the ones a subject-matter expert would actually expect to confound the specific exposure-outcome relationship being studied &mdash; adjustment for the wrong or insufficient set of variables gives a false sense of rigor without removing the bias.</p>`,
+        html: `<p>Because cohort studies cannot rely on randomization, confounding control has to be built into either the design (matching, restriction) or the analysis (stratification, multivariable regression, propensity score methods). None of these eliminates confounding by unmeasured variables &mdash; a limitation worth stating plainly rather than glossing over, since even a carefully adjusted cohort study cannot rule out bias from a confounder the investigators did not think to measure. When appraising the adjustment strategy, it is worth checking not just that adjustment was done, but whether the variables adjusted for are the ones a subject-matter expert would actually expect to confound the specific exposure-outcome relationship being studied &mdash; adjustment for the wrong or insufficient set of variables gives a false sense of rigor without removing the bias.</p>`,
       },
       {
         heading: 'Temporality: did the exposure clearly precede the outcome',
-        html: `<p>This is more often a design feature than something to individually assess, but it is worth confirming rather than assuming. Prospective cohort studies establish temporality by design, since exposure is measured before the outcome occurs. Case-control studies, and especially cross-sectional or retrospective designs, can blur this &mdash; for example, when exposure status is measured or reconstructed after the outcome is already known, raising the possibility of reverse causation (the outcome influencing the recorded exposure, rather than the reverse).</p>`,
+        html: `<p>This is more often a design feature than something to individually assess in a cohort study, but it is worth confirming rather than assuming. A prospective cohort establishes temporality by design, since exposure is measured before the outcome occurs. A retrospective (historical) cohort, built from records collected for some other purpose, can blur this if exposure status was in any way influenced by knowledge of the outcome during data collection or coding &mdash; worth a specific check when the cohort was assembled after the fact rather than followed forward in real time.</p>`,
+      },
+      {
+        heading: 'Completeness of follow-up and differential attrition',
+        html: `<p>A cohort study's comparison only stays fair if losses to follow-up are similar, in both amount and reason, between the exposed and unexposed groups. Differential attrition &mdash; for example, if patients experiencing early symptoms of the outcome preferentially drop out of one arm, or if the exposed group is harder to track down because it draws from a more mobile or less-engaged population &mdash; can distort the comparison in either direction, even when the original selection and confounding control were sound. Worth checking: how much loss occurred in each group, whether the reasons for loss were similar between them, and whether the investigators addressed the possibility that dropout was related to the outcome itself rather than occurring at random.</p>`,
       },
       {
         heading: 'A structured checklist: STROBE',
-        html: `<p>The STROBE (Strengthening the Reporting of Observational Studies in Epidemiology) statement is the standard reporting guideline for cohort, case-control, and cross-sectional studies. Its checklist items map closely onto the concerns above: how participants were selected, how exposures and outcomes were defined and measured, which confounders were addressed and how, and &mdash; importantly &mdash; a stated discussion of the study's limitations and potential sources of bias. A report that addresses these items explicitly is easier to appraise than one that leaves them to be inferred.</p>`,
+        html: `<p>The STROBE (Strengthening the Reporting of Observational Studies in Epidemiology) statement is the standard reporting guideline for cohort, case-control, and cross-sectional studies. Its checklist items map closely onto the concerns above: how participants were selected, how exposures and outcomes were defined and measured, which confounders were addressed and how, and &mdash; importantly &mdash; a stated discussion of the study's limitations and potential sources of bias. A report that addresses these items explicitly is easier to appraise than one that leaves them to be inferred, though STROBE itself only checks that these items were reported, not that the study was actually well-conducted.</p>`,
+      },
+      {
+        heading: 'A structured tool: the Newcastle-Ottawa Scale',
+        html: `<p>The Newcastle-Ottawa Scale (NOS) is the most widely used risk-of-bias tool for cohort studies, rating each study on three domains: selection of the exposed and unexposed cohorts (up to four stars), comparability of the two cohorts on the basis of design or analysis &mdash; essentially, how well confounding was controlled (up to two stars), and ascertainment of the outcome, including whether follow-up was long and complete enough (up to three stars). Its star-based scoring makes it quick to apply, though the cutoffs used to call a study "good," "fair," or "poor" quality are not standardized across reviews that use it, which is worth checking when a systematic review reports NOS scores &mdash; two reviews can apply different thresholds to the same underlying stars.</p>`,
       },
       {
         heading: 'What this design can — and cannot — tell you',
-        html: `<p>A well-conducted cohort or case-control study can support an association between exposure and outcome, and, with sufficiently careful confounding control, a reasonably confident causal claim &mdash; but that confidence is always conditional on having measured and appropriately adjusted for the relevant confounders, something that can never be fully verified from the data itself. These designs are frequently the only feasible way to study rare outcomes, long latency periods, or exposures that could not ethically be randomized (genuinely harmful ones, for instance) &mdash; a real strength, not merely a fallback for when a trial isn't possible &mdash; but they cannot match a well-conducted RCT's confidence that alternative explanations have been ruled out.</p>`,
+        html: `<p>A well-conducted cohort study can support an association between exposure and outcome, and, with sufficiently careful confounding control, a reasonably confident causal claim &mdash; but that confidence is always conditional on having measured and appropriately adjusted for the relevant confounders, something that can never be fully verified from the data itself. Cohort studies are frequently the only feasible way to study rare exposures, long latency periods, or exposures that could not ethically be randomized (genuinely harmful ones, for instance) &mdash; a real strength, not merely a fallback for when a trial isn't possible &mdash; but they cannot match a well-conducted RCT's confidence that alternative explanations have been ruled out.</p>`,
       },
       {
         heading: 'Reading tip',
-        html: `<p>Ask, for any observational finding: what confounder, if it existed and went unmeasured, would fully explain this result away? If a plausible one comes to mind quickly and the study does not address it, that is the single most useful piece of appraisal a reader can do without any specialized checklist.</p>`,
+        html: `<p>Ask, for any cohort finding: what confounder, if it existed and went unmeasured, would fully explain this result away &mdash; and separately, was either group more likely to have its outcome noticed simply because of who was watching more closely? If a plausible answer to either comes to mind quickly and the study does not address it, that is the single most useful piece of appraisal a reader can do without any specialized checklist.</p>`,
       },
     ],
     related: [
       { id: 'appraisal-confounding-bias', why: 'The mechanism this guide\'s appraisal questions are built around.' },
+      { id: 'appraisal-appraising-case-control', why: 'The other major observational design, vulnerable to a somewhat different set of biases.' },
+      { id: 'appraisal-appraising-cross-sectional', why: 'A related observational design that measures exposure and outcome at a single point in time rather than following a cohort forward.' },
+      { id: 'appraisal-effect-measures', why: 'Cohort studies can estimate relative risk directly, unlike case-control studies — covered there.' },
+      { id: 'appraisal-study-design', why: 'Places cohort studies within the broader design hierarchy.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-case-control',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Case-Control Studies',
+    blurb: 'A case-control study works backward from outcome to exposure — which means its appraisal concerns center on how cases and controls were chosen and how honestly the past can actually be reconstructed.',
+    dek: `A case-control study samples participants based on outcome status and then looks backward for exposure, which means it cannot rely on randomization and is vulnerable to its own distinctive versions of selection and measurement bias &mdash; on top of the confounding concerns it shares with every other observational design.`,
+    sections: [
+      {
+        heading: 'Selection bias: were controls drawn from the same source population as the cases',
+        html: `<p>The central appraisal question for a case-control study's selection is whether the controls were sampled from the same source population that produced the cases, using the same criteria used to identify the cases themselves. A classic failure is selecting controls from a hospitalized population when cases were drawn from the general community, since hospitalized controls typically differ from the general population in ways &mdash; other illness, healthcare-seeking behavior &mdash; that can distort the exposure-outcome association being studied. The practical test is: if a control had instead developed the outcome, would they have been eligible to be enrolled as a case?</p>`,
+      },
+      {
+        heading: 'Recall bias: cases and controls may not remember exposure the same way',
+        html: `<p>Recall bias is the version of information bias specific to this design: participants who have experienced an outcome (cases) may remember or report past exposures differently &mdash; often more thoroughly &mdash; than controls who have not experienced that outcome, purely because having the outcome prompts more careful reflection on possible causes. This is a structural feature of asking people to recall exposure after the outcome has already occurred, and it is one of the reasons case-control studies are generally considered more vulnerable to bias than prospective cohort studies, even though both are observational. Exposure ascertainment from an objective record (pharmacy claims, a pre-existing registry) rather than participant recall largely sidesteps this problem, and is worth checking for specifically.</p>`,
+      },
+      {
+        heading: 'Confounding control: what was adjusted for, and how',
+        html: `<p>Because case-control studies cannot rely on randomization, confounding control has to be built into either the design (matching, restriction) or the analysis (stratification, multivariable regression, propensity score methods). None of these eliminates confounding by unmeasured variables &mdash; a limitation worth stating plainly rather than glossing over, since even a carefully adjusted case-control study cannot rule out bias from a confounder the investigators did not think to measure. When cases and controls are matched on a variable, remember that the matching variable itself can no longer be examined as a potential cause of the outcome, and the analysis needs to account for the matching (for example, with conditional logistic regression) rather than ignoring it.</p>`,
+      },
+      {
+        heading: 'Temporality and the retrospective reconstruction of exposure',
+        html: `<p>Because a case-control study starts from the outcome and looks backward, establishing that exposure truly preceded the outcome takes more active verification than it does in a prospective cohort. This is particularly true when exposure status is measured or reconstructed after the outcome is already known, which raises the possibility of reverse causation &mdash; the outcome (or its early, undiagnosed symptoms) influencing what gets recorded as the exposure, rather than the exposure influencing the outcome. A study that ascertains exposure from records predating the outcome's onset is on firmer ground here than one relying entirely on retrospective participant report.</p>`,
+      },
+      {
+        heading: 'A structured checklist: STROBE',
+        html: `<p>The STROBE (Strengthening the Reporting of Observational Studies in Epidemiology) statement is the standard reporting guideline for cohort, case-control, and cross-sectional studies. Its checklist items map closely onto the concerns above: how cases and controls were selected, how exposures were ascertained, which confounders were addressed and how, and &mdash; importantly &mdash; a stated discussion of the study's limitations and potential sources of bias. A report that addresses these items explicitly is easier to appraise than one that leaves them to be inferred, though STROBE itself only checks that these items were reported, not that the study was actually well-conducted.</p>`,
+      },
+      {
+        heading: 'A structured tool: the Newcastle-Ottawa Scale',
+        html: `<p>The Newcastle-Ottawa Scale (NOS) has a version specifically adapted for case-control studies, rating each study on three domains: selection of cases and controls, including whether case definition was adequate and controls were drawn from the right source population (up to four stars), comparability of cases and controls on the basis of design or analysis &mdash; how well confounding was controlled (up to two stars), and ascertainment of exposure, including whether the same method was used for cases and controls and whether it was blinded to case/control status (up to three stars). Its star-based scoring makes it quick to apply, though the cutoffs used to call a study "good," "fair," or "poor" quality are not standardized across reviews that use it, which is worth checking when a systematic review reports NOS scores &mdash; two reviews can apply different thresholds to the same underlying stars.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted case-control study can support an association between exposure and outcome, and, with sufficiently careful confounding control, a reasonably confident causal claim &mdash; but that confidence is always conditional on having measured and appropriately adjusted for the relevant confounders, something that can never be fully verified from the data itself. This design is frequently the only feasible way to study rare outcomes or long latency periods, since it does not require following a large cohort forward in time waiting for enough events to accrue &mdash; a real strength, not merely a fallback for when a trial isn't possible &mdash; but it cannot match a well-conducted RCT's confidence that alternative explanations have been ruled out, and it can only ever estimate an odds ratio rather than a directly observed risk.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Ask, for any case-control finding: could a control have been selected as a case under the same criteria, and was exposure ascertained the same way, from the same kind of source, for both groups? If either answer is unclear, the study's central comparison is on shakier ground than its statistical results alone would suggest.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-confounding-bias', why: 'The mechanism this guide\'s appraisal questions are built around.' },
+      { id: 'appraisal-appraising-cohort', why: 'The other major observational design, vulnerable to a somewhat different set of biases.' },
+      { id: 'appraisal-appraising-cross-sectional', why: 'A related observational design that measures exposure and outcome simultaneously rather than working backward from outcome to exposure.' },
       { id: 'appraisal-effect-measures', why: 'Case-control studies can only estimate the odds ratio, not relative risk — covered there.' },
-      { id: 'appraisal-study-design', why: 'Places cohort and case-control designs within the broader hierarchy.' },
+      { id: 'appraisal-study-design', why: 'Places case-control studies within the broader design hierarchy.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-cross-sectional',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Cross-Sectional Studies',
+    blurb: 'A cross-sectional study captures exposure and outcome at the same instant, in the same subjects — which means its biggest appraisal question is one no other design shares: which came first?',
+    dek: `A cross-sectional study samples a population at a single point in time and measures exposure and outcome simultaneously, which makes it well suited to estimating prevalence but structurally unable to establish which of two associated factors preceded the other. Appraising one turns on how representative the sample was, how exposure and outcome were measured, and how honestly the report acknowledges what a single snapshot in time can and cannot show.`,
+    sections: [
+      {
+        heading: 'What a cross-sectional study can actually measure',
+        html: `<p>A cross-sectional study estimates the prevalence of a condition, an exposure, or both, at one point in time in a defined population &mdash; and, when it measures both together, an association between them. Because there is no follow-up period, it counts existing cases rather than new ones, so its results describe how common something is, not how often it newly occurs (that is incidence, which requires a cohort design). Worth checking first: does the study frame its conclusions around prevalence and association, or does it slip into language &mdash; "caused," "led to," "resulted in" &mdash; that implies a causal direction the design cannot support on its own?</p>`,
+      },
+      {
+        heading: 'Temporal ambiguity: the central limitation of this design',
+        html: `<p>Because exposure and outcome are measured at the same moment, a cross-sectional study cannot, on its own, establish which came first. An association between a symptom and a behavior could mean the behavior caused the symptom, the symptom caused a change in the behavior (reverse causation), or a third factor caused both &mdash; and cross-sectional data alone cannot distinguish between these possibilities. This is a structural feature of the design, not a fixable flaw in a particular study, and the strongest cross-sectional reports acknowledge it explicitly rather than defaulting to causal language because it makes for a more compelling result.</p>`,
+      },
+      {
+        heading: 'Selection and response bias: who actually got sampled',
+        html: `<p>A cross-sectional study's validity depends on the sample resembling the population it claims to describe, which means both the sampling method (random, convenience, a captive population such as hospital attendees) and the response rate matter. A low response rate is a particular concern here because non-responders often differ systematically from responders on the very factors under study &mdash; healthier or sicker, more or less engaged &mdash; so it is worth checking whether the study reports its response rate and compares responder and non-responder characteristics, rather than reporting only the results from those who happened to participate.</p>`,
+      },
+      {
+        heading: 'Measurement: were exposure and outcome assessed the same way for everyone',
+        html: `<p>Because both exposure and outcome are collected at the same visit, often via the same instrument (a single survey, one clinical assessment), differential measurement between subgroups is a real risk &mdash; for example, if a self-reported exposure is more likely to be recalled or disclosed accurately by one group than another. Worth checking whether measurement tools were validated and applied identically regardless of a participant's status on the other variable being measured.</p>`,
+      },
+      {
+        heading: 'Confounding control: the same requirement, without randomization\'s protection',
+        html: `<p>Like every other observational design, a cross-sectional study cannot rely on randomization to balance confounders, so any adjustment has to happen through matching, restriction, or statistical adjustment (stratification, multivariable regression) &mdash; carrying the same caveat as the cohort and case-control designs: adjustment only handles the confounders the investigators thought to measure, not the ones they did not.</p>`,
+      },
+      {
+        heading: 'A structured checklist: STROBE, and a structured tool: AXIS',
+        html: `<p>STROBE (Strengthening the Reporting of Observational Studies in Epidemiology) covers cross-sectional studies alongside cohort and case-control designs for reporting completeness. For risk of bias specifically, AXIS (Appraisal tool for Cross-Sectional Studies) is the tool built for this design, covering the clarity of the research question, appropriateness of the study design and sample, adequacy of the response rate, validity and reliability of measurement, and whether the statistical analysis and conclusions were justified by the data actually collected.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted cross-sectional study can tell you how common a condition or exposure is in a defined population at a point in time, and whether two factors are statistically associated at that same point in time. It cannot, on its own, establish incidence (new cases over time), the direction of an association, or a causal claim &mdash; any of these requires a design with a temporal dimension, such as a cohort study, or a formal trial.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a cross-sectional study reports an association, mentally rewrite its conclusion as "X and Y were both present in the same people at the same time" before accepting any implied direction &mdash; then ask whether the discussion section earns the causal language it may be using, or whether that language has outrun what a single time point can actually support.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-cohort', why: 'The design that adds the temporal dimension this guide\'s central limitation is missing.' },
+      { id: 'appraisal-appraising-case-control', why: 'The other major observational design, sampling from the opposite direction — outcome backward to exposure — rather than at one simultaneous point.' },
+      { id: 'appraisal-confounding-bias', why: 'The mechanism this guide\'s confounding-control section is built around.' },
+      { id: 'appraisal-study-design', why: 'Places cross-sectional studies within the broader design hierarchy.' },
     ],
   },
 
@@ -16189,6 +16403,10 @@ const GUIDES = [
         html: `<p>This is the layer most specific to systematic reviews: rather than appraising one study, the review should have appraised every included study, using a validated tool matched to study design. For randomized trials, the standard tool is RoB 2 (Risk of Bias 2), which assesses bias across several domains including the randomization process, deviations from intended interventions, missing outcome data, outcome measurement, and selective reporting. For non-randomized studies, the analogous tool is ROBINS-I (Risk Of Bias In Non-randomized Studies of Interventions), which additionally assesses bias due to confounding and selection into the study, given that these designs lack randomization's protection. A review that pools studies of dramatically different risk-of-bias ratings without addressing that difference &mdash; through subgroup analysis, sensitivity analysis, or at minimum explicit discussion &mdash; is combining evidence of uneven quality as though it were uniform.</p>`,
       },
       {
+        heading: 'Were study selection and risk-of-bias assessments done independently, in duplicate',
+        html: `<p>Deciding which studies meet the eligibility criteria, and rating each included study's risk of bias, both involve judgment calls that a single reviewer can get wrong or apply inconsistently. The methodological standard is for these steps to be performed independently by at least two reviewers, with disagreements resolved by discussion or a third reviewer, and with some measure of inter-rater agreement (such as kappa) reported for the screening step. A review that assigns both steps to a single reviewer, or does not describe how disagreements were handled, is more exposed to reviewer-specific error and unstated judgment calls than one that reports formal duplicate assessment &mdash; a distinct concern from whether the underlying eligibility criteria and risk-of-bias tool were appropriate in the first place.</p>`,
+      },
+      {
         heading: 'Heterogeneity: are the pooled studies answering close enough to the same question',
         html: `<p>Statistical heterogeneity (covered in more depth in the companion guide on reading a forest plot) is one signal, but clinical and methodological heterogeneity matter just as much for appraisal: whether the pooled studies used similar populations, interventions, comparators, and outcome definitions. A low statistical heterogeneity score does not certify that pooling was conceptually appropriate &mdash; a small number of similar-looking studies can produce a low heterogeneity statistic while still differing in ways that matter clinically, such as dose, duration, or the specific patient population enrolled.</p>`,
       },
@@ -16198,7 +16416,19 @@ const GUIDES = [
       },
       {
         heading: 'A structured reporting checklist: PRISMA',
-        html: `<p>The PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) statement is the standard reporting guideline, and its flow diagram &mdash; tracking records identified, screened, excluded (with reasons), and ultimately included &mdash; is the fastest way to see how a review arrived at its final study set and how many potentially relevant studies were excluded and why.</p>`,
+        html: `<p>The PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) statement is the standard reporting guideline, and its flow diagram &mdash; tracking records identified, screened, excluded (with reasons), and ultimately included &mdash; is the fastest way to see how a review arrived at its final study set and how many potentially relevant studies were excluded and why. PRISMA certifies that the review reported these steps completely, though &mdash; it is not itself a judgment on whether the review was conducted rigorously.</p>`,
+      },
+      {
+        heading: 'A structured tool: AMSTAR-2',
+        html: `<p>AMSTAR-2 (A MeaSurement Tool to Assess systematic Reviews) appraises the review's own conduct, which is a distinct question from whether it was reported completely, and a distinct question again from the risk of bias in its included studies. Its items cover whether the review question and eligibility criteria were established before the search began, whether study selection and data extraction were performed in duplicate, whether the search was sufficiently comprehensive, whether the list of excluded studies was justified, and whether the review accounted for risk of bias when interpreting and discussing its results. A review can be fully PRISMA-compliant in how it reports itself while still rating poorly on AMSTAR-2 if, for instance, its eligibility criteria were finalized only after seeing which studies were available &mdash; the two tools are complementary, not redundant.</p>`,
+      },
+      {
+        heading: 'A complementary tool: ROBIS',
+        html: `<p>ROBIS (Risk Of Bias In Systematic reviews) asks a related but distinct question from AMSTAR-2: rather than grading the review's overall methodological conduct, it specifically assesses the risk of bias in the review's own conclusions, working through four phases &mdash; whether the study eligibility criteria matched the review question, whether study identification and selection were conducted appropriately, whether data collection and study appraisal were done without introducing bias, and whether the synthesis and interpretation of findings were appropriate given what was actually pooled. A review can score well on AMSTAR-2's conduct checklist while ROBIS still flags a bias concern in how the eligible studies were ultimately synthesized into a headline conclusion &mdash; the two tools are complementary rather than interchangeable, and some reviews report both.</p>`,
+      },
+      {
+        heading: 'Grading overall certainty in the evidence: GRADE',
+        html: `<p>Beyond the risk of bias in each individual included study, a systematic review should ideally rate the overall certainty of the pooled evidence for each outcome &mdash; high, moderate, low, or very low &mdash; a judgment distinct from, and assessed separately for, every outcome the review reports. GRADE (Grading of Recommendations Assessment, Development and Evaluation) is the standard framework for this; see the companion guide for the full set of domains it weighs. A review that reports GRADE ratings (or an equivalent) makes explicit how much weight its own headline result can bear; one that reports only a pooled estimate and a p-value leaves that judgment for the reader to make unaided.</p>`,
       },
       {
         heading: 'What this design can — and cannot — tell you',
@@ -16212,6 +16442,7 @@ const GUIDES = [
     related: [
       { id: 'appraisal-meta-analysis-reading', why: 'Covers the statistical side — heterogeneity statistics, prediction intervals, and forest plot interpretation — that this guide assumes.' },
       { id: 'reading-forest-plots', why: 'The visual companion for reading the pooled estimate this guide discusses appraising.' },
+      { id: 'appraisal-grade', why: 'Full explanation of the certainty-of-evidence rating this guide\'s GRADE section introduces.' },
       { id: 'appraisal-appraising-scoping-reviews', why: 'Covers the related but distinct review type used to map a body of literature rather than pool its effect estimates.' },
     ],
   },
@@ -16282,8 +16513,16 @@ const GUIDES = [
         html: `<p>If a meaningful interval elapses between the index test and the reference standard, the underlying disease status can change in that window (either resolving or progressing), which introduces a mismatch unrelated to either test's actual accuracy. Similarly, if different subgroups of participants followed different diagnostic pathways &mdash; some receiving the reference standard immediately, others only after an ambiguous index test result &mdash; that differential flow can distort the final accuracy figures independent of anything about the tests themselves.</p>`,
       },
       {
+        heading: 'How the results are reported: a single sensitivity/specificity pair, or likelihood ratios across the range',
+        html: `<p>Sensitivity and specificity describe test performance at a single, fixed positive/negative cutoff &mdash; but many tests produce an ordinal or continuous result (an imaging finding graded on a scale, a biomarker level), where collapsing every possible result into one binary cutpoint throws away information. A more informative report gives a likelihood ratio for each distinct result stratum (for example, one LR for a strongly positive result and a separate, larger LR for a borderline one), letting a reader shift their estimate of disease probability by different amounts depending on exactly how positive or negative the result actually was. A study that only reports one sensitivity/specificity pair for a test that naturally produces a graded result is presenting a simplified, and potentially less useful, picture of what that test result actually tells you in a specific patient.</p>`,
+      },
+      {
         heading: 'A structured tool: QUADAS-2',
         html: `<p>QUADAS-2 (Quality Assessment of Diagnostic Accuracy Studies 2) is the standard tool for structuring this appraisal, organized around four domains: patient selection, the index test, the reference standard, and flow and timing &mdash; each rated for risk of bias and, separately, for applicability to the review question at hand. The applicability ratings are worth noting specifically, since a diagnostic study can be low-risk-of-bias by QUADAS-2's bias criteria while still being a poor match for the population or setting a reader actually cares about.</p>`,
+      },
+      {
+        heading: 'Reproducibility: will this test result mean the same thing in your own setting',
+        html: `<p>A test's reported accuracy assumes its result can be produced and interpreted consistently, which is not guaranteed to travel from the study setting to any other. Tests that depend on subjective interpretation &mdash; imaging read by a radiologist, a clinical sign elicited on physical exam &mdash; can show meaningfully different inter-observer agreement between a study's specialized, high-volume readers and the readers or equipment available in a different practice setting. Worth checking specifically: whether the study reports an inter-rater or inter-observer agreement statistic (such as kappa) for the index test itself, and, separately, whether the equipment, assay, or level of reader expertise used in the study resembles what is actually available where the test would be applied &mdash; a highly accurate test in expert hands is not the same claim as an accurate test in general practice.</p>`,
       },
       {
         heading: 'What this design can — and cannot — tell you',
@@ -16340,6 +16579,105 @@ const GUIDES = [
   },
 
   {
+    id: 'appraisal-appraising-prognostic-studies',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Prognostic Studies',
+    blurb: 'A prognostic study asks what happens next, not whether a treatment works — which shifts the appraisal questions toward how the cohort was assembled and how honestly its follow-up data were handled.',
+    dek: `A prognostic study estimates the likely future course of a disease or condition in patients who already have it, rather than testing an intervention. Appraising one turns on whether the patients studied represent a fair, consistently defined starting point, and whether the reported likelihoods and their precision can actually be trusted.`,
+    sections: [
+      {
+        heading: 'Was an inception cohort assembled at a consistent point in the disease course',
+        html: `<p>A prognostic study's cohort should be assembled at a uniform, well-defined point early in the course of the condition being studied &mdash; an "inception cohort" &mdash; rather than mixing patients enrolled at different stages of disease, or preferentially including patients who have already survived long enough to be identified and recruited (a form of survivorship bias, sometimes called length-time bias when disease severity also affects how early it tends to be detected). Worth checking: was the starting point for follow-up (diagnosis, symptom onset, a specific treatment decision) the same for every patient, and were patients with unusually severe or unusually mild disease at that point systematically over- or under-represented relative to who would typically present at that stage?</p>`,
+      },
+      {
+        heading: 'Were patients sufficiently homogeneous with respect to prognostic risk, or was risk stratified',
+        html: `<p>Prognosis rarely depends only on having the condition &mdash; it varies with disease severity, comorbidities, age, and other factors known to affect outcome, and a cohort that pools patients across a wide range of these factors without stratifying the reported results can produce a single average prognosis that describes almost no individual patient well. A well-conducted prognostic study either enrolls a reasonably homogeneous population for the question being asked, or explicitly stratifies its results by the major known prognostic factors, so a reader can locate a specific patient's likely course rather than being handed one number that blends a wide range of true risk.</p>`,
+      },
+      {
+        heading: 'Was follow-up sufficiently complete',
+        html: `<p>Patients lost to follow-up are not lost at random with respect to prognosis &mdash; those who feel worse may seek care elsewhere and drop out, while those who feel well may lose interest in continued participation, and either pattern can bias the reported likelihood of the outcome in either direction. Worth checking: what fraction of the original cohort was accounted for at the end of the reported follow-up period, whether that fraction is similar across prognostic subgroups, and whether the study describes what is known, if anything, about the patients who were lost.</p>`,
+      },
+      {
+        heading: 'Were outcome criteria objective and assessed without knowledge of prognostic status',
+        html: `<p>Outcomes that require judgment &mdash; cause of death, symptom severity, a subjective global assessment &mdash; are vulnerable to bias if the person recording the outcome already knows a given patient's prognostic risk factors, since that knowledge can subtly influence borderline calls. The strongest prognostic studies use outcome criteria objective enough to leave little room for interpretation (all-cause mortality, for instance), or have outcomes adjudicated by assessors blinded to the prognostic factors under study &mdash; the same objectivity check that applies to blinding an RCT's outcome assessors applies here as well.</p>`,
+      },
+      {
+        heading: 'Reporting the results: survival curves and how precise they actually are',
+        html: `<p>Prognostic results are usually presented as the likelihood of an outcome over time &mdash; a survival or event-free curve &mdash; rather than a single point estimate, and precision should be reported at the specific time points that matter clinically (1-year survival, 5-year recurrence-free survival), not only as an average across the full follow-up period. Precision is worth scrutinizing specifically at the later portions of the curve: as fewer patients remain at risk further out in follow-up, the confidence interval around the curve widens substantially, and a curve reported without confidence bands or a risk table showing the number still at risk at each time point can make a late-follow-up estimate look more solid than the underlying data actually support.</p>`,
+      },
+      {
+        heading: 'A structured tool: QUIPS',
+        html: `<p>QUIPS (Quality In Prognosis Studies) is the standard tool for structuring this appraisal, organized around six domains: study participation, study attrition, prognostic factor measurement, outcome measurement, adjustment for confounding, and statistical analysis and reporting. Like QUADAS-2 for diagnostic studies, it separates several distinct sources of potential bias that are easy to blur together into a single vague "quality" judgment, and rates each domain independently.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted prognostic study can tell you the likely course of a condition, and how that course varies with identifiable risk factors, for patients who resemble the cohort studied. It cannot, on its own, tell you whether intervening on that factor changes the outcome &mdash; a prognostic factor is not automatically a target that, if modified, improves outcomes, and testing that requires a separate interventional study. Conflating "this factor predicts a worse outcome" with "treating this factor will improve the outcome" is one of the most common misreadings of prognostic literature.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before trusting a reported prognosis, check the risk table beneath the survival curve (or ask what fraction of the original cohort was still being followed) at the specific time point you actually care about &mdash; a curve that looks smooth and confident at 10 years can be resting on a small fraction of the original cohort still under observation that far out.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-survival-basics', why: 'Covers the statistical machinery — censoring, hazard ratios, proportional hazards — behind the survival curves this guide discusses appraising.' },
+      { id: 'appraisal-appraising-cohort', why: 'Prognostic studies are a specific application of the cohort design, and most of its appraisal concerns — attrition, confounding — carry over directly.' },
+      { id: 'appraisal-study-design', why: 'Places prognostic studies within the broader design landscape.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-guidelines',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Clinical Practice Guidelines',
+    blurb: 'A guideline is a step removed from any single study — appraising one means checking not the evidence itself, but whether the group that weighed it did so completely and transparently.',
+    dek: `A clinical practice guideline translates a body of evidence into an actionable recommendation, which adds an entire layer of appraisal beyond the studies it draws on: whether the full range of patients, options, and outcomes were considered, whether the evidence behind it was assembled systematically, and whether the strength of each recommendation was graded honestly.`,
+    sections: [
+      {
+        heading: 'Did it consider the full range of relevant patient groups',
+        html: `<p>A recommendation that works for a low-risk, otherwise-healthy patient does not automatically transfer to a high-risk patient or one more susceptible to the treatment's adverse effects, and a rigorous guideline says so explicitly rather than issuing one blanket recommendation across every patient who technically meets the diagnostic label. Worth checking: does the guideline distinguish its recommendation, or its strength, across clinically meaningful subgroups &mdash; low- versus high-risk, and patients more versus less vulnerable to the intervention's harms &mdash; or does it treat every patient with the diagnosis as an interchangeable case?</p>`,
+      },
+      {
+        heading: 'Did it consider all reasonable management options, including no treatment',
+        html: `<p>A guideline that compares only two active treatments, without considering a no-treatment or watchful-waiting option, or that omits an alternative modality (medical versus surgical management, for instance) entirely, has implicitly narrowed the question before a reader ever sees a recommendation. The no-treatment option deserves particular attention: for conditions with a favorable natural history without intervention, a guideline that never explicitly weighs "treat" against "do not treat" is not answering the full clinical question a patient actually faces.</p>`,
+      },
+      {
+        heading: 'Did it consider all patient-important outcomes, not only the ones easiest to measure',
+        html: `<p>A recommendation built around a single outcome &mdash; often the one most convenient to measure, like a laboratory value or a short-term surrogate &mdash; can look strong while ignoring outcomes patients actually care about: morbidity and mortality, quality of life, toxicity and adverse effects, the inconvenience and psychological burden of the treatment itself, and its cost to the patient or to the health system. A guideline that explicitly weighs benefit against this fuller set of downsides gives a reader a genuine risk-benefit picture; one that reports only efficacy on a favorable primary endpoint may be presenting a narrower case for its recommendation than the full evidence actually supports.</p>`,
+      },
+      {
+        heading: 'Is the recommendation grounded in a systematic review of the evidence',
+        html: `<p>A guideline's recommendation is only as trustworthy as the evidence-gathering process behind it, and the strongest guidelines are built on a systematic review (see the companion guide on appraising systematic reviews) estimating the relative effect of each management option on each important outcome, rather than a narrative summary curated by the writing panel's own sense of the literature. A guideline that cites a systematic review supporting its central recommendations is on considerably firmer ground than one that cites a scattered selection of individual studies chosen without a described, reproducible search process.</p>`,
+      },
+      {
+        heading: 'Were patient values and preferences explicitly incorporated',
+        html: `<p>Even a well-established estimate of benefits and harms still requires a value judgment about how those benefits and harms should be weighed against each other, and that weighing is not a purely statistical question &mdash; it depends on how much a specific outcome matters to the patients affected. A rigorous guideline states explicitly what values and preferences it assumed (for example, how heavily it weighted avoiding a rare but serious harm against a more common but modest benefit) rather than presenting its recommendation as though it followed automatically and value-neutrally from the data.</p>`,
+      },
+      {
+        heading: 'Is the strength of each recommendation graded, and separately from the certainty of the evidence behind it',
+        html: `<p>Recommendation strength (how confidently a clinician should follow the recommendation) and evidence certainty (how much confidence to place in the underlying data) are two separate axes that are easy to collapse into one, but a strong recommendation can rest on evidence of only moderate certainty if the trade-off between benefit and harm is lopsided enough, while a weak recommendation can exist even for high-certainty evidence if the benefits and harms are closely balanced. GRADE is the most widely used framework for making this distinction explicit &mdash; see the companion guide for how it derives one from the other &mdash; typically labeling recommendations as "strong" or "weak/conditional" separately from labeling the evidence's certainty. A guideline that reports only one of these two dimensions is giving a reader half the information needed to decide how much to defer to it.</p>`,
+      },
+      {
+        heading: 'A structured tool: AGREE II',
+        html: `<p>AGREE II (Appraisal of Guidelines for Research and Evaluation II) is the standard tool for appraising a guideline's overall development process, covering six domains: scope and purpose, stakeholder involvement, rigor of development, clarity of presentation, applicability, and editorial independence &mdash; the last of which includes whether panel members' financial conflicts of interest were disclosed and managed, a particularly important check for guidelines on any topic with active industry involvement.</p>`,
+      },
+      {
+        heading: 'What this document can — and cannot — tell you',
+        html: `<p>A well-developed guideline can translate a body of evidence into a usable recommendation, saving a clinician from having to independently appraise and synthesize the entire underlying literature at every patient encounter. It cannot substitute for individual clinical judgment about a specific patient who may fall outside the population the guideline considered, and a recommendation's grade (strong versus weak) is itself a signal of how much room there is for that judgment to reasonably override the general recommendation.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Look first at how a recommendation is graded &mdash; a "weak" or "conditional" recommendation is an explicit invitation to weigh the specific patient's values and circumstances rather than default to the general recommendation, while a "strong" recommendation signals the panel judged that further individual weighing would rarely change the decision.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-systematic-reviews', why: 'The evidence-synthesis layer a rigorous guideline should be built on.' },
+      { id: 'appraisal-grade', why: 'Full explanation of the certainty-vs-strength distinction this guide\'s GRADE section introduces.' },
+      { id: 'appraisal-clinical-significance', why: 'Covers the distinction between a statistically significant finding and one large enough to matter — the same distinction a guideline panel has to make when weighing benefit against harm.' },
+      { id: 'appraisal-study-design', why: 'Places guidelines within the broader landscape of evidence types this site covers.' },
+    ],
+  },
+
+  {
     id: 'reference-glossary-abbreviations',
     category: 'Reference',
     title: 'Glossary of Statistical Abbreviations and Symbols',
@@ -16380,7 +16718,7 @@ const GUIDES = [
       },
       {
         heading: 'Study Design & Reporting Checklists',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>RCT</td><td>Randomized Controlled Trial</td><td style="text-align:left;">A study in which participants are randomly assigned to intervention or control groups.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>ITT / PP</td><td>Intention-to-Treat / Per-Protocol (analysis)</td><td style="text-align:left;">ITT analyzes participants by their assigned group regardless of adherence; PP restricts analysis to those who adhered to the assigned protocol.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>CONSORT</td><td>Consolidated Standards of Reporting Trials</td><td style="text-align:left;">The standard reporting guideline for randomized trials, including the participant flow diagram.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>STROBE</td><td>Strengthening the Reporting of Observational Studies in Epidemiology</td><td style="text-align:left;">The standard reporting guideline for cohort, case-control, and cross-sectional studies.</td><td style="text-align:left;">Appraising Cohort and Case-Control Studies (Learn guide)</td></tr><tr><td>PRISMA</td><td>Preferred Reporting Items for Systematic Reviews and Meta-Analyses</td><td style="text-align:left;">The standard reporting guideline for systematic reviews, including the study-selection flow diagram.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>PRISMA-ScR</td><td>PRISMA extension for Scoping Reviews</td><td style="text-align:left;">Adapts PRISMA's reporting items to a scoping review's different purpose &mdash; mapping evidence rather than pooling it.</td><td style="text-align:left;">Appraising Scoping Reviews (Learn guide)</td></tr><tr><td>RoB 2</td><td>Risk of Bias 2</td><td style="text-align:left;">The standard tool for assessing risk of bias in randomized trials, across five domains.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>ROBINS-I</td><td>Risk Of Bias In Non-randomized Studies of Interventions</td><td style="text-align:left;">The analogous risk-of-bias tool for non-randomized studies, which additionally assesses confounding and selection into the study.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>QUADAS-2</td><td>Quality Assessment of Diagnostic Accuracy Studies 2</td><td style="text-align:left;">The standard risk-of-bias and applicability tool for diagnostic accuracy studies, across four domains.</td><td style="text-align:left;">Appraising Diagnostic Accuracy Studies (Learn guide)</td></tr><tr><td>GRADE</td><td>Grading of Recommendations Assessment, Development and Evaluation</td><td style="text-align:left;">A widely used framework for rating the overall certainty of a body of evidence, commonly used in systematic reviews and clinical guidelines.</td><td style="text-align:left;">&mdash;</td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>RCT</td><td>Randomized Controlled Trial</td><td style="text-align:left;">A study in which participants are randomly assigned to intervention or control groups.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>ITT / PP</td><td>Intention-to-Treat / Per-Protocol (analysis)</td><td style="text-align:left;">ITT analyzes participants by their assigned group regardless of adherence; PP restricts analysis to those who adhered to the assigned protocol.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>CONSORT</td><td>Consolidated Standards of Reporting Trials</td><td style="text-align:left;">The standard reporting guideline for randomized trials, including the participant flow diagram.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>STROBE</td><td>Strengthening the Reporting of Observational Studies in Epidemiology</td><td style="text-align:left;">The standard reporting guideline for cohort, case-control, and cross-sectional studies.</td><td style="text-align:left;">Appraising Cohort Studies; Appraising Case-Control Studies; Appraising Cross-Sectional Studies (Learn guides)</td></tr><tr><td>NOS</td><td>Newcastle-Ottawa Scale</td><td style="text-align:left;">The standard star-based risk-of-bias tool for cohort and case-control studies, across three domains.</td><td style="text-align:left;">Appraising Cohort Studies; Appraising Case-Control Studies (Learn guides)</td></tr><tr><td>AXIS</td><td>Appraisal tool for Cross-Sectional Studies</td><td style="text-align:left;">The standard risk-of-bias tool for cross-sectional studies, covering sampling, response rate, measurement, and analysis.</td><td style="text-align:left;">Appraising Cross-Sectional Studies (Learn guide)</td></tr><tr><td>QUIPS</td><td>Quality In Prognosis Studies</td><td style="text-align:left;">The standard risk-of-bias tool for prognostic factor studies, across six domains.</td><td style="text-align:left;">Appraising Prognostic Studies (Learn guide)</td></tr><tr><td>PRISMA</td><td>Preferred Reporting Items for Systematic Reviews and Meta-Analyses</td><td style="text-align:left;">The standard reporting guideline for systematic reviews, including the study-selection flow diagram.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>PRISMA-ScR</td><td>PRISMA extension for Scoping Reviews</td><td style="text-align:left;">Adapts PRISMA's reporting items to a scoping review's different purpose &mdash; mapping evidence rather than pooling it.</td><td style="text-align:left;">Appraising Scoping Reviews (Learn guide)</td></tr><tr><td>RoB 2</td><td>Risk of Bias 2</td><td style="text-align:left;">The standard tool for assessing risk of bias in randomized trials, across five domains.</td><td style="text-align:left;">Appraising Randomized Controlled Trials (Learn guide)</td></tr><tr><td>ROBINS-I</td><td>Risk Of Bias In Non-randomized Studies of Interventions</td><td style="text-align:left;">The analogous risk-of-bias tool for non-randomized studies, which additionally assesses confounding and selection into the study.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>AMSTAR-2</td><td>A MeaSurement Tool to Assess systematic Reviews 2</td><td style="text-align:left;">Appraises a systematic review's own conduct — distinct from PRISMA's focus on whether the review reported itself completely.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>ROBIS</td><td>Risk Of Bias In Systematic reviews</td><td style="text-align:left;">Assesses risk of bias in a systematic review's own conclusions — distinct from AMSTAR-2's focus on overall methodological conduct.</td><td style="text-align:left;">Appraising Systematic Reviews and Meta-Analyses (Learn guide)</td></tr><tr><td>JBI</td><td>Joanna Briggs Institute Critical Appraisal Tools</td><td style="text-align:left;">A parallel family of design-specific checklists (RCTs, cohort, case-control, diagnostic accuracy, systematic reviews, and more), asking largely the same questions as the tools above in a different packaging.</td><td style="text-align:left;">Reporting Guideline, Risk-of-Bias Tool, or Certainty Framework? (Learn guide)</td></tr><tr><td>QUADAS-2</td><td>Quality Assessment of Diagnostic Accuracy Studies 2</td><td style="text-align:left;">The standard risk-of-bias and applicability tool for diagnostic accuracy studies, across four domains.</td><td style="text-align:left;">Appraising Diagnostic Accuracy Studies (Learn guide)</td></tr><tr><td>GRADE</td><td>Grading of Recommendations Assessment, Development and Evaluation</td><td style="text-align:left;">A widely used framework for rating the overall certainty of a body of evidence, commonly used in systematic reviews and clinical guidelines.</td><td style="text-align:left;">Understanding GRADE (Learn guide)</td></tr><tr><td>AGREE II</td><td>Appraisal of Guidelines for Research and Evaluation II</td><td style="text-align:left;">The standard tool for appraising a clinical practice guideline's development process, across six domains.</td><td style="text-align:left;">Appraising Clinical Practice Guidelines (Learn guide)</td></tr></tbody></table></div>`,
       },
     ],
     related: [
@@ -16402,9 +16740,9 @@ const GUIDES = [
         heading: 'Which worksheet for which article',
         html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Question Type</th><th>Use It For</th><th>Download</th></tr></thead><tbody>
 <tr><td>Diagnosis</td><td>An article evaluating how well a diagnostic test performs against a reference standard. See also <a href="#learn/appraisal-appraising-diagnostic-studies">Appraising Diagnostic Accuracy Studies</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-diagnosis.docx" download>critical-appraisal-diagnosis.docx</a></td></tr>
-<tr><td>Etiology</td><td>A cohort or case-control study estimating whether an exposure causes or is associated with an outcome. See also <a href="#learn/appraisal-appraising-observational">Appraising Cohort and Case-Control Studies</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-etiology.docx" download>critical-appraisal-etiology.docx</a></td></tr>
-<tr><td>Guidelines (treatment recommendations)</td><td>A practice guideline or treatment recommendation, rather than a single primary study.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-guidelines.docx" download>critical-appraisal-guidelines.docx</a></td></tr>
-<tr><td>Prognosis</td><td>An article estimating the likely course of a disease or condition over time in a defined group of patients.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-prognosis.docx" download>critical-appraisal-prognosis.docx</a></td></tr>
+<tr><td>Etiology</td><td>A cohort or case-control study estimating whether an exposure causes or is associated with an outcome. See also <a href="#learn/appraisal-appraising-cohort">Appraising Cohort Studies</a> and <a href="#learn/appraisal-appraising-case-control">Appraising Case-Control Studies</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-etiology.docx" download>critical-appraisal-etiology.docx</a></td></tr>
+<tr><td>Guidelines (treatment recommendations)</td><td>A practice guideline or treatment recommendation, rather than a single primary study. See also <a href="#learn/appraisal-appraising-guidelines">Appraising Clinical Practice Guidelines</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-guidelines.docx" download>critical-appraisal-guidelines.docx</a></td></tr>
+<tr><td>Prognosis</td><td>An article estimating the likely course of a disease or condition over time in a defined group of patients. See also <a href="#learn/appraisal-appraising-prognostic-studies">Appraising Prognostic Studies</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-prognosis.docx" download>critical-appraisal-prognosis.docx</a></td></tr>
 <tr><td>Systematic reviews</td><td>A systematic review or meta-analysis pooling results across multiple studies. See also <a href="#learn/appraisal-appraising-systematic-reviews">Appraising Systematic Reviews and Meta-Analyses</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-systematic-reviews.docx" download>critical-appraisal-systematic-reviews.docx</a></td></tr>
 <tr><td>Therapy</td><td>An article testing whether a treatment or intervention works &mdash; typically a randomized trial. See also <a href="#learn/appraisal-appraising-rcts">Appraising Randomized Controlled Trials</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-therapy.docx" download>critical-appraisal-therapy.docx</a></td></tr>
 </tbody></table></div>`,

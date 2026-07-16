@@ -309,6 +309,26 @@ body {
 
 .nav-item.active .nav-item-name { color: #FFFFFF; }
 
+.nav-item-badge {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  color: var(--accent);
+  background: rgba(78, 110, 219, .14);
+}
+
+.nav-item.active .nav-item-badge {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, .18);
+}
+
 .nav-item-hint {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -671,6 +691,16 @@ body {
   margin-bottom: 8px;
 }
 
+/* Neutral/outlined variant — distinguishes a calculator card from a
+   Learn Guide card (solid accent badge) in a guide's "Related" list,
+   without reusing --amber, which already means "highlighted result"
+   in the results table. */
+.wizard-result-badge.calc {
+  color: var(--text-3);
+  background: transparent;
+  border: 1.5px solid var(--border);
+}
+
 .wizard-result-name {
   font-family: var(--font-display);
   font-size: 16px;
@@ -1030,6 +1060,17 @@ body {
   line-height: 1.72;
   max-width: 640px;
   margin-bottom: 14px;
+}
+
+.guide-body a,
+.guide-body a:visited {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.guide-body a:hover {
+  border-bottom-color: var(--accent);
 }
 
 .example-summary {
