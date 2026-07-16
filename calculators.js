@@ -6777,6 +6777,8 @@ const CALCULATORS = [
         { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false },
         { label: 'Interpretation (Koo & Li, 2016)', isText: true, ci: null, isRatio: false,
           value: `${reliability[0].toUpperCase()}${reliability.slice(1)} reliability (ICC = ${f(ICC)}).` },
+        { label: 'If Deciding on Multilevel Modeling', isText: true, ci: null, isRatio: false,
+          value: `The same number answers a different question if you relabel "subjects" above as your clusters (e.g., hospitals, classrooms) and "raters/occasions" as observations within each cluster: an ICC above roughly 0.05&ndash;0.10 means enough outcome variance sits between clusters that treating every observation as independent will understate your uncertainty &mdash; multilevel/mixed-effects modeling (or at least cluster-robust standard errors) is worth using instead of a standard test.` },
       ];
     }
   },
@@ -13292,6 +13294,33 @@ const WIZARD_TREE = {
       { label: 'Update a probability with new evidence (Bayesian)',                  next: 'bayesGoal' },
       { label: 'Pool results across multiple studies (meta-analysis)',               next: 'metaResult' },
       { label: 'Check how fragile a significant trial result is',                    next: 'fragilityResult' },
+      { label: 'Decide whether I need multilevel/hierarchical modeling',             next: 'multilevelGoal' },
+    ]
+  },
+
+  // ── MULTILEVEL / HIERARCHICAL MODELING DECISION ─────────────────────
+  multilevelGoal: {
+    question: 'Do your observations naturally group into clusters, or include repeated measurements within the same subject (e.g., patients within hospitals, students within classrooms, multiple visits per patient)?',
+    options: [
+      { label: "No — each observation is independent", next: 'compareGoal' },
+      { label: 'Yes — there is a grouping or clustering structure', next: 'multilevelClusterSize' },
+    ]
+  },
+  multilevelClusterSize: {
+    question: 'Roughly how many groups/clusters do you have?',
+    options: [
+      { label: 'Fewer than about 10 clusters',    next: 'multilevelFewClustersResult' },
+      { label: 'About 10 or more clusters',       next: 'multilevelManyClustersResult' },
+    ]
+  },
+  multilevelFewClustersResult: {
+    results: [
+      { id: 'icc', why: 'With this few clusters, a full multilevel model can give unstable estimates of between-cluster variance — many methodologists suggest at least ~10 clusters before trusting one. Compute the ICC here first to see how much clustering actually exists; with few clusters, a fixed-effects-with-cluster-dummies approach or cluster-robust standard errors is often more practical than a full mixed-effects model.' },
+    ]
+  },
+  multilevelManyClustersResult: {
+    results: [
+      { id: 'icc', why: 'Compute the ICC for your grouping variable here. As a rule of thumb, an ICC above roughly 0.05–0.10 means enough outcome variance sits between clusters that a standard (non-clustered) test will understate your uncertainty — multilevel/mixed-effects modeling (or at least cluster-robust standard errors) is worth using instead of treating every observation as independent.' },
     ]
   },
 
