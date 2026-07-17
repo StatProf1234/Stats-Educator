@@ -15690,6 +15690,7 @@ const GUIDES = [
       { id: 'critical-value-z', why: 'Same idea for the z-distribution, used with large samples or known population variance.' },
       { id: 'binomial-hyp-test', why: 'Worked example of a p-value calculation against a binomial null hypothesis.' },
       { id: 'appraisal-tails-and-multiplicity', why: 'Extends this guide\'s multiple-comparisons example into the formal family-wise error rate, and covers one-tailed vs. two-tailed testing.' },
+      { id: 'appraisal-frequentist-bayesian', why: 'Generalizes this guide\'s P(data|null) vs. P(null|data) distinction into the full frequentist-vs-Bayesian divide.' },
     ],
   },
 
@@ -15727,6 +15728,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'appraisal-p-values', why: 'Covers the multiplicity worked example (20 comparisons, ~64% chance of a false positive) that this guide\'s family-wise error rate section builds on.' },
+      { id: 'appraisal-frequentist-bayesian', why: 'Covers the Bayesian adaptive-design alternative to the alpha-spending approach described here for repeated interim looks.' },
       { id: 'appraisal-subgroup-interaction', why: 'Applies the same multiplicity problem specifically to subgroup analyses, with the ISIS-2 astrological-sign example.' },
       { id: 'holm-sidak-test', why: 'Computes the step-down Holm-Šídák correction described here directly.' },
     ],
@@ -15790,6 +15792,52 @@ const GUIDES = [
       { id: 'bayesian-cri', why: 'Computes a Bayesian credible interval directly, so you can compare it against a frequentist CI on the same data.' },
       { id: 'single-sample-ci', why: 'The confidence interval this guide contrasts against the credible interval.' },
       { id: 'meta-analysis', why: 'Produces both a confidence interval and a prediction interval for a pooled effect — see How to Read a Forest Plot for how to tell them apart visually.' },
+      { id: 'appraisal-frequentist-bayesian', why: 'Widens the CI-vs-CrI distinction here into the full frequentist-vs-Bayesian divide, and why it matters for clinical decisions.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-frequentist-bayesian',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Frequentist vs. Bayesian Reasoning: Two Ways to Read the Same Evidence',
+    blurb: 'A p-value and a Bayesian posterior can be computed from the exact same data and still answer two genuinely different questions — and clinicians already reason the Bayesian way every time they combine a test result with how likely a diagnosis was beforehand.',
+    dek: `Frequentist and Bayesian statistics are often taught as competing camps, but the more useful frame is that they answer different questions from the same evidence, each with a specific place where it is the wrong tool for what a reader actually wants to know. This guide lays out what separates them, where the divide changes real clinical decisions, and what each approach can and cannot settle for you.`,
+    sections: [
+      {
+        heading: 'Two different questions about the same data',
+        html: `<p>Bayes' theorem states the structure of the disagreement directly: P(model | data) = P(data | model) &times; P(model) / P(data). A p-value, and the sampling logic behind a frequentist confidence interval, only ever answers the mirror-image question on the right-hand side &mdash; P(data | model), or more precisely, how likely is data this extreme or more extreme, if a specific null model were true (the same P(data | null hypothesis) framing covered in the companion guide on p-values, now named as one instance of a more general divide). But the question a clinician or reader actually wants answered is the reverse: given what was just observed, how likely is it that this treatment really works &mdash; P(model | data). Frequentist inference cannot get there without an extra assumption, because the only way to flip P(data | model) into P(model | data) is Bayes' theorem itself, and that requires the one ingredient &mdash; P(model), the prior probability of the model before seeing any data &mdash; that frequentist inference is built specifically to avoid ever having to specify. That is not a minor technical omission; it is the structural reason the two paradigms produce differently shaped answers to what feels, on the surface, like the same question.</p>`,
+      },
+      {
+        heading: 'You are already reasoning like a Bayesian at the bedside',
+        html: `<p>Diagnostic reasoning is the one place this divide gets resolved in routine clinical practice, and it happens so automatically that it rarely gets labeled as Bayesian at all. A test's sensitivity and specificity describe P(test result | disease status) &mdash; the data-given-model direction, exactly the kind of quantity a frequentist analysis is built to produce. But no clinician stops there: a positive result on a highly sensitive and specific test still means very little in a patient with no risk factors and no clinical suspicion for the disease, and a great deal in a patient where the disease was already likely. Getting from "how good is this test" to "how likely is this patient's diagnosis" requires folding in a prior &mdash; the pretest probability, taken from disease prevalence or clinical judgment &mdash; via the same Bayes' theorem calculation from the previous section, arriving at P(disease | test result). Every posttest-probability calculation on this site is a P(model | data) answer, built from P(data | model) inputs (sensitivity, specificity) plus an explicit prior. Clinicians would never accept "the sensitivity was 95%" alone as an answer to "does this patient have the disease" &mdash; yet a p-value alone, with no equivalent prior folded in, is routinely accepted as settling whether a treatment works.</p>`,
+      },
+      {
+        heading: 'Why the prior is the real crux of the disagreement, not a loophole',
+        html: `<p>A Bayesian analysis requires specifying a prior probability before seeing the data, and the standard criticism is that this makes the result subjective: a different investigator, a different prior, a different posterior from the same data. Two things are worth weighing against that criticism rather than treating it as fatal. First, with enough data, the likelihood increasingly dominates the posterior regardless of a reasonable starting prior, so two analysts with different but plausible priors tend to converge as evidence accumulates. Second, a prior is not required to be a guess: it can be built directly from prior trials, meta-analytic evidence, or a formally elicited range of expert opinion, making it a structured way to use everything already known about a question, rather than pretending each new trial is the only evidence that has ever existed &mdash; which is effectively what happens when a frequentist analysis treats every study as its own isolated universe. The trade-off runs the other way too: frequentist inference sidesteps ever having to defend a prior, at the real cost of being unable to directly answer the question &mdash; P(model | data) &mdash; that prompted the study in the first place.</p>`,
+      },
+      {
+        heading: 'Credible interval vs. confidence interval, revisited',
+        html: `<p>This same divide is why a 95% credible interval and a 95% confidence interval, despite looking identical on a page, support different sentences. A credible interval is a direct output of P(model | data), so "there is a 95% probability the true value lies in this range" is a legitimate statement &mdash; conditional on the prior used to get there. A confidence interval is built from the sampling behavior of the estimation method under repeated hypothetical sampling &mdash; a P(data | model)-flavored guarantee &mdash; so the same sentence is not licensed by a CI: it describes how often the method would capture the true value across repeated studies, not a probability statement about this specific interval. See the companion guide on confidence, credible, and prediction intervals for the fuller version of this distinction.</p>`,
+      },
+      {
+        heading: 'Where this actually changes practice: adaptive and sequential trial designs',
+        html: `<p>A fixed-design frequentist trial that wants to check its results early, before full enrollment completes, runs into the same multiplicity problem covered in the companion guide on multiple comparisons: each additional interim look is another opportunity for a false positive, and controlling the overall false-positive rate across several looks requires a pre-specified alpha-spending plan that spends only a small fraction of the total error budget at each interim analysis. A Bayesian adaptive design solves the same practical problem differently: at each interim look, it updates the posterior probability that the treatment is superior (or futile) given all data collected so far, and stops the trial once that posterior crosses a pre-specified threshold &mdash; a direct P(model | data) statement at every look, rather than a repeatedly-corrected P(data | model) one. This is not a hypothetical alternative; Bayesian adaptive elements have been used in large modern platform trials, including several run during the COVID-19 pandemic, specifically because they can stop for early evidence of benefit or harm without the same repeated-testing penalty a fixed frequentist design would otherwise incur.</p>`,
+      },
+      {
+        heading: 'What each approach can — and cannot — settle for you',
+        html: `<p>A frequentist analysis gives a well-calibrated long-run error rate without requiring anyone to defend a prior, but it answers P(data | model) and largely interprets each study on its own, leaving it to the reader to decide how to combine it with everything else already known. A Bayesian analysis directly answers the P(model | data) question a reader actually wants, and naturally accumulates evidence across studies through successive updating &mdash; but that answer is only as trustworthy as the prior feeding it, and a prior chosen to flatter a preferred conclusion can manufacture a favorable-looking posterior exactly as easily as selective analysis choices can manufacture a favorable p-value.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports a Bayesian analysis, check specifically how the prior was chosen and whether the result was tested again under a more skeptical prior &mdash; a posterior that only looks convincing under one favorable prior is telling you something different than one that survives a skeptical check. When a paper reports a frequentist trial with interim analyses, check whether an alpha-spending plan was pre-specified, for exactly the same reason multiplicity correction matters everywhere else on this site: repeated looks at accumulating data are a repeated-testing problem no matter which paradigm is used to analyze them.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-p-values', why: 'Covers the P(data|null) vs. P(null|data) distinction this guide generalizes into the full frequentist-vs-Bayesian divide.' },
+      { id: 'appraisal-diagnostic-tests-prevalence', why: 'Covers the pretest/posttest probability calculation this guide frames as everyday Bayesian reasoning.' },
+      { id: 'appraisal-tails-and-multiplicity', why: 'Covers the family-wise error rate and alpha-spending logic behind the frequentist side of adaptive-trial monitoring.' },
+      { id: 'bayesian-cri', why: 'Produces the credible interval discussed in this guide\'s comparison with confidence intervals.' },
+      { id: 'bayes-theorem', why: 'Computes the P(model|data) update directly, given a prior and new evidence — the calculation behind this guide\'s core argument.' },
     ],
   },
 
@@ -15998,6 +16046,7 @@ const GUIDES = [
       { id: 'post-test-probability', why: 'Applies a likelihood ratio to a pretest probability to get the posttest probability, as worked through in this guide.' },
       { id: 'ppv-npv-vs-prevalence', why: 'Shows PPV and NPV shifting across a range of prevalence values, exactly as in the worked example above.' },
       { id: 'roc-auc', why: 'Extends the same sensitivity/specificity logic across every possible cutoff of a continuous test.' },
+      { id: 'appraisal-frequentist-bayesian', why: 'Frames the pretest-to-posttest Bayes\' theorem calculation above as an everyday instance of the broader frequentist-vs-Bayesian divide.' },
     ],
   },
 
