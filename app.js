@@ -36,6 +36,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Mobile nav toggle — below 640px the sidebar collapses to just the
+  // brand row + this button (see style.css's .sidebar-collapsible
+  // rules); this just flips the class the CSS is keyed on, updates
+  // aria-expanded, and swaps the hamburger/close icon. Harmless no-op
+  // above that breakpoint, since the media query it depends on never
+  // applies there.
+  const sidebarEl = document.getElementById('sidebar');
+  const sidebarToggleEl = document.getElementById('sidebar-toggle');
+  const sidebarToggleIconEl = sidebarToggleEl.querySelector('.sidebar-toggle-icon');
+
+  const setSidebarOpen = open => {
+    sidebarEl.classList.toggle('open', open);
+    sidebarToggleEl.setAttribute('aria-expanded', String(open));
+    sidebarToggleIconEl.textContent = open ? '✕' : '☰';
+  };
+
+  sidebarToggleEl.addEventListener('click', () => {
+    setSidebarOpen(!sidebarEl.classList.contains('open'));
+  });
+
+  // Auto-close after picking a destination, so the user isn't left
+  // scrolling past a still-open menu to see what they just navigated to.
+  document.getElementById('sidebar-collapsible').addEventListener('click', e => {
+    if (e.target.closest('a')) setSidebarOpen(false);
+  });
+
   // Chart export (PNG/JPG) — a single delegated listener attached
   // once here, rather than one per button, since showResults()
   // rebuilds the results DOM (and every button in it) from scratch

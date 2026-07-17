@@ -69,14 +69,46 @@ body {
   overflow-x: hidden;
 }
 
-.sidebar-brand {
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 28px 22px 22px;
   border-bottom: 1px solid var(--sidebar-border);
+}
+
+.sidebar-brand {
   text-decoration: none;
   display: block;
   cursor: pointer;
 }
 .sidebar-brand:hover .brand-name { color: #FFFFFF; }
+
+/* Hidden on desktop — only meaningful once .sidebar-collapsible starts
+   getting hidden by default, which only happens at the narrow-screen
+   breakpoint below. */
+.sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  border: 1px solid var(--sidebar-border);
+  background: rgba(255, 255, 255, .06);
+  color: var(--sidebar-text);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, .12);
+  border-color: var(--accent);
+}
 
 .sidebar-footer {
   margin-top: auto;
@@ -1898,11 +1930,21 @@ body {
 
 @media (max-width: 640px) {
   #app { flex-direction: column; height: auto; overflow: visible; }
-  #sidebar { width: 100%; max-height: 56px; overflow: hidden; }
-  #sidebar.open { max-height: 100vh; }
+  #sidebar { width: 100%; height: auto; overflow: visible; }
   #main { overflow: visible; }
   #view { padding: 20px 16px 48px; }
   .home-sections-grid { grid-template-columns: 1fr; }
+
+  /* Collapsed by default at this width: only the brand row + toggle
+     button show. Hiding the one wrapper div (rather than clipping the
+     whole #sidebar to a guessed max-height) means this doesn't depend
+     on knowing the brand row's exact rendered height — it's just
+     whatever height that row actually needs, nothing more; children
+     inside .sidebar-collapsible keep their own normal display values
+     (flex for .wizard-nav-link, etc.) once the wrapper is shown. */
+  .sidebar-toggle { display: flex; }
+  .sidebar-collapsible { display: none; }
+  #sidebar.open .sidebar-collapsible { display: block; }
   .results-header.has-ci,
   .result-row.has-ci {
     grid-template-columns: 1fr 100px;

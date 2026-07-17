@@ -17,30 +17,38 @@
 <body>
   <div id="app">
     <nav id="sidebar" aria-label="Calculator navigation">
-      <a class="sidebar-brand" href="#" aria-label="Home — full calculator index">
-        <span class="brand-name">Statistical<br>Calculators</span>
-      </a>
-      <div class="sidebar-search">
-        <svg class="search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
-          <line x1="9.5" y1="9.5" x2="13" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-        <input type="search" id="search" placeholder="Search calculators…"
-               aria-label="Search calculators" autocomplete="off" spellcheck="false">
-        <button type="button" id="search-clear" class="search-clear" aria-label="Clear search" hidden>&times;</button>
+      <div class="sidebar-brand-row">
+        <a class="sidebar-brand" href="#" aria-label="Home — full calculator index">
+          <span class="brand-name">Statistical<br>Calculators</span>
+        </a>
+        <button type="button" id="sidebar-toggle" class="sidebar-toggle"
+                aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="sidebar-collapsible">
+          <span class="sidebar-toggle-icon">☰</span>
+        </button>
       </div>
-      <a class="wizard-nav-link" href="#wizard">
-        <span class="wizard-nav-link-icon">?</span>
-        Which Calculator Should I Use?
-      </a>
-      <a class="wizard-nav-link" href="#learn">
-        <span class="wizard-nav-link-icon">L</span>
-        Learn — Data, Graphs, Appraisal & Reference
-      </a>
-      <div id="nav-list" role="list"></div>
+      <div id="sidebar-collapsible" class="sidebar-collapsible">
+        <div class="sidebar-search">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="9.5" y1="9.5" x2="13" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <input type="search" id="search" placeholder="Search calculators…"
+                 aria-label="Search calculators" autocomplete="off" spellcheck="false">
+          <button type="button" id="search-clear" class="search-clear" aria-label="Clear search" hidden>&times;</button>
+        </div>
+        <a class="wizard-nav-link" href="#wizard">
+          <span class="wizard-nav-link-icon">?</span>
+          Which Calculator Should I Use?
+        </a>
+        <a class="wizard-nav-link" href="#learn">
+          <span class="wizard-nav-link-icon">L</span>
+          Learn — Data, Graphs, Appraisal & Reference
+        </a>
+        <div id="nav-list" role="list"></div>
 
-      <div class="sidebar-footer">
-        © 2026 Michael Glick. All rights reserved.
+        <div class="sidebar-footer">
+          © 2026 Michael Glick. All rights reserved.
+        </div>
       </div>
     </nav>
 
