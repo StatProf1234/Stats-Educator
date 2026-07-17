@@ -1475,6 +1475,24 @@ body {
   font-weight: 600;
 }
 
+/* Traffic-light risk-of-bias judgment chips (RoB 2-style tables) —
+   reuses --amber for "Some concerns" (already the site's one
+   pre-existing semantic accent color); low/high add a small green/red
+   pair used nowhere else, kept local to this one judgment convention
+   rather than promoted to :root variables. */
+.rob-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rob-badge.rob-low  { background: #E6F5EC; color: #23875B; }
+.rob-badge.rob-some { background: var(--amber-bg); color: var(--amber); }
+.rob-badge.rob-high { background: #FBE7E5; color: #C0392B; }
+
 /* ── DECISION MATRIX (Type I / Type II explorer) ────── */
 /* Styled to match the site's existing 2×2 table component (.table-2x2
    below) — same bordered-corner/col-head/row-head treatment, same
