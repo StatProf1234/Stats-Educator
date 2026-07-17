@@ -1470,9 +1470,17 @@ body {
   background: #EEF2FC;
   color: var(--accent-h);
   font-weight: 600;
+  letter-spacing: 0.01em;
   position: sticky;
   top: 0;
   z-index: 1;
+}
+
+.ref-table-note {
+  font-size: 13px;
+  color: var(--text-3);
+  font-style: italic;
+  margin-top: 10px;
 }
 
 .ref-table .ref-table-sub {
