@@ -15634,7 +15634,7 @@ const GUIDES = [
       },
       {
         heading: 'From relative measures to absolute ones',
-        html: `<p>Absolute risk (AR) is simply the plain probability of an outcome occurring in a given group over a specified period &mdash; for example, "a 30% risk" or "30 out of 100 people." It is not a comparison to anything else; it is the number itself, which is exactly why it is easy to lose sight of once a study starts reporting relative measures (RR, OR, HR) instead.</p><p>Relative risk reduction (RRR) is calculated as (risk in the control group minus risk in the treated group), divided by the risk in the control group. Absolute risk reduction (ARR) is simply the risk in the control group minus the risk in the treated group, expressed in percentage points &mdash; the difference between two absolute risks. The two can tell very different stories about the same result:</p><div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Baseline<br>(control) risk</th><th>Treated<br>risk</th><th>Relative risk<br>reduction</th><th>Absolute risk<br>reduction</th><th>Number needed<br>to treat</th></tr></thead><tbody><tr><td>2%</td><td>1%</td><td>50%</td><td>1<br>percentage point</td><td>100</td></tr><tr><td>40%</td><td>20%</td><td>50%</td><td>20<br>percentage points</td><td>5</td></tr></tbody></table></div><p>Both rows describe "a 50% relative risk reduction." But treating 100 patients to prevent a single event, versus treating 5, are very different clinical propositions &mdash; and press coverage and abstracts overwhelmingly report the relative number because it is the larger, more attention-grabbing figure.</p>`,
+        html: `<p>Absolute risk (AR) is simply the plain probability of an outcome occurring in a given group over a specified period &mdash; for example, "a 30% risk" or "30 out of 100 people." It is not a comparison to anything else; it is the number itself, which is exactly why it is easy to lose sight of once a study starts reporting relative measures (RR, OR, HR) instead.</p><p>Relative risk reduction (RRR) is calculated as (risk in the control group minus risk in the treated group), divided by the risk in the control group. Absolute risk reduction (ARR) is simply the risk in the control group minus the risk in the treated group, expressed in percentage points &mdash; the difference between two absolute risks. The two can tell very different stories about the same result:</p><div class="ref-table-label">Table: the same 50% relative risk reduction at two different baseline risks</div><div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Baseline<br>(control) risk</th><th>Treated<br>risk</th><th>Relative risk<br>reduction</th><th>Absolute risk<br>reduction</th><th>Number needed<br>to treat</th></tr></thead><tbody><tr><td>2%</td><td>1%</td><td>50%</td><td>1<br>percentage point</td><td>100</td></tr><tr><td>40%</td><td>20%</td><td>50%</td><td>20<br>percentage points</td><td>5</td></tr></tbody></table></div><p>Both rows describe "a 50% relative risk reduction." But treating 100 patients to prevent a single event, versus treating 5, are very different clinical propositions &mdash; and press coverage and abstracts overwhelmingly report the relative number because it is the larger, more attention-grabbing figure.</p>`,
       },
       {
         heading: 'Number needed to treat and number needed to harm',
@@ -16079,7 +16079,7 @@ const GUIDES = [
 
   {
     id: 'appraisal-meta-analysis-reading',
-    category: 'Critical Appraisal of the Literature',
+    category: 'Evidence Synthesis & Certainty',
     title: 'Reading a Meta-Analysis: Beyond the Pooled Estimate',
     blurb: 'The pooled diamond on a forest plot is only as trustworthy as the heterogeneity behind it — and pooling studies cannot fix flawed primary research.',
     dek: `A precise-looking pooled estimate sitting atop wildly inconsistent individual studies deserves more scrutiny, not more confidence. This guide complements How to Read a Forest Plot with the broader questions a critical reader should ask about a meta-analysis as a whole.`,
@@ -16112,7 +16112,7 @@ const GUIDES = [
 
   {
     id: 'appraisal-bias-tools',
-    category: 'Critical Appraisal of the Literature',
+    category: 'Evidence Synthesis & Certainty',
     title: 'Reporting Guideline, Risk-of-Bias Tool, or Certainty Framework? Four Different Jobs',
     blurb: 'CONSORT, RoB 2, AMSTAR-2, and GRADE all get invoked in the same breath, but they check four completely different things — and a study can pass one perfectly while failing another.',
     dek: `The critical-appraisal literature is full of acronyms that get used almost interchangeably in casual conversation, but each actually answers a different question: did the report describe itself completely, was the underlying study well-conducted, was a review or guideline that synthesizes other work itself put together rigorously, and how much confidence should the resulting evidence carry. This guide sorts the major tools into those four categories and maps each to the study design it applies to.`,
@@ -16172,7 +16172,7 @@ const GUIDES = [
 
   {
     id: 'appraisal-grade',
-    category: 'Critical Appraisal of the Literature',
+    category: 'Evidence Synthesis & Certainty',
     title: 'Understanding GRADE: Certainty of Evidence vs. Strength of Recommendation',
     blurb: 'GRADE rates two different things that are easy to collapse into one — how much to trust the evidence, and how strongly to act on it — and conflating them is one of the most common misreadings of a systematic review or guideline.',
     dek: `GRADE (Grading of Recommendations Assessment, Development and Evaluation) is the most widely adopted framework for rating evidence in systematic reviews and clinical practice guidelines. It produces two related but distinct outputs &mdash; a certainty rating for a body of evidence, and a strength rating for a recommendation built on it &mdash; and reading either one correctly starts with keeping them apart.`,
@@ -16226,7 +16226,7 @@ const GUIDES = [
 
   {
     id: 'appraisal-regression-to-mean',
-    category: 'Critical Appraisal of the Literature',
+    category: 'Common Statistical Pitfalls',
     title: 'Regression to the Mean',
     blurb: 'Why a before/after study with no control group will almost always show "improvement" — treatment or not.',
     dek: `People, and the measurements taken from them, are often enrolled in a study, or brought in for treatment, precisely because they are at an extreme. Some of that extremity is simply random noise, and noise tends to fade on remeasurement, regardless of any treatment given.`,
@@ -16251,7 +16251,7 @@ const GUIDES = [
 
   {
     id: 'appraisal-subgroup-interaction',
-    category: 'Critical Appraisal of the Literature',
+    category: 'Common Statistical Pitfalls',
     title: 'Subgroup Analyses and Interaction Tests',
     blurb: '“The treatment worked in women but not men” is one of the most common misreadings in the clinical literature — and usually isn’t what the data actually show.',
     dek: `A trial can report a "significant" effect in one subgroup and a "non-significant" effect in another without there being any real difference between those subgroups at all. Telling the two apart requires a specific tool &mdash; the interaction test &mdash; that most headlines, and many abstracts, skip entirely.`,
@@ -16288,7 +16288,7 @@ const GUIDES = [
 
   {
     id: 'appraisal-table2-fallacy',
-    category: 'Critical Appraisal of the Literature',
+    category: 'Common Statistical Pitfalls',
     title: 'The Table 2 Fallacy',
     blurb: 'A multivariable model is built to give one unconfounded estimate — the exposure of interest. The other coefficients sitting right next to it in the same table are not free bonus results.',
     dek: `When a study adjusts for confounders in a regression model, only the effect estimate for the exposure of interest was actually designed to be free of confounding. The "adjustment" variables in that same table &mdash; age, sex, smoking status, whatever else was included &mdash; are routinely reported and even discussed as if they are equally clean causal estimates. They usually aren't, and it's common enough in the literature to have its own name: the Table 2 fallacy.`,

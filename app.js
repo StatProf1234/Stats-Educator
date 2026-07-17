@@ -71,19 +71,19 @@ function route() {
   calc ? renderCalculator(calc) : renderHome();
 }
 
-// Same idea for the home/"Full Calculator Index" page, but inverted:
-// that page is a browsable directory, so categories default OPEN
-// (unlike the sidebar, which no longer renders a category list at
-// rest at all — see buildNav) and this only tracks the ones a user
-// has manually collapsed.
-const collapsedHomeCategories = new Set();
+// Home/"Full Calculator Index" page category sections default CLOSED —
+// only the heading + count show at rest, and this tracks the ones a
+// user has explicitly opened, same pattern as expandedLearnCategories
+// below (there's no sidebar category list at rest either — see
+// buildNav — so this is the one place category browsing happens).
+const expandedHomeCategories = new Set();
 
-// Same idea again, but for the Learn hub's category sections (Data
-// Types, Reading and Understanding Graphs, Critical Appraisal of the
-// Literature, Appraising Studies by Design, Reference) — tracked
-// separately from collapsedHomeCategories, and inverted: the Learn
-// hub defaults CLOSED rather than open (like the Full Calculator
-// Index), so this Set holds categories the user has explicitly opened.
+// Same idea for the Learn hub's category sections (Data Types, Reading
+// and Understanding Graphs, Critical Appraisal of the Literature,
+// Evidence Synthesis & Certainty, Common Statistical Pitfalls,
+// Appraising Studies by Design, Quick Reference) — tracked separately
+// from expandedHomeCategories, defaults CLOSED, holds categories the
+// user has explicitly opened.
 const expandedLearnCategories = new Set();
 
 function applyActiveState() {
@@ -272,7 +272,7 @@ function renderHome() {
       ? `${availCount} of ${entries.length} available`
       : `${entries.length} calculators`;
 
-    const isOpen = !collapsedHomeCategories.has(cat);
+    const isOpen = expandedHomeCategories.has(cat);
 
     return `
       <div class="home-section${isOpen ? '' : ' collapsed'}" data-cat="${esc(cat)}">
@@ -309,7 +309,7 @@ function renderHome() {
       const section = header.closest('.home-section');
       const cat = section.dataset.cat;
       const nowOpen = !header.classList.contains('open');
-      nowOpen ? collapsedHomeCategories.delete(cat) : collapsedHomeCategories.add(cat);
+      nowOpen ? expandedHomeCategories.add(cat) : expandedHomeCategories.delete(cat);
       header.classList.toggle('open', nowOpen);
       header.setAttribute('aria-expanded', String(nowOpen));
       section.classList.toggle('collapsed', !nowOpen);
