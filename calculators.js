@@ -6686,16 +6686,18 @@ const CALCULATORS = [
   },
 
   /* ── 66. INTRACLASS CORRELATION (ICC) ──────────────────────────────────
-     One-way random-effects ICC — ICC(1,1) in Shrout & Fleiss (1979)
-     notation — from a subjects × raters/occasions matrix, via a
-     one-way ANOVA decomposition (same shape of input as Cronbach's
-     Alpha and Cochran's Q).                                          */
+     All six standard ICC forms (McGraw & Wong, 1996 / Shrout & Fleiss,
+     1979 notation) from a subjects × raters/occasions matrix (same
+     shape of input as Cronbach's Alpha and Cochran's Q) — one-way
+     random (single/average measures), two-way random with absolute
+     agreement (single/average), and two-way mixed with consistency
+     (single/average). See computeICC() / ICC_FORM_META above.       */
   {
     id:          'icc',
     name:        'Intraclass Correlation (ICC)',
-    hint:        'ICC(1,1) = (MSB−MSW)/(MSB+(n−1)MSW)',
+    hint:        'ICC(1,1), ICC(2,1), ICC(3,1) — and their average-measures forms',
     category:    'Effect Sizes & Agreement',
-    description: 'Assesses reliability and agreement for continuous measurements across raters or occasions.',
+    description: 'Assesses reliability and agreement for continuous measurements across raters or occasions — one-way, two-way random, or two-way mixed, single- or average-measures.',
 
     formulas: [
       {
@@ -6703,21 +6705,45 @@ const CALCULATORS = [
         latex: 'MS_B = \\dfrac{SS_B}{k-1} \\qquad MS_W = \\dfrac{SS_W}{k(n-1)}'
       },
       {
-        label: 'ICC(1,1) — Single-Measurement, One-Way Random Effects',
+        label: 'Two-Way ANOVA Decomposition',
+        latex: 'MS_R = \\dfrac{SS_R}{n-1} \\qquad MS_E = \\dfrac{SS_E}{(k-1)(n-1)}'
+      },
+      {
+        label: 'ICC(1,1) — One-Way Random, Single Measures',
         latex: 'ICC = \\dfrac{MS_B-MS_W}{MS_B+(n-1)MS_W}'
+      },
+      {
+        label: 'ICC(3,1) — Two-Way Mixed, Consistency, Single Measures',
+        latex: 'ICC = \\dfrac{MS_B-MS_E}{MS_B+(n-1)MS_E}'
+      },
+      {
+        label: "Spearman-Brown Prophecy Formula",
+        latex: "ICC_{k'} = \\dfrac{k' \\cdot ICC_1}{1+(k'-1)ICC_1}"
       }
     ],
 
     inputLayout: 'grid',
     inputs: [
+      { id: 'iccForm', type: 'select', label: 'ICC Form (design)', default: '1_1',
+        note: 'Pick the form matching how the data were actually collected — this determines which variance sources count as "error." One-way: a different, not-fully-shared set of raters/occasions per subject. Two-way: the same fixed raters rated every subject — choose "random" if they stand in for a larger pool of possible raters, "mixed" if these specific raters are the only ones you care about (most common in practice). The "k" in an average-measures form (·,k) is not a free choice — it always means the average of the n raters/occasions actually entered below. If you plan to use a different number of raters in actual practice than the n columns you have data for, use the Spearman-Brown projection field below instead of picking an average-measures form here.',
+        options: [
+          { value: '1_1', label: 'ICC(1,1) — One-way random, single measures' },
+          { value: '1_k', label: 'ICC(1,k) — One-way random, average measures' },
+          { value: '2_1', label: 'ICC(2,1) — Two-way random, absolute agreement, single measures' },
+          { value: '2_k', label: 'ICC(2,k) — Two-way random, absolute agreement, average measures' },
+          { value: '3_1', label: 'ICC(3,1) — Two-way mixed, consistency, single measures' },
+          { value: '3_k', label: 'ICC(3,k) — Two-way mixed, consistency, average measures' },
+        ] },
       {
         id: 'data', type: 'textarea',
         label: 'Measurements — one row per subject, one column per rater/occasion (comma-separated)',
         default: '90,88,92\n85,87,84\n78,80,82\n95,94,96\n88,90,89\n75,78,76'
       },
+      { id: 'projectRaters', label: "Project reliability onto k' raters/occasions (Spearman-Brown) — set equal to n above for no projection", default: 3,
+        note: "Answers a different question from the average-measures forms above: not \"how reliable is the average of the n raters I actually have data for,\" but \"how reliable would the average be with a different number of raters than that, k'?\" Common use: you ran a small reliability study with n raters, but plan to use more (or fewer) in the real study — enter that planned number here. This always projects from the single-measures ICC of whichever model (one-way / two-way random / two-way mixed) is selected above, regardless of whether you picked its single- or average-measures form." },
     ],
 
-    example({ data }) {
+    example({ data, iccForm }) {
       const matrix = parseMatrix(data);
       const k = matrix.length;
       if (k < 2) return 'Enter at least 2 subjects to see a worked medical example here.';
@@ -6725,22 +6751,15 @@ const CALCULATORS = [
       if (n < 2 || matrix.some(row => row.length !== n) || matrix.some(row => row.some(v => !isFinite(v))) ||
           typeof jStat === 'undefined' || !jStat.centralF)
         return 'Enter numeric measurements for at least 2 raters/occasions to see a worked medical example here.';
-      const grandMean = matrix.reduce((s, row) => s + row.reduce((s2, v) => s2 + v, 0), 0) / (k * n);
-      const subjectMeans = matrix.map(row => row.reduce((s, v) => s + v, 0) / n);
-      const SSB = n * subjectMeans.reduce((s, m) => s + (m - grandMean) ** 2, 0);
-      const SSW = matrix.reduce((s, row, i) => s + row.reduce((s2, v) => s2 + (v - subjectMeans[i]) ** 2, 0), 0);
-      const dfB = k - 1, dfW = k * (n - 1);
-      const MSB = SSB / dfB, MSW = SSW / dfW;
-      const ICC = (MSB - MSW) / (MSB + (n - 1) * MSW);
-      const reliability = ICC < 0.5 ? 'poor' : ICC < 0.75 ? 'moderate' : ICC < 0.9 ? 'good' : 'excellent';
+      const r = computeICC(matrix, iccForm);
       const f = v => +v.toFixed(3);
-      const takeaway = (reliability === 'poor' || reliability === 'moderate')
+      const takeaway = (r.reliability === 'poor' || r.reliability === 'moderate')
         ? 'a single measurement is a fairly unreliable stand-in for the true patient value'
         : 'individual measurements can be trusted as a reasonably faithful proxy for the true patient value';
-      return `${n} different raters (or the same rater on ${n} occasions) each measure blood pressure in ${k} patients. ICC = ${f(ICC)} shows what fraction of total measurement variance is real between-patient difference rather than rater/occasion inconsistency — ${reliability} reliability here means ${takeaway}.`;
+      return `${n} different raters (or the same rater on ${n} occasions) each measure blood pressure in ${k} patients. ${r.label} = ${f(r.icc)} shows what fraction of total measurement variance is real between-patient difference rather than rater/occasion inconsistency — ${r.reliability} reliability here means ${takeaway}.`;
     },
 
-    calculate({ data }) {
+    calculate({ data, iccForm, projectRaters }) {
       const matrix = parseMatrix(data);
       const k = matrix.length;
       if (k < 2) return [err('Enter at least 2 subjects')];
@@ -6748,38 +6767,48 @@ const CALCULATORS = [
       if (n < 2) return [err('Enter at least 2 raters/occasions (columns)')];
       if (matrix.some(row => row.length !== n)) return [err('Every subject must have the same number of measurements')];
       if (matrix.some(row => row.some(v => !isFinite(v)))) return [err('All values must be numeric')];
+      if (!isFinite(projectRaters) || projectRaters < 1) return [err("Enter a k' of at least 1 for the Spearman-Brown projection")];
       if (typeof jStat === 'undefined' || !jStat.centralF)
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
-      const grandMean = matrix.reduce((s, row) => s + row.reduce((s2, v) => s2 + v, 0), 0) / (k * n);
-      const subjectMeans = matrix.map(row => row.reduce((s, v) => s + v, 0) / n);
-
-      const SSB = n * subjectMeans.reduce((s, m) => s + (m - grandMean) ** 2, 0);
-      const SSW = matrix.reduce((s, row, i) => s + row.reduce((s2, v) => s2 + (v - subjectMeans[i]) ** 2, 0), 0);
-
-      const dfB = k - 1, dfW = k * (n - 1);
-      const MSB = SSB / dfB, MSW = SSW / dfW;
-      const ICC = (MSB - MSW) / (MSB + (n - 1) * MSW);
-      const F = MSB / MSW;
-      const pValue = 1 - jStat.centralF.cdf(F, dfB, dfW);
-
-      const reliability = ICC < 0.5 ? 'poor' : ICC < 0.75 ? 'moderate' : ICC < 0.9 ? 'good' : 'excellent';
-
+      const r = computeICC(matrix, iccForm);
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
-      return [
+      // Spearman-Brown always projects from the SINGLE-measures ICC of
+      // whichever model family (one-way / two-way random / two-way
+      // mixed) is selected above — not from an average-measures value,
+      // which would double-count the averaging this formula itself does.
+      const singleICC = computeICC(matrix, iccForm[0] + '_1').icc;
+      const projectedICC = (projectRaters * singleICC) / (1 + (projectRaters - 1) * singleICC);
+
+      const rows = [
         { label: 'Number of Subjects (k)', value: k, ci: null, isRatio: false },
         { label: 'Number of Raters/Occasions (n)', value: n, ci: null, isRatio: false },
-        { label: 'MS Between Subjects (MSB)', value: f(MSB), ci: null, isRatio: false },
-        { label: 'MS Within Subjects (MSW)', value: f(MSW), ci: null, isRatio: false },
-        { label: 'ICC(1,1)', value: f(ICC), ci: null, isRatio: false, highlight: true },
-        { label: 'F-Statistic', value: f(F), ci: null, isRatio: false },
-        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false },
-        { label: 'Interpretation (Koo & Li, 2016)', isText: true, ci: null, isRatio: false,
-          value: `${reliability[0].toUpperCase()}${reliability.slice(1)} reliability (ICC = ${f(ICC)}).` },
-        { label: 'If Deciding on Multilevel Modeling', isText: true, ci: null, isRatio: false,
-          value: `The same number answers a different question if you relabel "subjects" above as your clusters (e.g., hospitals, classrooms) and "raters/occasions" as observations within each cluster: an ICC above roughly 0.05&ndash;0.10 means enough outcome variance sits between clusters that treating every observation as independent will understate your uncertainty &mdash; multilevel/mixed-effects modeling (or at least cluster-robust standard errors) is worth using instead of a standard test.` },
+        { label: 'MS Between Subjects (MSB)', value: f(r.MSB), ci: null, isRatio: false },
       ];
+
+      if (r.isTwoWay) {
+        rows.push(
+          { label: 'MS Between Raters (MSR)', value: f(r.MSR), ci: null, isRatio: false },
+          { label: 'MS Residual Error (MSE)', value: f(r.MSE), ci: null, isRatio: false },
+        );
+      } else {
+        rows.push({ label: 'MS Within Subjects (MSW)', value: f(r.MSW), ci: null, isRatio: false });
+      }
+
+      rows.push(
+        { label: `${r.label} — ${r.name}`, value: f(r.icc), ci: null, isRatio: false, highlight: true },
+        { label: 'F-Statistic', value: f(r.F), ci: null, isRatio: false },
+        { label: 'p-value', value: formatPValue(r.pValue), ci: null, isRatio: false },
+        { label: 'Interpretation (Koo & Li, 2016)', isText: true, ci: null, isRatio: false,
+          value: `${r.reliability[0].toUpperCase()}${r.reliability.slice(1)} reliability (${r.label} = ${f(r.icc)}).` },
+        { label: `Spearman-Brown Projection at k' = ${projectRaters}`, value: f(projectedICC), ci: null, isRatio: false,
+          highlight: projectRaters !== n },
+        { label: 'If Deciding on Multilevel Modeling', isText: true, ci: null, isRatio: false,
+          value: `The same number answers a different question if you relabel "subjects" above as your clusters (e.g., hospitals, classrooms) and "raters/occasions" as observations within each cluster: an ICC above roughly 0.05–0.10 means enough outcome variance sits between clusters that treating every observation as independent will understate your uncertainty &mdash; multilevel/mixed-effects modeling (or at least cluster-robust standard errors) is worth using instead of a standard test.` },
+      );
+
+      return rows;
     }
   },
 
@@ -10682,6 +10711,56 @@ function parseMatrix(text) {
     .map(l => l.split(/[,\s]+/).filter(Boolean).map(Number));
 }
 
+// The six standard ICC forms (McGraw & Wong, 1996 / Shrout & Fleiss,
+// 1979), computed once from a shared one-way + two-way ANOVA
+// decomposition of a subjects (rows) x raters/occasions (columns)
+// matrix — factored out so the ICC calculator's live results and its
+// worked example use the exact same six formulas rather than two
+// copies that could drift apart.
+const ICC_FORM_META = {
+  '1_1': { label: 'ICC(1,1)', name: 'One-way random, single measures' },
+  '1_k': { label: 'ICC(1,k)', name: 'One-way random, average measures' },
+  '2_1': { label: 'ICC(2,1)', name: 'Two-way random, absolute agreement, single measures' },
+  '2_k': { label: 'ICC(2,k)', name: 'Two-way random, absolute agreement, average measures' },
+  '3_1': { label: 'ICC(3,1)', name: 'Two-way mixed, consistency, single measures' },
+  '3_k': { label: 'ICC(3,k)', name: 'Two-way mixed, consistency, average measures' },
+};
+
+function computeICC(matrix, formKey) {
+  const k = matrix.length;
+  const n = matrix[0].length;
+
+  const grandMean = matrix.reduce((s, row) => s + row.reduce((s2, v) => s2 + v, 0), 0) / (k * n);
+  const subjectMeans = matrix.map(row => row.reduce((s, v) => s + v, 0) / n);
+  const raterMeans = Array.from({ length: n }, (_, j) => matrix.reduce((s, row) => s + row[j], 0) / k);
+
+  const SSB = n * subjectMeans.reduce((s, m) => s + (m - grandMean) ** 2, 0);
+  const SSW = matrix.reduce((s, row, i) => s + row.reduce((s2, v) => s2 + (v - subjectMeans[i]) ** 2, 0), 0);
+  const SSR = k * raterMeans.reduce((s, m) => s + (m - grandMean) ** 2, 0);
+  const SSE = SSW - SSR; // residual (subject x rater interaction, the two-way "error" term)
+
+  const dfB = k - 1, dfW = k * (n - 1), dfR = n - 1, dfE = (k - 1) * (n - 1);
+  const MSB = SSB / dfB, MSW = SSW / dfW, MSR = SSR / dfR, MSE = SSE / dfE;
+
+  const byForm = {
+    '1_1': { icc: (MSB - MSW) / (MSB + (n - 1) * MSW), F: MSB / MSW, df1: dfB, df2: dfW },
+    '1_k': { icc: (MSB - MSW) / MSB,                   F: MSB / MSW, df1: dfB, df2: dfW },
+    '2_1': { icc: (MSB - MSE) / (MSB + (n - 1) * MSE + (n / k) * (MSR - MSE)), F: MSB / MSE, df1: dfB, df2: dfE },
+    '2_k': { icc: (MSB - MSE) / (MSB + (MSR - MSE) / k),                      F: MSB / MSE, df1: dfB, df2: dfE },
+    '3_1': { icc: (MSB - MSE) / (MSB + (n - 1) * MSE), F: MSB / MSE, df1: dfB, df2: dfE },
+    '3_k': { icc: (MSB - MSE) / MSB,                   F: MSB / MSE, df1: dfB, df2: dfE },
+  };
+
+  const chosen = byForm[formKey] || byForm['1_1'];
+  const meta = ICC_FORM_META[formKey] || ICC_FORM_META['1_1'];
+  const pValue = (typeof jStat !== 'undefined' && jStat.centralF) ? 1 - jStat.centralF.cdf(chosen.F, chosen.df1, chosen.df2) : NaN;
+  const reliability = chosen.icc < 0.5 ? 'poor' : chosen.icc < 0.75 ? 'moderate' : chosen.icc < 0.9 ? 'good' : 'excellent';
+  const isTwoWay = formKey === '2_1' || formKey === '2_k' || formKey === '3_1' || formKey === '3_k';
+
+  return { k, n, MSB, MSW, MSR, MSE, icc: chosen.icc, F: chosen.F, df1: chosen.df1, df2: chosen.df2,
+    pValue, reliability, label: meta.label, name: meta.name, isTwoWay };
+}
+
 // Parses long-format factorial data (one row per observation: factor
 // level(s) followed by a trailing value column) for '2-Way ANOVA with
 // Replication' and 'Multi-Factor ANOVA'. Returns the number of factor
@@ -13929,7 +14008,7 @@ const SEARCH_KEYWORDS = {
   'phi-coefficient': ['phi coefficient', 'effect size for a 2x2 table', 'case-control study'],
   'cohens-kappa':    ["cohen's kappa", 'inter-rater agreement', 'agreement between two raters categorical', 'unordered categories'],
   'weighted-kappa':  ['weighted kappa', 'ordinal agreement between raters', 'agreement ordered categories'],
-  'icc':             ['intraclass correlation coefficient', 'reliability across three or more raters'],
+  'icc':             ['intraclass correlation coefficient', 'reliability across three or more raters', 'icc(1,1)', 'icc(2,1)', 'icc(3,1)', 'one-way random', 'two-way random', 'two-way mixed', 'absolute agreement', 'consistency', 'average measures'],
   'bland-altman':    ['bland-altman plot', 'limits of agreement', 'compare two measurement methods', 'agreement between two continuous methods'],
   'eta-squared':     ['eta squared', 'anova effect size'],
   'cronbachs-alpha': ["cronbach's alpha", 'internal consistency', 'scale reliability', 'questionnaire reliability'],
@@ -14587,10 +14666,16 @@ const NOTATION = {
     { symbol: 'MS_B', meaning: 'Mean square between subjects — average variability in scores from one subject to another.' },
     { symbol: 'SS_B', meaning: 'Sum of squares between subjects, before dividing by its degrees of freedom.' },
     { symbol: 'k', meaning: 'Number of subjects being measured.' },
-    { symbol: 'MS_W', meaning: 'Mean square within subjects — average variability among repeated measurements on the same subject.' },
+    { symbol: 'MS_W', meaning: 'Mean square within subjects (one-way model) — average variability among repeated measurements on the same subject, combining rater differences and residual error together.' },
     { symbol: 'SS_W', meaning: 'Sum of squares within subjects, before dividing by its degrees of freedom.' },
     { symbol: 'n', meaning: 'Number of raters or occasions each subject was measured on.' },
+    { symbol: 'MS_R', meaning: 'Mean square between raters (two-way models only) — average systematic difference from one rater to another, e.g. one rater consistently scoring higher.' },
+    { symbol: 'SS_R', meaning: 'Sum of squares between raters, before dividing by its degrees of freedom.' },
+    { symbol: 'MS_E', meaning: 'Mean square residual error (two-way models only) — leftover variability once both subject and rater differences are accounted for; MS_W splits into MS_R and MS_E once raters are treated as their own factor.' },
+    { symbol: 'SS_E', meaning: 'Sum of squares residual error, before dividing by its degrees of freedom.' },
     { symbol: 'ICC', meaning: 'Intraclass correlation — the share of total measurement variance that reflects true differences between subjects rather than rater/occasion inconsistency.' },
+    { symbol: "k'", meaning: 'The number of raters/occasions you plan to average in practice, for the Spearman-Brown projection — independent of n, the number actually entered above.' },
+    { symbol: 'ICC_1', meaning: 'The single-measures ICC of whichever model family is selected (one-way, two-way random, or two-way mixed) — the starting point the Spearman-Brown formula projects from.' },
   ],
   'bland-altman': [
     { symbol: 'M_i', meaning: 'Average of Method A and Method B readings for subject i, plotted on the x-axis.' },
