@@ -1444,9 +1444,31 @@ body {
   text-align: left;
 }
 
+/* Prose-heavy tables (glossary, worksheets, RoB 2/GRADE examples, etc.)
+   read poorly in a dense monospace, single-line-forced layout — this
+   is what was forcing a horizontal scrollbar on anything with a long
+   "Definition"/"Reason" column. The plain numeric tables above (z/t
+   distribution lookups) keep the compact mono/nowrap treatment from
+   .ref-table, since their cells are short values, not sentences. */
+.ref-table-left {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  white-space: normal;
+}
+
+.ref-table-left th, .ref-table-left td {
+  padding: 10px 12px;
+  line-height: 1.55;
+  vertical-align: top;
+}
+
 .ref-table thead th {
-  background: var(--ground);
-  color: var(--text-3);
+  /* Must be opaque, not the rgba() accent tint used elsewhere — this
+     header is position:sticky, so a translucent background lets
+     scrolling body rows show through underneath it. #EEF2FC is the
+     opaque equivalent of accent (--accent) at 8% over white. */
+  background: #EEF2FC;
+  color: var(--accent-h);
   font-weight: 600;
   position: sticky;
   top: 0;
@@ -1468,6 +1490,22 @@ body {
 }
 
 .ref-table td { color: var(--text-2); }
+
+/* Zebra striping + row hover — applied broadly to every .ref-table for
+   a consistent, less "rudimentary" look; kept low-contrast (--ground,
+   a faint accent tint) so it doesn't fight with cell content colors.
+   :not(.reftab-hl) is a structural exclusion, not a specificity bet —
+   with equal class counts, CSS specificity is decided by the higher
+   type-selector count (tbody+tr+td beats a bare .reftab-hl td), so
+   without this exclusion the amber highlight below would lose to
+   zebra striping on every even row regardless of source order. */
+.ref-table tbody tr:nth-child(even) td:not(.reftab-hl) {
+  background: var(--ground);
+}
+
+.ref-table tbody tr:hover td:not(.reftab-hl) {
+  background: rgba(78, 110, 219, .06);
+}
 
 .ref-table .reftab-hl {
   background: var(--amber-bg);
