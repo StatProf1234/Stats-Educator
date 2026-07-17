@@ -301,7 +301,7 @@ function renderHome() {
       <div class="wizard-banner-desc">Answer a few questions about your data — categorical or continuous, how many samples, paired or independent — and get pointed straight to the right one.</div>
       <div class="wizard-banner-cta">Find My Calculator →</div>
     </a>
-    ${sections}
+    <div class="home-sections-grid">${sections}</div>
   `;
   document.getElementById('main').scrollTop = 0;
 

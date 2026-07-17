@@ -511,6 +511,22 @@ body {
 
 /* ── INDEX SECTIONS ────────────────────────────────── */
 
+/* Full Calculator Index only (renderHome()) — the Learn hub keeps its
+   sections single-column, since several of its category names are too
+   long to sit comfortably in a half-width column. Collapsed sections
+   (short header + count) pack two per row; an expanded section spans
+   the full row width via :not(.collapsed) below, so its card grid
+   never has to fight a neighboring column for space. */
+.home-sections-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 28px;
+}
+
+.home-sections-grid .home-section:not(.collapsed) {
+  grid-column: 1 / -1;
+}
+
 .home-section {
   margin-bottom: 44px;
 }
@@ -521,6 +537,29 @@ body {
    header rows now that sections default to collapsed. */
 .home-section.collapsed {
   margin-bottom: 14px;
+}
+
+/* Boxed-card look for collapsed sections in the 2-column grid — border
+   goes on .home-section itself (the grid item, which CSS Grid already
+   stretches to match its row partner's height by default), not on the
+   header button, so both boxes in a row come out the same height
+   automatically. The header's own underline is dropped in favor of
+   the box's border, since the box now provides that boundary. */
+.home-sections-grid .home-section.collapsed {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 18px;
+  transition: border-color .15s;
+}
+
+.home-sections-grid .home-section.collapsed:hover {
+  border-color: var(--accent);
+}
+
+.home-sections-grid .home-section.collapsed .home-section-header {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding: 14px 0;
 }
 
 .home-section-heading {
@@ -562,6 +601,7 @@ body {
 }
 
 .home-section-title {
+  flex: 1;
   font-family: var(--font-display);
   font-size: 17px;
   font-weight: 600;
@@ -1850,6 +1890,7 @@ body {
   #sidebar.open { max-height: 100vh; }
   #main { overflow: visible; }
   #view { padding: 20px 16px 48px; }
+  .home-sections-grid { grid-template-columns: 1fr; }
   .results-header.has-ci,
   .result-row.has-ci {
     grid-template-columns: 1fr 100px;
