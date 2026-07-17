@@ -16708,7 +16708,7 @@ const GUIDES = [
 
   {
     id: 'reference-glossary-abbreviations',
-    category: 'Reference',
+    category: 'Quick Reference',
     title: 'Glossary of Statistical Abbreviations and Symbols',
     blurb: 'A quick lookup for the abbreviations and symbols used throughout this site — grouped by topic, with links to the fuller guide or calculator where one exists.',
     dek: `This page is a reference, not a guided walkthrough: use it to look up an abbreviation you've run into, then follow the link to the calculator or Learn guide that covers it in depth. Terms are grouped by topic rather than alphabetically, since most lookups start from "what kind of stat is this" rather than the letter it begins with.`,
@@ -16760,7 +16760,7 @@ const GUIDES = [
 
   {
     id: 'reference-appraisal-worksheets',
-    category: 'Reference',
+    category: 'Quick Reference',
     title: 'Critical Appraisal Worksheets (Downloadable)',
     blurb: 'Six fill-in-the-blank worksheets — one per clinical question type — for critiquing a specific article. Download the one matching the article you\'re reading and work through it question by question.',
     dek: `These worksheets follow the classic "Users' Guides to the Medical Literature" format: each is a two-column checklist (question on the left, space for your own notes on the right) split into three sections &mdash; is it valid, what are the results, and how do I apply it &mdash; with the exact checklist items tailored to the type of question the article addresses. They're organized by clinical question type (therapy, diagnosis, prognosis, etiology/harm, guidelines, systematic review) rather than by study design, which is a different cut than this site's "Appraising Studies by Design" guides &mdash; use whichever framing matches the assignment.`,
