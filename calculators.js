@@ -6808,6 +6808,14 @@ const CALCULATORS = [
           value: `The same number answers a different question if you relabel "subjects" above as your clusters (e.g., hospitals, classrooms) and "raters/occasions" as observations within each cluster: an ICC above roughly 0.05–0.10 means enough outcome variance sits between clusters that treating every observation as independent will understate your uncertainty &mdash; multilevel/mixed-effects modeling (or at least cluster-robust standard errors) is worth using instead of a standard test.` },
       );
 
+      const mainCaveat = iccRangeCaveat(r.icc, r.label);
+      if (mainCaveat) rows.push({ label: `Out-of-Range Estimate: ${r.label}`, isText: true, ci: null, isRatio: false, value: mainCaveat });
+
+      const projLabel = `Spearman-Brown Projection at k' = ${projectRaters}`;
+      const projCaveat = spearmanBrownCaveat(singleICC, projectedICC, projectRaters)
+        || (mainCaveat ? null : iccRangeCaveat(projectedICC, projLabel));
+      if (projCaveat) rows.push({ label: `Out-of-Range Estimate: ${projLabel}`, isText: true, ci: null, isRatio: false, value: projCaveat });
+
       return rows;
     }
   },
@@ -10759,6 +10767,41 @@ function computeICC(matrix, formKey) {
 
   return { k, n, MSB, MSW, MSR, MSE, icc: chosen.icc, F: chosen.F, df1: chosen.df1, df2: chosen.df2,
     pValue, reliability, label: meta.label, name: meta.name, isTwoWay };
+}
+
+// ICC is a proportion-of-variance quantity and can never truly exceed 1
+// or fall below 0 — but ANOVA/method-of-moments point ESTIMATES aren't
+// constrained to respect that. Every form's denominator is a sum of
+// mean squares with at least one negative coefficient, so a large
+// enough residual/error term relative to the others can push a given
+// form's estimate outside [0,1] (ICC(2,k) is the one this is easiest
+// to hit for, since MS_E's coefficient in its denominator is strictly
+// negative, unlike ICC(1,*)/ICC(3,*)/ICC(2,1), whose denominators are
+// guaranteed non-negative). Returns null when the value is in range.
+function iccRangeCaveat(value, formLabel) {
+  const f = v => +(v.toFixed(4));
+  if (value > 1) {
+    return `${formLabel} = ${f(value)} exceeds the theoretical maximum of 1. ICC point estimates can occasionally land outside the valid [0,1] range — this reflects sampling variability in the underlying variance components (most likely with few subjects/raters, or when between- and within-group variability are similar in size), not a data-entry error. Read the true reliability as at or very near 1.`;
+  }
+  if (value < 0) {
+    return `${formLabel} = ${f(value)} is negative, which has no meaningful interpretation as a proportion of variance — it happens when between-subject variability is smaller than measurement error, i.e., there is more disagreement than chance alone would produce. Conventionally reported and interpreted as 0 (no reliability).`;
+  }
+  return null;
+}
+
+// The Spearman-Brown prophecy formula assumes it is projecting a
+// valid, non-negative single-measures reliability onto a different
+// number of raters. Fed a negative one instead, its denominator
+// (1 + (k'-1)*r) can shrink toward zero or cross it entirely as k'
+// grows, producing wild swings — arbitrarily large negative values,
+// or, once the denominator flips sign, a result that spuriously
+// reappears positive and can even land above 1. None of that is a
+// meaningful projection; it's the formula being asked a question it
+// isn't built to answer.
+function spearmanBrownCaveat(singleICC, projected, kPrime) {
+  if (singleICC >= 0) return null;
+  const f = v => +(v.toFixed(4));
+  return `The single-measures ICC feeding this projection is negative (${f(singleICC)}), which the Spearman-Brown formula was never designed to handle — its denominator can shrink toward zero or flip sign as k' grows, which is why the projected value above (${f(projected)}) can swing to an extreme or even nonsensically exceed 1. A negative single-measures ICC already means there is no real reliability signal to project onto more raters in the first place; read it as "unreliable" (ICC ≤ 0) rather than trying to interpret the projected number.`;
 }
 
 // Parses long-format factorial data (one row per observation: factor
