@@ -515,6 +515,14 @@ body {
   margin-bottom: 44px;
 }
 
+/* Collapsed sections are just a thin header row with nothing below —
+   the full 44px above was sized for separating a dense card grid from
+   the next heading, and reads as an oversized gap between two bare
+   header rows now that sections default to collapsed. */
+.home-section.collapsed {
+  margin-bottom: 14px;
+}
+
 .home-section-heading {
   margin: 0;
 }
