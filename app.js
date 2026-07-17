@@ -297,9 +297,9 @@ function renderHome() {
       Click any available calculator to open it.
     </p>
     <a class="wizard-banner" href="#wizard">
-      <div class="wizard-banner-title">Not sure which calculator you need?</div>
-      <div class="wizard-banner-desc">Answer a few questions about your data — categorical or continuous, how many samples, paired or independent — and get pointed straight to the right one.</div>
-      <div class="wizard-banner-cta">Find My Calculator →</div>
+      <span class="wizard-banner-icon">?</span>
+      <span class="wizard-banner-text">Answer a few quick questions to find the right calculator.</span>
+      <span class="wizard-banner-arrow">→</span>
     </a>
     <div class="home-sections-grid">${sections}</div>
   `;

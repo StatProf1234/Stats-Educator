@@ -382,43 +382,55 @@ body {
   margin-bottom: 36px;
 }
 
+/* Compact single-line prompt — the wizard is always one click away via
+   the sidebar's own .wizard-nav-link, so this doesn't need to repeat
+   the pitch at hero-banner size; it just needs to catch the eye of
+   someone facing the full category list who doesn't know where to
+   start. */
 .wizard-banner {
-  display: block;
-  background: linear-gradient(135deg, rgba(78,110,219,.08), rgba(224,123,44,.06));
-  border: 1.5px solid rgba(78,110,219,.25);
-  border-radius: 12px;
-  padding: 20px 24px;
-  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(78, 110, 219, .06);
+  border: 1.5px solid rgba(78, 110, 219, .25);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 24px;
   text-decoration: none;
-  transition: border-color .15s, box-shadow .15s, transform .1s;
+  transition: border-color .15s, background .15s;
 }
 
 .wizard-banner:hover {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(78,110,219,.09), var(--shadow-sm);
-  transform: translateY(-1px);
+  background: rgba(78, 110, 219, .1);
 }
 
-.wizard-banner-title {
-  font-family: var(--font-display);
-  font-size: 17px;
+.wizard-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text);
-  margin-bottom: 6px;
+  flex-shrink: 0;
 }
 
-.wizard-banner-desc {
-  font-size: 13.5px;
+.wizard-banner-text {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-2);
-  line-height: 1.6;
-  max-width: 620px;
-  margin-bottom: 10px;
 }
 
-.wizard-banner-cta {
-  font-size: 12.5px;
+.wizard-banner-arrow {
+  font-size: 14px;
   font-weight: 600;
   color: var(--accent);
+  flex-shrink: 0;
 }
 
 .home-cards {
