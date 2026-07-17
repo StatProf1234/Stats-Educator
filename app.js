@@ -268,9 +268,10 @@ function renderHome() {
     }).join('');
 
     const availCount = entries.filter(e => e.status === 'available').length;
-    const countLabel = availCount > 0
-      ? `${availCount} of ${entries.length} available`
-      : `${entries.length} calculators`;
+    const countLabel =
+      availCount === entries.length ? `${availCount} available` :
+      availCount > 0 ? `${availCount} of ${entries.length} available` :
+      `${entries.length} calculators`;
 
     const isOpen = expandedHomeCategories.has(cat);
 
