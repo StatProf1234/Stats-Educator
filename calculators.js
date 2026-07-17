@@ -15689,6 +15689,46 @@ const GUIDES = [
       { id: 'critical-value-t', why: 'Finds the critical t-value and corresponding p-value for a given alpha and degrees of freedom.' },
       { id: 'critical-value-z', why: 'Same idea for the z-distribution, used with large samples or known population variance.' },
       { id: 'binomial-hyp-test', why: 'Worked example of a p-value calculation against a binomial null hypothesis.' },
+      { id: 'appraisal-tails-and-multiplicity', why: 'Extends this guide\'s multiple-comparisons example into the formal family-wise error rate, and covers one-tailed vs. two-tailed testing.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-tails-and-multiplicity',
+    category: 'Critical Appraisal of the Literature',
+    title: 'One-Tailed vs. Two-Tailed Tests, and When Multiple Comparisons Change the Rules',
+    blurb: 'Two decisions made before a single participant is enrolled — how many directions a test can detect an effect in, and how many hypotheses are being tested at once — quietly change what "significant" means, and both are easy to get right on paper and wrong in spirit.',
+    dek: `Most critical-appraisal attention goes to whether a p-value or confidence interval was calculated correctly. Two upstream decisions matter just as much and get far less scrutiny: whether a test was set up to detect an effect in one direction or two, and whether the reported significance threshold still means what it claims once more than one comparison is on the table.`,
+    sections: [
+      {
+        heading: 'One-tailed vs. two-tailed: what the choice actually commits you to',
+        html: `<p>A two-tailed test splits the significance threshold across both directions of the null distribution, testing whether an effect differs from the null in either direction &mdash; better or worse. A one-tailed test puts the entire threshold in a single, pre-specified direction, testing only whether the effect exceeds (or only whether it falls below) the null. Because all of the threshold sits on one side, a one-tailed test reaches significance with a smaller effect than a two-tailed test would need from the identical data &mdash; not a statistical trick, but a real difference in what question is being asked, and one that is only legitimate when the direction was genuinely fixed before data collection, for a genuinely one-directional question (for instance, testing whether a new manufacturing tolerance reduces a defect rate, where an increase would be handled no differently from no effect at all).</p>`,
+      },
+      {
+        heading: 'The appraisal red flag: choosing "one-tailed" after seeing the data',
+        html: `<p>The appraisal concern is not that one-tailed tests exist; it is post hoc adoption. A study that reports a one-tailed p-value only for the specific outcome that would have missed a conventional two-tailed threshold, without a pre-registered rationale for testing that outcome one-tailed, has effectively lowered its own bar for significance after already seeing the result. Worth checking: does the trial's protocol or registration, where available, specify one-tailed testing in advance, and is it applied consistently across every outcome rather than selectively wherever it happens to help.</p>`,
+      },
+      {
+        heading: 'Why testing more than one hypothesis changes the odds',
+        html: `<p>As the companion guide on p-values shows, testing 20 independent null hypotheses at a 0.05 threshold each pushes the chance of at least one false positive to roughly 64%, purely from running that many tests. The formal name for that quantity is the family-wise error rate (FWER): the probability of making at least one Type I error across a whole family of comparisons, as opposed to the per-comparison alpha, which only bounds the error rate for a single test considered in isolation. "0.05 per test" and "0.05 overall" are very different guarantees once more than one test is run, and it is worth asking, for any reported p-value, which of the two it is actually protecting.</p>`,
+      },
+      {
+        heading: 'Two ways trials keep the overall error rate honest',
+        html: `<p>Correction methods adjust the significance threshold for individual comparisons so the family-wise rate stays at its nominal level. Bonferroni divides the overall alpha by the number of comparisons &mdash; simple and appropriately conservative for a small, pre-specified set. Holm-Šídák is a step-down alternative: it ranks the p-values and tests them sequentially against a progressively less strict threshold, recovering some of the power Bonferroni gives up while still controlling the family-wise rate. Separately, a hierarchical (gatekeeping) testing procedure &mdash; common in registered trials with multiple pre-specified endpoints &mdash; only tests a secondary endpoint formally once the primary endpoint has already reached significance, so the "family" being protected is defined by the analysis plan itself rather than corrected after the fact with a formula.</p>`,
+      },
+      {
+        heading: 'What correction does not fix',
+        html: `<p>A Bonferroni or Holm-Šídák correction controls the false-positive rate across the specific comparisons the investigators chose to correct for &mdash; it says nothing about comparisons that were run, came back nonsignificant, and were simply left out of the paper, a subtler and more common problem than under-correcting the ones that do get reported. Worth checking whether a study's methods section states, in advance, how many comparisons were planned and how the analysis handled them, rather than presenting one corrected p-value for a small subset of tests among many that could have been run.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Two habits catch most of this: for any single p-value sitting close to the threshold, count how many total comparisons actually appear in the results section &mdash; not just the one highlighted in the abstract &mdash; and check whether any correction was applied to that full count; and for any one-tailed test, check specifically whether its direction was justified in advance rather than chosen after seeing which way the data leaned.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-p-values', why: 'Covers the multiplicity worked example (20 comparisons, ~64% chance of a false positive) that this guide\'s family-wise error rate section builds on.' },
+      { id: 'appraisal-subgroup-interaction', why: 'Applies the same multiplicity problem specifically to subgroup analyses, with the ISIS-2 astrological-sign example.' },
+      { id: 'holm-sidak-test', why: 'Computes the step-down Holm-Šídák correction described here directly.' },
     ],
   },
 
@@ -16190,6 +16230,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'interaction-test', why: 'Directly tests whether two subgroup effect estimates differ significantly from each other — the calculator built for this guide\'s core teaching point.' },
+      { id: 'appraisal-tails-and-multiplicity', why: 'Covers the family-wise error rate and correction methods (Bonferroni, Holm-Šídák) behind the multiplicity problem raised here.' },
       { id: 'anova-2way', why: 'Tests main effects and their interaction directly, for two-factor designs.' },
       { id: 'measures-of-association', why: 'Produces the subgroup-level effect estimates and confidence intervals discussed in the worked example.' },
       { id: 'meta-analysis', why: 'Subgroup/heterogeneity testing in a pooled-effects context is the same underlying idea.' },
