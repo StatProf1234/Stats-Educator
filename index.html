@@ -13,6 +13,13 @@
   <link rel="stylesheet" href="style.css">
   <script defer src="calculators.js"></script>
   <script defer src="app.js"></script>
+  <!-- GoatCounter analytics — no_onload since this is a single-page app;
+       app.js's route() fires window.goatcounter.count() manually on
+       every hash change instead, so each calculator/guide view counts
+       as its own pageview. -->
+  <script data-goatcounter="https://statprof.goatcounter.com/count"
+          data-goatcounter-settings='{"no_onload": true}'
+          async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
   <div id="app">

@@ -81,7 +81,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ── ROUTING ────────────────────────────────────────────── */
 
+// GoatCounter's script only auto-counts once, on load — this app never
+// reloads the page, so every calculator/guide/wizard view has to be
+// recorded manually here instead. Guarded in case the script didn't
+// load (ad blockers commonly block analytics domains), so a blocked
+// tracker never breaks navigation.
+function trackPageview() {
+  if (typeof window.goatcounter !== 'undefined' && window.goatcounter.count) {
+    window.goatcounter.count({ path: location.pathname + location.hash });
+  }
+}
+
 function route() {
+  trackPageview();
   const hash = location.hash.slice(1);
   if (hash === 'wizard' || hash.startsWith('wizard/')) {
     renderWizard(hash === 'wizard' ? [] : hash.slice('wizard/'.length).split('/'));
