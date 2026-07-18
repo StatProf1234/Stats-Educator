@@ -13965,6 +13965,163 @@ const WIZARD_TREE = {
 
 };
 
+// The Learn hub's counterpart to WIZARD_TREE above — same {question,
+// options} / {results} node shape, same renderer (renderWizardGeneric()
+// in app.js), just pointed at GUIDES instead of CALCULATORS. Every one
+// of the Learn hub's guides should appear in exactly one `results` list
+// below as its primary placement; a guide can ALSO appear a second time
+// as a secondary "also consider" entry elsewhere (see appraisal-
+// confounding-bias, referenced from both res_rct and res_confound)
+// without that counting as its primary spot.
+//
+// To add a newly written guide: pick whichever existing question this
+// guide's topic already falls under (or add a new option to that
+// question, or a whole new top-level branch off `start` if it doesn't
+// fit any existing one), then add one `{ id, why }` entry to that
+// option's results node. No other code changes needed.
+const LEARN_WIZARD_TREE = {
+
+  start: {
+    question: 'What are you trying to do?',
+    options: [
+      { label: "Figure out what kind of data I'm working with",          next: 'dataType' },
+      { label: 'Understand a chart or plot I\'m looking at',             next: 'graphKind' },
+      { label: "Critically appraise a study I'm reading",                next: 'appraiseKind' },
+      { label: 'Understand a specific statistical concept or term',      next: 'conceptKind' },
+      { label: 'Look something up quickly',                              next: 'quickRefResult' },
+    ]
+  },
+
+  // ── DATA TYPES ────────────────────────────────────────────────────
+  dataType: {
+    question: 'Which best describes your data?',
+    options: [
+      { label: 'Named categories with no natural order (blood type, treatment arm)', next: 'res_nominal' },
+      { label: "Ordered categories, but the gaps between levels aren't necessarily equal (pain scale, satisfaction rating)", next: 'res_ordinal' },
+      { label: 'Only two possible outcomes (alive/dead, yes/no)', next: 'res_binary' },
+      { label: 'Counts of how many times something happened (falls, infections, readmissions)', next: 'res_count' },
+      { label: 'Measured on a continuous scale (blood pressure, weight, age)', next: 'res_continuous' },
+      { label: 'The same subjects measured twice, or matched pairs, vs. separate independent groups', next: 'res_paired' },
+      { label: "Time until an event happens, and not everyone has had the event yet", next: 'res_tte' },
+    ]
+  },
+  res_nominal:    { results: [ { id: 'data-nominal', why: 'Unordered categories — the starting point for choosing a chi-square, Fisher\'s exact, or a 2×2-based measure of association.' } ] },
+  res_ordinal:    { results: [ { id: 'data-ordinal', why: 'Ordered categories with unequal gaps — rules out an ordinary mean/SD as the natural summary.' } ] },
+  res_binary:     { results: [ { id: 'data-binary', why: 'Two possible outcomes — the data shape behind proportions, risk ratios, odds ratios, and logistic regression.' } ] },
+  res_count:      { results: [ { id: 'data-discrete-count', why: 'Event counts — usually modeled with Poisson or negative binomial regression rather than an ordinary linear model.' } ] },
+  res_continuous: { results: [ { id: 'data-continuous', why: 'The data shape behind t-tests, ANOVA, correlation, and linear regression.' } ] },
+  res_paired:     { results: [ { id: 'data-paired-independent', why: 'Whether the same subjects were measured twice determines whether a paired or an independent-samples test is valid.' } ] },
+  res_tte:        { results: [ { id: 'data-time-to-event', why: "Censoring — some subjects haven't had the event yet — is why this needs survival analysis, not an ordinary mean." } ] },
+
+  // ── READING GRAPHS ────────────────────────────────────────────────
+  graphKind: {
+    question: 'Which chart are you looking at?',
+    options: [
+      { label: 'Rows of studies with a diamond at the bottom', next: 'res_forest' },
+      { label: 'A diagram connecting several treatments with lines between them', next: 'res_network' },
+      { label: 'A box with whiskers showing a spread of values', next: 'res_box' },
+      { label: 'A scatter plot of differences plotted against averages', next: 'res_blandaltman' },
+      { label: 'A plot with a shaded equivalence or non-inferiority zone', next: 'res_equiv' },
+      { label: 'A step-down curve tracking survival over time', next: 'res_km' },
+    ]
+  },
+  res_forest:      { results: [ { id: 'reading-forest-plots', why: "The standard chart for a single study's effect estimate or a meta-analysis's pooled result." } ] },
+  res_network:     { results: [ { id: 'reading-network-diagrams', why: 'How to read the network geometry and league table behind an indirect or mixed treatment comparison.' } ] },
+  res_box:         { results: [ { id: 'reading-box-plots', why: 'Five-number-summary charts for comparing distributions across groups.' } ] },
+  res_blandaltman: { results: [ { id: 'reading-bland-altman-plots', why: 'For agreement between two measurement methods, not correlation between them.' } ] },
+  res_equiv:       { results: [ { id: 'reading-equivalence-plots', why: 'Reading whether a confidence interval actually falls inside the zone that counts as "equivalent."' } ] },
+  res_km:          { results: [ { id: 'reading-kaplan-meier-cox', why: 'Step curves, censoring tick marks, and what a Cox hazard ratio adds on top.' } ] },
+
+  // ── APPRAISING STUDIES BY DESIGN ──────────────────────────────────
+  appraiseKind: {
+    question: 'What kind of study is it?',
+    options: [
+      { label: 'Randomized controlled trial', next: 'res_rct' },
+      { label: 'Cohort study', next: 'res_cohort' },
+      { label: 'Case-control study', next: 'res_cc' },
+      { label: 'Cross-sectional study', next: 'res_cs' },
+      { label: 'Systematic review or meta-analysis', next: 'res_sr' },
+      { label: 'Scoping review', next: 'res_scoping' },
+      { label: 'Diagnostic accuracy study', next: 'res_dx' },
+      { label: 'Pilot or feasibility study', next: 'res_pilot' },
+      { label: 'Prognostic study', next: 'res_prog' },
+      { label: 'Clinical practice guideline', next: 'res_guideline' },
+    ]
+  },
+  res_rct: { results: [
+    { id: 'appraisal-appraising-rcts', why: 'Randomization, allocation concealment, blinding, ITT vs. per-protocol, CONSORT, RoB 2.' },
+    { id: 'appraisal-confounding-bias', why: 'The mechanism randomization is designed to solve — worth having first.' },
+  ]},
+  res_cohort:    { results: [ { id: 'appraisal-appraising-cohort', why: 'Selection bias, surveillance bias, confounding control, differential attrition, the Newcastle-Ottawa Scale.' } ] },
+  res_cc:        { results: [ { id: 'appraisal-appraising-case-control', why: 'Control selection, recall bias, and the retrospective reconstruction of exposure.' } ] },
+  res_cs:        { results: [ { id: 'appraisal-appraising-cross-sectional', why: 'Temporal ambiguity — which came first — is the central limitation, and this guide starts there.' } ] },
+  res_sr: { results: [
+    { id: 'appraisal-appraising-systematic-reviews', why: 'Protocol registration, search strategy, risk-of-bias assessment, PRISMA, AMSTAR-2, ROBIS.' },
+    { id: 'appraisal-meta-analysis-reading', why: 'The statistical side — heterogeneity, fixed vs. random effects, publication bias.' },
+    { id: 'appraisal-grade', why: 'How much confidence the pooled result actually deserves.' },
+  ]},
+  res_scoping:   { results: [ { id: 'appraisal-appraising-scoping-reviews', why: 'A different purpose from a systematic review — mapping a literature, not pooling an effect.' } ] },
+  res_dx:        { results: [ { id: 'appraisal-appraising-diagnostic-studies', why: 'Reference standard adequacy, spectrum bias, verification bias, QUADAS-2.' } ] },
+  res_pilot:     { results: [ { id: 'appraisal-pilot-studies', why: 'What a small feasibility study can — and specifically cannot — tell you about whether a treatment works.' } ] },
+  res_prog:      { results: [ { id: 'appraisal-appraising-prognostic-studies', why: 'Inception cohorts, prognostic-risk homogeneity, censoring, the QUIPS tool.' } ] },
+  res_guideline: { results: [ { id: 'appraisal-appraising-guidelines', why: 'Patient groups considered, evidence grounding, values and preferences, AGREE II.' } ] },
+
+  // ── CONCEPTS & TERMS ──────────────────────────────────────────────
+  conceptKind: {
+    question: 'Which kind of concept?',
+    options: [
+      { label: 'Effect measures — risk ratios, odds ratios, absolute risk', next: 'res_effect' },
+      { label: 'P-values, significance, or hypothesis testing', next: 'res_pval' },
+      { label: 'Confidence intervals or similar ranges', next: 'res_ci' },
+      { label: 'Frequentist vs. Bayesian reasoning', next: 'res_bayes' },
+      { label: 'Standard deviation vs. standard error', next: 'res_sdse' },
+      { label: 'Statistical vs. clinical significance', next: 'res_clinsig' },
+      { label: 'Statistical power or sample size', next: 'res_power' },
+      { label: 'Confounding, bias, or study design quality', next: 'res_confound' },
+      { label: 'How prevalence affects a diagnostic test', next: 'res_prevalence' },
+      { label: 'Survival analysis basics — censoring, hazard ratios', next: 'res_survival' },
+      { label: 'How much to trust pooled or synthesized evidence', next: 'res_evidence' },
+      { label: 'A specific reading trap or pitfall', next: 'res_pitfall' },
+    ]
+  },
+  res_effect:   { results: [ { id: 'appraisal-effect-measures', why: 'Where relative risk and odds ratio diverge, and why absolute measures often tell a different story.' } ] },
+  res_pval: { results: [
+    { id: 'appraisal-p-values', why: 'The precise definition, and what "0.05" actually is (and isn\'t).' },
+    { id: 'appraisal-tails-and-multiplicity', why: 'One-tailed vs. two-tailed testing, and what multiple comparisons do to the rules.' },
+  ]},
+  res_ci: { results: [
+    { id: 'appraisal-confidence-intervals', why: "What the interval is actually a guarantee about — and what it isn't." },
+    { id: 'appraisal-interval-types', why: 'Confidence, credible, or prediction interval — three similar-looking ranges, three different questions.' },
+  ]},
+  res_bayes:      { results: [ { id: 'appraisal-frequentist-bayesian', why: 'P(data | model) vs. P(model | data) — and why clinicians already reason the Bayesian way at the bedside.' } ] },
+  res_sdse:       { results: [ { id: 'appraisal-sd-vs-se', why: 'What error bars are actually showing, and the mistake of reading one as the other.' } ] },
+  res_clinsig:    { results: [ { id: 'appraisal-clinical-significance', why: "A statistically significant effect that's too small to matter to an actual patient." } ] },
+  res_power:      { results: [ { id: 'appraisal-power-sample-size', why: 'Why "no difference found" and "no difference" are not the same claim.' } ] },
+  res_confound: { results: [
+    { id: 'appraisal-confounding-bias', why: 'The core mechanism behind most observational-study appraisal.' },
+    { id: 'appraisal-study-design', why: "Where a given design actually sits in the hierarchy, and when that hierarchy doesn't hold." },
+  ]},
+  res_prevalence: { results: [ { id: 'appraisal-diagnostic-tests-prevalence', why: 'The same test performs differently in a screening population than in a specialty referral clinic.' } ] },
+  res_survival:   { results: [ { id: 'appraisal-survival-basics', why: 'Censoring, the log-rank test, and what a hazard ratio assumes to stay valid.' } ] },
+  res_evidence: { results: [
+    { id: 'appraisal-meta-analysis-reading', why: "Heterogeneity, fixed vs. random effects, and why pooling can't fix flawed primary studies." },
+    { id: 'appraisal-bias-tools', why: 'A map of which tool answers which question — CONSORT, RoB 2, AMSTAR-2, GRADE, and more.' },
+    { id: 'appraisal-grade', why: 'Certainty of evidence and strength of recommendation are two different questions.' },
+  ]},
+  res_pitfall: { results: [
+    { id: 'appraisal-table2-fallacy', why: "Only the exposure of interest in a regression table was built to be unconfounded — the rest weren't." },
+    { id: 'appraisal-regression-to-mean', why: 'Why a before/after study with no control group will almost always look like "improvement."' },
+    { id: 'appraisal-subgroup-interaction', why: '"Worked in women but not men" is usually not what the data actually show.' },
+  ]},
+
+  // ── QUICK REFERENCE ───────────────────────────────────────────────
+  quickRefResult: { results: [
+    { id: 'reference-glossary-abbreviations', why: 'Grouped by topic, with links to the fuller guide or calculator where one exists.' },
+    { id: 'reference-appraisal-worksheets', why: 'Six fill-in-the-blank worksheets, one per clinical question type.' },
+  ]},
+
+};
+
 /* ── SEARCH KEYWORDS ──────────────────────────────────────────────────────
    A synonym/intent layer for the sidebar search, keyed by calculator id.
    These are common ways someone might describe their situation ("before

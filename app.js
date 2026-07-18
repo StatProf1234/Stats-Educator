@@ -87,6 +87,10 @@ function route() {
     renderWizard(hash === 'wizard' ? [] : hash.slice('wizard/'.length).split('/'));
     return;
   }
+  if (hash === 'learnwizard' || hash.startsWith('learnwizard/')) {
+    renderLearnWizard(hash === 'learnwizard' ? [] : hash.slice('learnwizard/'.length).split('/'));
+    return;
+  }
   if (hash === 'learn' || hash.startsWith('learn/')) {
     if (hash === 'learn') { renderLearnHub(); return; }
     const guide = GUIDES.find(g => g.id === hash.slice('learn/'.length));
@@ -344,20 +348,31 @@ function renderHome() {
   });
 }
 
-/* ── SELECTION WIZARD ───────────────────────────────────── */
+/* ── SELECTION WIZARDS ──────────────────────────────────── */
 
-// Renders the calculator-selection wizard (WIZARD_TREE, defined in
-// calculators.js) at the given path — an array of node ids visited so
-// far, with the LAST entry being the current node ('start' if empty).
-// The path lives entirely in the URL hash (#wizard/id1/id2/...), so
-// answering a question is just navigating to a longer hash and the
-// browser's own back button walks back through it for free.
-function renderWizard(path) {
+// Shared renderer for both decision-tree wizards — the calculator one
+// (WIZARD_TREE, pointed at CALCULATORS) and the Learn hub one
+// (LEARN_WIZARD_TREE, pointed at GUIDES). Same {question, options} /
+// {results} node shape either way; `path` is the array of node ids
+// visited so far, with the LAST entry being the current node ('start'
+// if empty). The path lives entirely in the URL hash (e.g.
+// #wizard/id1/id2/...), so answering a question is just navigating to
+// a longer hash and the browser's own back button walks back through
+// it for free. `cfg` supplies everything that differs between the two:
+//   tree        — the WIZARD_TREE-shaped object to walk
+//   homeHash    — hash prefix for "start over" / back / option links
+//   eyebrow     — small label shown above the question/results
+//   resolveItem — (id) => the CALCULATORS/GUIDES entry for a result id
+//   itemHref    — (item) => href for that item's own page
+//   itemName    — (item) => headline text for the result card
+//   itemHint    — (item) => secondary line for the result card
+function renderWizardGeneric(path, cfg) {
+  const { tree, homeHash, eyebrow, resolveItem, itemHref, itemName, itemHint } = cfg;
   const currentId = path.length ? path[path.length - 1] : 'start';
-  const node = WIZARD_TREE[currentId];
+  const node = tree[currentId];
 
   if (!node) {
-    view().innerHTML = `<p class="calc-desc">That wizard step doesn't exist. <a href="#wizard">Start over</a>.</p>`;
+    view().innerHTML = `<p class="calc-desc">That wizard step doesn't exist. <a href="#${homeHash}">Start over</a>.</p>`;
     return;
   }
 
@@ -365,29 +380,29 @@ function renderWizard(path) {
   // chosen to get there (the label lives on the PREVIOUS node).
   const crumbs = ['start', ...path].map((id, i, arr) => {
     if (i === 0) return null;
-    const prevNode = WIZARD_TREE[arr[i - 1]];
+    const prevNode = tree[arr[i - 1]];
     const opt = prevNode && prevNode.options && prevNode.options.find(o => o.next === id);
     return opt ? opt.label : null;
   }).filter(Boolean);
 
   const breadcrumbHtml = crumbs.length ? `
     <div class="wizard-breadcrumb">
-      <a href="#wizard">Start over</a>
+      <a href="#${homeHash}">Start over</a>
       ${crumbs.map(c => `<span class="wizard-crumb-sep">›</span><span class="wizard-crumb">${esc(c)}</span>`).join('')}
     </div>` : '';
 
-  const backHref = path.length > 1 ? `#wizard/${path.slice(0, -1).join('/')}` : '#wizard';
+  const backHref = path.length > 1 ? `#${homeHash}/${path.slice(0, -1).join('/')}` : `#${homeHash}`;
   const backHtml = path.length ? `<a class="wizard-back" href="${backHref}">← Back</a>` : '';
 
   if (node.question) {
     const optionsHtml = node.options.map(opt => `
-      <a class="wizard-option" href="#wizard/${[...path, opt.next].join('/')}">
+      <a class="wizard-option" href="#${homeHash}/${[...path, opt.next].join('/')}">
         <span>${esc(opt.label)}</span>
         <span class="wizard-option-arrow">→</span>
       </a>`).join('');
 
     view().innerHTML = `
-      <div class="calc-eyebrow">Calculator Finder</div>
+      <div class="calc-eyebrow">${esc(eyebrow)}</div>
       ${breadcrumbHtml}
       <h1 class="wizard-question">${esc(node.question)}</h1>
       <div class="wizard-options">${optionsHtml}</div>
@@ -396,19 +411,19 @@ function renderWizard(path) {
   } else {
     const [primary, ...also] = node.results;
     const cardFor = (r, isPrimary) => {
-      const calc = CALCULATORS.find(c => c.id === r.id);
-      if (!calc) return '';
+      const item = resolveItem(r.id);
+      if (!item) return '';
       return `
-        <a class="wizard-result-card${isPrimary ? ' primary' : ''}" href="#${calc.id}">
+        <a class="wizard-result-card${isPrimary ? ' primary' : ''}" href="${itemHref(item)}">
           ${isPrimary ? '<div class="wizard-result-badge">Recommended</div>' : ''}
-          <div class="wizard-result-name">${esc(calc.name)}</div>
-          <div class="wizard-result-hint">${esc(calc.hint)}</div>
+          <div class="wizard-result-name">${esc(itemName(item))}</div>
+          <div class="wizard-result-hint">${esc(itemHint(item))}</div>
           <div class="wizard-result-why">${esc(r.why)}</div>
         </a>`;
     };
 
     view().innerHTML = `
-      <div class="calc-eyebrow">Calculator Finder</div>
+      <div class="calc-eyebrow">${esc(eyebrow)}</div>
       ${breadcrumbHtml}
       <h1 class="wizard-question">Here's what fits</h1>
       <div class="wizard-results">
@@ -421,6 +436,30 @@ function renderWizard(path) {
   }
 
   document.getElementById('main').scrollTop = 0;
+}
+
+function renderWizard(path) {
+  renderWizardGeneric(path, {
+    tree: WIZARD_TREE,
+    homeHash: 'wizard',
+    eyebrow: 'Calculator Finder',
+    resolveItem: id => CALCULATORS.find(c => c.id === id),
+    itemHref: calc => `#${calc.id}`,
+    itemName: calc => calc.name,
+    itemHint: calc => calc.hint,
+  });
+}
+
+function renderLearnWizard(path) {
+  renderWizardGeneric(path, {
+    tree: LEARN_WIZARD_TREE,
+    homeHash: 'learnwizard',
+    eyebrow: 'Guide Finder',
+    resolveItem: id => GUIDES.find(g => g.id === id),
+    itemHref: guide => `#learn/${guide.id}`,
+    itemName: guide => guide.title,
+    itemHint: guide => guide.blurb,
+  });
 }
 
 /* ── LEARN: CHART-READING GUIDES ────────────────────────── */
@@ -437,18 +476,6 @@ function renderLearnHub() {
 
   const catEntries = Object.entries(groups);
 
-  // Quick-nav pills up top — jumps down to a category's own section via
-  // scrollIntoView rather than a real href="#...", since a plain anchor
-  // hash would be caught by the app's own hash-based router (route())
-  // and treated as an attempt to navigate to a calculator/guide, not a
-  // same-page scroll.
-  const jumpNav = catEntries.length > 1 ? `
-    <div class="learn-jump-nav">
-      ${catEntries.map(([cat, guides]) => `
-        <button type="button" class="learn-jump-pill" data-target="learn-cat-${slugify(cat)}">${esc(cat)} <span class="guide-section-count">${guides.length}</span></button>
-      `).join('')}
-    </div>` : '';
-
   const sections = catEntries.map(([cat, guides]) => {
     const cards = guides.map(g => `
       <a class="home-card" href="#learn/${g.id}">
@@ -459,7 +486,7 @@ function renderLearnHub() {
     const isOpen = expandedLearnCategories.has(cat);
 
     return `
-      <div class="home-section${isOpen ? '' : ' collapsed'}" data-cat="${esc(cat)}" id="learn-cat-${slugify(cat)}">
+      <div class="home-section${isOpen ? '' : ' collapsed'}" data-cat="${esc(cat)}">
         <h2 class="home-section-heading">
           <button type="button" class="home-section-header${isOpen ? ' open' : ''}" aria-expanded="${isOpen}">
             <span class="home-section-chevron">▸</span>
@@ -475,21 +502,13 @@ function renderLearnHub() {
     <div class="home-eyebrow">Statistical Calculator Library</div>
     <h1 class="home-title">Learn</h1>
     <p class="home-desc">Reference guides for using this site well — how to recognize the kind of data you're working with, how to read the charts these calculators produce, and how to critically appraise the studies you're applying them to.</p>
-    ${jumpNav}
+    <a class="wizard-banner" href="#learnwizard">
+      <span class="wizard-banner-icon">?</span>
+      <span class="wizard-banner-text">Not sure where to start? Answer a few quick questions to find the right guide.</span>
+      <span class="wizard-banner-arrow">→</span>
+    </a>
     ${sections}
   `;
-
-  document.querySelectorAll('.learn-jump-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = document.getElementById(btn.dataset.target);
-      // Expand the section first if it's currently collapsed — scrolling
-      // to a collapsed section would just land on its header with no
-      // cards visible underneath, defeating the point of the jump link.
-      const header = target?.querySelector('.home-section-header');
-      if (header && !header.classList.contains('open')) header.click();
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  });
 
   document.querySelectorAll('.home-section-header').forEach(header => {
     header.addEventListener('click', () => {
