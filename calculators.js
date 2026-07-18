@@ -9487,6 +9487,80 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 105. WEIGHTED AVERAGE / WEIGHTED SCORE ──────────────────────────────
+     A plain weighted mean — Σ(w·x)/Σw — for combining several scores
+     using arbitrary, externally assigned weights (course grades,
+     rubric items, composite indices). Distinct from 'combine-groups'
+     above, whose weights come from each subgroup's own sample size
+     rather than a weight the user assigns directly.                    */
+  {
+    id:          'weighted-average',
+    name:        'Weighted Average / Weighted Score',
+    hint:        'x̄w = Σ(w·x) / Σw',
+    category:    'Descriptive Statistics',
+    description: 'Combines several scores — exam grades, rubric items, composite quality indices — into one overall score using weights you assign directly, rather than weights derived from sample size.',
+
+    formulas: [
+      {
+        label: 'Weighted Mean',
+        latex: '\\bar{x}_w = \\dfrac{\\sum w_i x_i}{\\sum w_i}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'data', type: 'textarea',
+        label: 'Components — one per line: label, score, weight (comma-separated)',
+        default: 'Exam 1, 78, 25\nExam 2, 85, 25\nFinal Exam, 90, 50'
+      },
+    ],
+
+    example({ data }) {
+      const rows = parseWeightedRows(data);
+      if (rows.length < 1 || rows.some(r => !r.label || !isFinite(r.score) || !isFinite(r.weight) || r.weight <= 0))
+        return 'Enter a label, score, and positive weight for each component to see a worked example here.';
+      const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
+      const weightedAvg = rows.reduce((s, r) => s + r.score * r.weight, 0) / totalWeight;
+      const isPct = Math.abs(totalWeight - 100) < 0.001;
+      const f = v => +v.toFixed(2);
+      const listStr = rows.map(r => `${r.label} (${f(r.score)}, weighted ${f(r.weight)}${isPct ? '%' : ''})`).join(', ');
+      return `With ${listStr}, the weighted average comes out to ${f(weightedAvg)}${isPct ? '%' : ''} — each component pulls the total toward its own score in proportion to its share of the total weight, not just an equal split across ${rows.length} component${rows.length === 1 ? '' : 's'}.`;
+    },
+
+    calculate({ data }) {
+      const rows = parseWeightedRows(data);
+      if (rows.length < 1) return [err('Enter at least one component')];
+      if (rows.some(r => !r.label)) return [err('Each row needs a label before the first comma')];
+      if (rows.some(r => !isFinite(r.score))) return [err('Each row needs a numeric score')];
+      if (rows.some(r => !isFinite(r.weight) || r.weight <= 0)) return [err('Each row needs a positive numeric weight')];
+
+      const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
+      const weightedSum = rows.reduce((s, r) => s + r.score * r.weight, 0);
+      const weightedAvg = weightedSum / totalWeight;
+      const isPct = Math.abs(totalWeight - 100) < 0.001;
+
+      const f = (v, dp = 2) => +(v.toFixed(dp));
+
+      const rowsOut = rows.map(r => ({
+        label: r.label,
+        isText: true, ci: null, isRatio: false,
+        value: `${f(r.score)} × ${f(r.weight)}${isPct ? '%' : ''} = ${f(r.score * r.weight)}`,
+      }));
+
+      rowsOut.push({ label: 'Sum of Weights', value: f(totalWeight), ci: null, isRatio: false });
+
+      if (!isPct) {
+        rowsOut.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: `Weights sum to ${f(totalWeight)}, not 100 — the weighted average below is still correctly normalized (divided by the actual sum of weights entered), but double-check this is intentional if you meant these to be percentages of a whole.` });
+      }
+
+      rowsOut.push({ label: 'Weighted Average', value: f(weightedAvg), ci: null, isRatio: false, highlight: true });
+
+      return rowsOut;
+    }
+  },
+
   /* ── 91. HARTUNG-KNAPP-SIDIK-JONKMAN (HKSJ) METHOD ──────────────────────
      The standard DerSimonian-Laird random-effects CI (θ̂ ± z·SE) treats
      τ² as if it were known exactly, which understates uncertainty —
@@ -10717,6 +10791,17 @@ function rankWithTies(arr) {
 function parseMatrix(text) {
   return String(text).trim().split(/\n+/).map(l => l.trim()).filter(Boolean)
     .map(l => l.split(/[,\s]+/).filter(Boolean).map(Number));
+}
+
+// One row per weighted component: "label, score, weight". Unlike
+// parseMatrix, the first field is a free-text label rather than a
+// number, so this splits on commas only (not whitespace too).
+function parseWeightedRows(text) {
+  return String(text).trim().split(/\n+/).map(l => l.trim()).filter(Boolean)
+    .map(line => {
+      const parts = line.split(',').map(s => s.trim());
+      return { label: parts[0] || '', score: Number(parts[1]), weight: Number(parts[2]) };
+    });
 }
 
 // The six standard ICC forms (McGraw & Wong, 1996 / Shrout & Fleiss,
@@ -13256,6 +13341,7 @@ const CALCULATOR_INDEX = [
   { id: 'revman-sd',            name: 'RevMan — Finding SD',             category: 'Descriptive Statistics',      description: 'Derives standard deviations from confidence intervals or standard errors for meta-analysis.',  status: 'available' },
   { id: 'combine-groups',       name: 'Combining Groups (Mean, SD & N)', category: 'Descriptive Statistics',  description: 'Combines 2 to 4 separately reported subgroups (e.g., age bands, sites, or sexes) into one overall mean, SD, and N, as if the raw data itself had been pooled.', status: 'available' },
   { id: 'interquartile-range',  name: 'Interquartile Range (IQR)',       category: 'Descriptive Statistics',  description: "Computes Q1, the median, Q3, and the interquartile range from raw data, flags outliers using Tukey's 1.5×IQR fences, and draws a box-and-whisker plot.", status: 'available' },
+  { id: 'weighted-average',     name: 'Weighted Average / Weighted Score', category: 'Descriptive Statistics', description: 'Combines several scores into one overall score using weights you assign directly — course grades, rubric items, or composite quality indices.', status: 'available' },
 
   // ── 2. PROBABILITY & DISTRIBUTIONS ───────────────────────────────────
   { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution.',    status: 'available' },
@@ -13462,6 +13548,7 @@ const WIZARD_TREE = {
       { id: 'variance-sd-sem-graph', why: 'Compares SD (spread of individuals) against SEM (precision of the mean) side by side.' },
       { id: 'revman-sd',             why: 'Back-calculates an SD from a paper that only reported a CI or SE — useful for meta-analysis prep.' },
       { id: 'combine-groups',        why: 'Merges 2 to 4 separately reported subgroups (e.g. age bands or sites) into one overall mean, SD, and N.' },
+      { id: 'weighted-average',      why: 'Combines several scores (exam grades, rubric items) using weights you assign directly — not weights based on sample size.' },
       { id: 'interquartile-range',   why: 'Q1, median, Q3, and IQR from raw data, with Tukey outlier fences and a box plot — a spread measure unaffected by extreme values.' },
     ]
   },
@@ -14141,6 +14228,7 @@ const SEARCH_KEYWORDS = {
   'revman-sd':             ['back calculate sd', 'derive sd from a confidence interval', 'meta-analysis sd', 'convert se to sd', 'cochrane revman'],
   'combine-groups':        ['combine groups', 'pooled mean and sd', 'overall mean and sd', 'merge male and female', 'combining subgroups', 'grand mean and sd', 'cochrane combine groups', 'combine multiple groups', 'combine four groups', 'weighted average mean and sd'],
   'interquartile-range':   ['interquartile range', 'iqr', 'q1', 'q3', 'first quartile', 'third quartile', 'box plot', 'box and whisker plot', 'tukey fences', 'outlier detection', 'five number summary'],
+  'weighted-average':      ['weighted average', 'weighted mean', 'weighted score', 'weighted grade', 'course grade calculator', 'exam weights', 'combine exam scores', 'rubric score', 'composite score'],
 
   // Probability & Distributions
   'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve'],
@@ -14344,6 +14432,11 @@ const NOTATION = {
     { symbol: 'IQR', meaning: 'Interquartile Range, Q3 − Q1 — the spread of the middle 50% of the data, unaffected by extreme values.' },
     { symbol: 'r', meaning: 'Linear Interpolation method only: the (possibly fractional) 1-indexed rank a given percentile falls at.' },
     { symbol: '\\text{Lower/Upper Fence}', meaning: "Tukey's boundaries for flagging outliers, 1.5×IQR beyond Q1 and Q3 respectively." },
+  ],
+  'weighted-average': [
+    { symbol: 'x_i', meaning: "Each component's own score (e.g., a single exam grade)." },
+    { symbol: 'w_i', meaning: "Each component's assigned weight — set directly by you, not derived from a sample size." },
+    { symbol: '\\bar{x}_w', meaning: 'The weighted mean — the combined score after weighting.' },
   ],
 
   // Probability & Distributions
