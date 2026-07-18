@@ -593,11 +593,13 @@ body {
   border: 1.5px solid var(--border);
   border-radius: 10px;
   padding: 2px 18px;
-  transition: border-color .15s;
+  background: rgba(78, 110, 219, .05);
+  transition: border-color .15s, background .15s;
 }
 
 .home-sections-grid .home-section.collapsed:hover {
   border-color: var(--accent);
+  background: rgba(78, 110, 219, .09);
 }
 
 .home-sections-grid .home-section.collapsed .home-section-header {
