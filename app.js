@@ -547,6 +547,19 @@ function renderLearnHub() {
       <span class="wizard-banner-text">${calcTotal} calculators across ${calcCategories} categories — ${calcAvailLabel}.</span>
       <span class="wizard-banner-arrow">→</span>
     </a>
+
+    <div class="resource-divider">More like this</div>
+    <a class="resource-card" href="https://www.dental.upenn.edu/research/center-for-integrative-global-oral-health/education/stats-with-crayons/" target="_blank" rel="noopener">
+      <span class="resource-icon">🐾</span>
+      <span class="resource-body">
+        <span class="resource-title-row">
+          <span class="resource-title">Stats with Crayons</span>
+          <span class="resource-source">dental.upenn.edu ↗</span>
+        </span>
+        <span class="resource-desc">Short vignettes where a dog teaches a cat statistics — from Penn Dental Medicine's <em>Center for Integrative Global Oral Health</em>. Opens in a new tab.</span>
+      </span>
+    </a>
+
     ${sections}
   `;
 
