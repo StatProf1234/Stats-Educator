@@ -9512,7 +9512,7 @@ const CALCULATORS = [
       {
         id: 'data', type: 'textarea',
         label: 'Components — one per line: label, score, weight (comma-separated)',
-        default: 'Exam 1, 78, 25\nExam 2, 85, 25\nFinal Exam, 90, 50'
+        default: 'OSCE (Clinical Skills Exam), 82, 30\nIn-Training Written Exam, 76, 30\nAttending Evaluation, 90, 40'
       },
     ],
 
@@ -9525,7 +9525,16 @@ const CALCULATORS = [
       const isPct = Math.abs(totalWeight - 100) < 0.001;
       const f = v => +v.toFixed(2);
       const listStr = rows.map(r => `${r.label} (${f(r.score)}, weighted ${f(r.weight)}${isPct ? '%' : ''})`).join(', ');
-      return `With ${listStr}, the weighted average comes out to ${f(weightedAvg)}${isPct ? '%' : ''} — each component pulls the total toward its own score in proportion to its share of the total weight, not just an equal split across ${rows.length} component${rows.length === 1 ? '' : 's'}.`;
+      let comparison = '';
+      if (rows.length > 1) {
+        const simpleAvg = rows.reduce((s, r) => s + r.score, 0) / rows.length;
+        const diff = Math.abs(weightedAvg - simpleAvg);
+        if (diff > 0.005) {
+          const dir = weightedAvg > simpleAvg ? 'higher' : 'lower';
+          comparison = ` A simple, unweighted average across the same ${rows.length} components would give ${f(simpleAvg)}${isPct ? '%' : ''} — the weighted result comes out ${dir}, reflecting which component carries the most weight.`;
+        }
+      }
+      return `With ${listStr}, the weighted average comes out to ${f(weightedAvg)}${isPct ? '%' : ''} — each component pulls the total toward its own score in proportion to its share of the total weight, not just an equal split across ${rows.length} component${rows.length === 1 ? '' : 's'}.${comparison}`;
     },
 
     calculate({ data }) {
