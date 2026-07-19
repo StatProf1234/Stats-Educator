@@ -346,6 +346,10 @@ function renderHome() {
   }).join('');
 
   view().innerHTML = `
+    <div class="hub-toggle">
+      <a href="#" class="hub-toggle-link active">Calculators</a>
+      <a href="#learn" class="hub-toggle-link">Learn</a>
+    </div>
     <div class="home-eyebrow">Statistical Calculator Library</div>
     <h1 class="home-title">Full Calculator Index</h1>
     <p class="home-desc">
@@ -549,6 +553,10 @@ function renderLearnHub() {
   }).join('');
 
   view().innerHTML = `
+    <div class="hub-toggle">
+      <a href="#" class="hub-toggle-link">Calculators</a>
+      <a href="#learn" class="hub-toggle-link active">Learn</a>
+    </div>
     <div class="home-eyebrow">Critical Appraisal &amp; Reference</div>
     <h1 class="home-title">Learn</h1>
     <p class="home-desc">Reference guides for using this site well — how to recognize the kind of data you're working with, how to read the charts these calculators produce, and how to critically appraise the studies you're applying them to. Looking for a specific calculator instead? See the Calculator Index.</p>
