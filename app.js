@@ -672,11 +672,11 @@ function renderGuide(guide) {
 /* ── CALCULATOR VIEW ────────────────────────────────────── */
 
 function renderCalculator(calc) {
-  // 'explorer' calculators (e.g. Statistical Power Explorer) use a
-  // completely different page template — live-updating header/chart/
-  // stats instead of the standard inputs-grid + Calculate + results
-  // table — so they're handed off entirely rather than threaded
-  // through the rest of this function.
+  // 'explorer' calculators (e.g. Power with Graph, Type I & Type II
+  // Error Explorer) use a completely different page template — live-
+  // updating header/chart/stats instead of the standard inputs-grid +
+  // Calculate + results table — so they're handed off entirely rather
+  // than threaded through the rest of this function.
   if (calc.inputLayout === 'explorer') {
     renderExplorerCalculator(calc);
     return;
@@ -763,14 +763,15 @@ function renderCalculator(calc) {
 }
 
 // Page template for calculators with inputLayout: 'explorer' (e.g.
-// Statistical Power Explorer) — a live-updating hero visualization
-// rather than the standard inputs-grid + Calculate button + results
-// table. calc.calculate() returns a single { title, subtitle, chartSvg,
-// legend, stats, footnote } object here instead of the usual row
-// array (or the usual [err(...)] array on invalid input, handled the
-// same way every other calculator does). Every control — sliders AND
-// the tails <select> — re-runs immediately with no Calculate click,
-// since watching the chart move *is* the point of this layout.
+// Power with Graph, Type I & Type II Error Explorer) — a live-
+// updating hero visualization rather than the standard inputs-grid +
+// Calculate button + results table. calc.calculate() returns a single
+// { title, subtitle, chartSvg, legend, stats, footnote } object here
+// instead of the usual row array (or the usual [err(...)] array on
+// invalid input, handled the same way every other calculator does).
+// Every control — sliders AND the tails <select> — re-runs
+// immediately with no Calculate click, since watching the chart move
+// *is* the point of this layout.
 function renderExplorerCalculator(calc) {
   const initialValues = {};
   calc.inputs.forEach(inp => { initialValues[inp.id] = inp.default; });

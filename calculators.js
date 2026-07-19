@@ -5744,157 +5744,6 @@ const CALCULATORS = [
     }
   },
 
-  /* ── 56b. STATISTICAL POWER EXPLORER ─────────────────────────────────────
-     A live, slider-driven companion to 'Power with Graph' above — same
-     underlying math (z-critical value(s) from α, β and power from the
-     normal CDF), but a simplified 4-slider model (α, effect size Δ, σ,
-     n) with μ₀ fixed at 0, built around a bigger chart that separately
-     shades β (still fails to reject) from Power (correctly rejects)
-     under Hₐ, rather than folding both into one "beta" band. Renders
-     through a dedicated inputLayout ('explorer') so every slider drag
-     — including the one/two-tailed toggle — updates the chart and
-     stats live with no Calculate click, per a hand-drawn reference
-     mockup this was built to match. Defaults reproduce that mockup's
-     numbers exactly: α=0.10, Δ=2.3, σ=0.9, n=1 → CV=±1.480,
-     β=0.181, power=0.819.                                               */
-  {
-    id:          'power-explorer',
-    name:        'Statistical Power Explorer',
-    hint:        'Live H₀ vs Hₐ — drag α, Δ, σ, n',
-    category:    'Power & Sample Size',
-    description: 'A live, slider-driven visualization of statistical power — drag α, effect size, σ, and n to watch the critical value(s), β, and power update instantly, for either a one- or two-tailed test.',
-
-    formulas: [
-      {
-        label: 'Critical Value(s)',
-        latex: 'SE = \\dfrac{\\sigma}{\\sqrt{n}} \\qquad \\text{One-tailed: } \\mu_0 + z_{1-\\alpha}SE \\qquad \\text{Two-tailed: } \\mu_0 \\mp z_{1-\\alpha/2}SE'
-      },
-      {
-        label: 'Beta & Power',
-        latex: '\\beta = P(\\text{fail to reject} \\mid H_a \\text{ true}) \\qquad \\text{Power} = 1-\\beta'
-      }
-    ],
-
-    inputLayout: 'explorer',
-    inputs: [
-      { id: 'tails', type: 'select', label: 'Test Direction', default: 'two',
-        options: [
-          { value: 'one', label: 'One-Tailed (tests for an increase only)' },
-          { value: 'two', label: 'Two-Tailed (tests for a difference either way)' },
-        ] },
-      { id: 'alpha', type: 'slider', label: 'Alpha (α)', default: 0.10, min: 0.01, max: 0.30, step: 0.005,
-        format: v => v.toFixed(3) },
-      { id: 'delta', type: 'slider', label: 'Effect Size (Δ = μA − μ₀)', default: 2.3, min: -5, max: 5, step: 0.1,
-        format: v => v.toFixed(1) },
-      { id: 'sigma', type: 'slider', label: 'Std Dev (σ)', default: 0.9, min: 0.1, max: 3, step: 0.1,
-        format: v => v.toFixed(1) },
-      { id: 'n', type: 'slider', label: 'Sample Size (n)', default: 1, min: 1, max: 100, step: 1,
-        format: v => String(Math.round(v)) },
-    ],
-
-    example({ alpha, delta, sigma, n, tails }) {
-      n = Math.round(n);
-      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1 || !isFinite(delta) || !isFinite(sigma) || sigma <= 0 || !isFinite(n) || n < 1 ||
-          typeof jStat === 'undefined' || !jStat.normal)
-        return 'Adjust the sliders to see a worked medical example here.';
-      const se = sigma / Math.sqrt(n);
-      const isTwoTailed = tails === 'two';
-      let beta;
-      if (isTwoTailed) {
-        const z = jStat.normal.inv(1 - alpha / 2, 0, 1);
-        beta = jStat.normal.cdf((z * se - delta) / se, 0, 1) - jStat.normal.cdf((-z * se - delta) / se, 0, 1);
-      } else {
-        const z = jStat.normal.inv(1 - alpha, 0, 1);
-        beta = jStat.normal.cdf((z * se - delta) / se, 0, 1);
-      }
-      const power = 1 - beta;
-      const f = v => +v.toFixed(3);
-      return `A trial is designed to detect a true effect of Δ = ${delta} (SD ${sigma}, n = ${n}) at α = ${alpha}, ${isTwoTailed ? 'testing for a difference in either direction' : 'testing only for an increase'}. Power = ${f(power)} means this design would correctly detect a real effect this size ${f(power * 100)}% of the time; β = ${f(beta)} is the complementary chance it misses it.`;
-    },
-
-    calculate({ alpha, delta, sigma, n, tails }) {
-      n = Math.round(n);
-      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Alpha must be between 0 and 1 (exclusive)')];
-      if (!isFinite(delta))                             return [err('Effect Size is required')];
-      if (!isFinite(sigma) || sigma <= 0)               return [err('Standard Deviation must be greater than 0')];
-      if (!isFinite(n) || n < 1)                        return [err('Sample Size must be at least 1')];
-      if (typeof jStat === 'undefined' || !jStat.normal)
-        return [err('The statistics library failed to load — please refresh the page and try again.')];
-
-      const mu0 = 0, muA = delta;
-      const se = sigma / Math.sqrt(n);
-      const isTwoTailed = tails === 'two';
-
-      let critUpper, critLower = null, beta;
-      if (isTwoTailed) {
-        const zCrit = jStat.normal.inv(1 - alpha / 2, 0, 1);
-        critUpper = mu0 + zCrit * se;
-        critLower = mu0 - zCrit * se;
-        beta = jStat.normal.cdf((critUpper - muA) / se, 0, 1) - jStat.normal.cdf((critLower - muA) / se, 0, 1);
-      } else {
-        const zCrit = jStat.normal.inv(1 - alpha, 0, 1);
-        critUpper = mu0 + zCrit * se;
-        beta = jStat.normal.cdf((critUpper - muA) / se, 0, 1);
-      }
-      const power = 1 - beta;
-
-      const f = (v, dp = 3) => +(v.toFixed(dp));
-
-      const stats = isTwoTailed
-        ? [
-            { label: 'SE', value: f(se) },
-            { label: 'Lower CV', value: f(critLower) },
-            { label: 'Upper CV', value: f(critUpper) },
-            { label: 'α (Total)', value: f(alpha) },
-            { label: 'β (Type II)', value: f(beta) },
-            { label: 'Power (1−β)', value: f(power) },
-          ]
-        : [
-            { label: 'SE', value: f(se) },
-            { label: 'Critical Value', value: f(critUpper) },
-            { label: 'α (Total)', value: f(alpha) },
-            { label: 'β (Type II)', value: f(beta) },
-            { label: 'Power (1−β)', value: f(power) },
-          ];
-
-      // One-tailed only checks for an INCREASE above μ₀=0 — if Δ isn't
-      // positive, there's no true increase to detect, so power won't
-      // rise with n the way it usually does (see 'Power with Graph'
-      // for the same caveat with a raw μ₀/μA parameterization).
-      const directionWarning = (!isTwoTailed && delta <= 0)
-        ? ' Δ is at or below 0, but this one-tailed test only checks for an increase above μ₀ — with no true increase to detect, power won\'t rise with n (it stays flat at α if Δ = 0, and falls toward 0 as n grows if Δ < 0). If you\'re testing for a decrease, enter Δ as positive and reinterpret the sign, or switch to Two-Tailed above.'
-        : '';
-
-      const footnote = (isTwoTailed
-        ? 'Both critical values are derived from H₀. The lower CV marks the left α/2 tail of H₀; the upper CV marks the right α/2 tail. Power is the area under Hₐ that falls beyond either critical value.'
-        : "The critical value is derived from H₀'s upper α tail (this test only checks for an increase above μ₀). Power is the area under Hₐ that falls beyond it; β is the area under Hₐ that doesn't.")
-        + directionWarning;
-
-      return {
-        title: `Statistical Power — ${isTwoTailed ? 'Two' : 'One'}-Tailed Test`,
-        subtitle: 'Visualizing H₀, Hₐ, critical values, α regions, β, and power (1−β)',
-        chartSvg: powerExplorerSVG(mu0, muA, se, critUpper, critLower, alpha, beta, power, isTwoTailed),
-        legend: isTwoTailed
-          ? [
-              { color: '#4E6EDB',           label: 'H₀ distribution' },
-              { color: '#E07B2C',           label: 'Hₐ distribution' },
-              { color: 'rgba(78,110,219,.28)',  label: 'α/2 (rejection regions)' },
-              { color: 'rgba(224,123,44,.45)',  label: 'Power (1−β)' },
-              { color: '#F6C9A0',           label: 'β (Type II error)' },
-            ]
-          : [
-              { color: '#4E6EDB',           label: 'H₀ distribution' },
-              { color: '#E07B2C',           label: 'Hₐ distribution' },
-              { color: 'rgba(78,110,219,.28)',  label: 'α (rejection region)' },
-              { color: 'rgba(224,123,44,.45)',  label: 'Power (1−β)' },
-              { color: '#F6C9A0',           label: 'β (Type II error)' },
-            ],
-        stats,
-        footnote,
-      };
-    }
-  },
-
   /* ── 57. POWER VS EFFECT SIZE & ALPHA ──────────────────────────────────
      Two-tailed power plotted as a continuous function of effect size,
      for three benchmark alpha levels (0.01/0.05/0.10) at a given σ
@@ -12306,7 +12155,7 @@ function powerDistributionsSVG(mu0, muA, se, criticalValue, alpha, beta, power, 
 }
 
 // Bigger, more detailed companion to powerDistributionsSVG, built for
-// the live "Statistical Power Explorer" calculator. Unlike the compact
+// the live "Power with Graph" explorer layout. Unlike the compact
 // inline chart above (which shades only a single "beta" band under
 // Hₐ), this separately shades β (pale, still-failing-to-reject) from
 // Power (solid, correctly-rejects) as two distinct regions under Hₐ,
@@ -13806,8 +13655,7 @@ const CALCULATOR_INDEX = [
 
   // ── 9. POWER & SAMPLE SIZE ────────────────────────────────────────────
   { id: 'power-calculations',   name: 'Power Calculations',              category: 'Power & Sample Size',         description: 'Computes statistical power for one- and two-tailed tests from delta, σ, n, and α.',           status: 'available' },
-  { id: 'power-with-graph',     name: 'Power with Graph',                category: 'Power & Sample Size',         description: 'Visualises the overlap of H₀ and Hₐ distributions, shading alpha, beta, and power.',          status: 'available' },
-  { id: 'power-explorer',       name: 'Statistical Power Explorer',      category: 'Power & Sample Size',         description: 'A live, slider-driven visualization of power — drag α, effect size, σ, and n to see the critical value(s), β, and power update instantly.', status: 'available' },
+  { id: 'power-with-graph',     name: 'Power with Graph',                category: 'Power & Sample Size',         description: 'Visualises the overlap of H₀ and Hₐ distributions, shading alpha, beta, and power — drag μ₀, μA, σ, n, or α to explore live.', status: 'available' },
   { id: 'power-vs-es-alpha',    name: 'Power vs Effect Size & Alpha',    category: 'Power & Sample Size',         description: 'Plots power as a function of effect size and significance level for a given sample size.',     status: 'available' },
   { id: 'posthoc-power',        name: 'Post-Hoc Power Calculation',      category: 'Power & Sample Size',         description: 'Estimates achieved power for a completed study given its observed effect size and n.',          status: 'available' },
   { id: 'sample-size-1mean',    name: 'Sample Size — 1-Sample Mean',     category: 'Power & Sample Size',         description: 'Determines the sample size needed to detect a specified difference from a hypothesised mean, given σ, alpha, and target power.', status: 'available' },
@@ -14692,8 +14540,7 @@ const SEARCH_KEYWORDS = {
 
   // Power & Sample Size
   'power-calculations': ['statistical power calculation'],
-  'power-with-graph':   ['power calculator with graph', 'interactive power', 'visualize power', 'power sliders'],
-  'power-explorer':     ['live power visualization', 'interactive power explorer', 'power sliders live update', 'alpha beta power visualization', 'one-tailed two-tailed power'],
+  'power-with-graph':   ['power calculator with graph', 'interactive power', 'visualize power', 'power sliders', 'live power visualization', 'power explorer', 'power sliders live update', 'alpha beta power visualization', 'one-tailed two-tailed power'],
   'power-vs-es-alpha':  ['power curves', 'power across a range of effect sizes'],
   'posthoc-power':      ['post hoc power', 'achieved power', 'observed power', 'power after study completed'],
   'sample-size-1mean':  ['sample size for one mean', 'sample size calculation one group'],
@@ -15411,15 +15258,6 @@ const NOTATION = {
     { symbol: '\\beta', meaning: 'Beta (β) — the probability of missing the true effect (area under Hₐ in the "fail to reject" zone).' },
     { symbol: '\\mu_A', meaning: 'Alternative Mean (μA) — the mean expected if the treatment effect is real; sets the effect size.' },
     { symbol: '\\text{Power}', meaning: 'Power (1 − β) — the probability of correctly detecting the shift from μ₀ to μA.' },
-  ],
-  'power-explorer': [
-    { symbol: '\\alpha', meaning: 'Significance level (α) — the total Type I error probability, split evenly across both tails for a two-tailed test.' },
-    { symbol: '\\Delta', meaning: 'Effect Size (Δ = μA − μ₀) — the true difference this design is trying to detect; μ₀ is fixed at 0.' },
-    { symbol: '\\sigma', meaning: 'Standard Deviation (σ) of the outcome in the population.' },
-    { symbol: 'n', meaning: 'Sample Size (n), used with σ to compute the Standard Error.' },
-    { symbol: 'SE', meaning: 'Standard Error, σ/√n — sets how wide each curve is drawn.' },
-    { symbol: '\\beta', meaning: 'Beta (β) — the probability of missing a true effect (area under Hₐ that still fails to reject H₀).' },
-    { symbol: '\\text{Power}', meaning: 'Power (1 − β) — the probability of correctly detecting a true effect of size Δ.' },
   ],
   'power-vs-es-alpha': [
     { symbol: '\\text{Power}(\\delta)', meaning: 'Power viewed as a curve across a whole range of possible Effect Size (δ) values.' },
