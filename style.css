@@ -1793,7 +1793,7 @@ body {
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: .08em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--text-3);
   margin-bottom: 7px;
 }
@@ -1808,6 +1808,17 @@ body {
   font-size: 13.5px;
   color: var(--text-2);
   line-height: 1.35;
+}
+
+/* Draws a bar directly over one letter (x̄, ȳ, etc.) via a real CSS
+   line rather than a Unicode combining macron (U+0304) — many web
+   fonts don't include that combining mark, so the browser silently
+   falls back to a different font just for it, and the two glyphs'
+   mismatched metrics make the bar land beside the letter instead of
+   above it. esc() in app.js wraps the letter in this span whenever
+   it finds that combining-mark pattern in label/value text. */
+.over-bar {
+  text-decoration: overline;
 }
 
 .result-value {

@@ -1029,9 +1029,11 @@ function showResults(results, calcId) {
       r.isError   ? 'error-row' : '',
     ].filter(Boolean).join(' ');
 
+    const labelText = r.isText ? upperAscii(r.label) : r.label;
+
     return `
       <div class="${rowCls}">
-        <div class="result-label">${esc(r.label)}</div>
+        <div class="result-label">${esc(labelText)}</div>
         <div class="result-value ${r.isText ? 'is-text' : ''}">${esc(valStr)}</div>
         ${ciCell}
       </div>
@@ -1141,7 +1143,22 @@ function esc(s) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    // x̄, ȳ, etc. (letter + combining macron, U+0304) render unreliably
+    // in many web fonts — see .over-bar in style.css for why — so
+    // replace the combining mark with a real CSS overline instead.
+    .replace(/([A-Za-z])̄/g, '<span class="over-bar">$1</span>');
+}
+
+// Uppercases only plain a-z ASCII letters, leaving everything else —
+// Greek letters (α, β, χ...), subscripts, symbols — untouched. Used
+// instead of CSS text-transform:uppercase for is-text-row labels,
+// since that transform turns lowercase Greek letters into their
+// capital forms (e.g. α → Α), which render visually identical to
+// ordinary Latin letters (Α looks like "A"), silently corrupting any
+// stats notation in a label like "Interpretation (α = 0.05)".
+function upperAscii(s) {
+  return String(s).replace(/[a-z]/g, c => c.toUpperCase());
 }
 
 // Turns a result row's label (e.g. "Forest Plot vs Reference") into a
