@@ -664,6 +664,16 @@ function renderGuide(guide) {
 /* ── CALCULATOR VIEW ────────────────────────────────────── */
 
 function renderCalculator(calc) {
+  // 'explorer' calculators (e.g. Statistical Power Explorer) use a
+  // completely different page template — live-updating header/chart/
+  // stats instead of the standard inputs-grid + Calculate + results
+  // table — so they're handed off entirely rather than threaded
+  // through the rest of this function.
+  if (calc.inputLayout === 'explorer') {
+    renderExplorerCalculator(calc);
+    return;
+  }
+
   const formulas = calc.formulas.map(f => `
     <div>
       <div class="formula-row-label">${esc(f.label)}</div>
@@ -741,6 +751,140 @@ function renderCalculator(calc) {
 
   // Auto-run with the defaults already populated into the inputs above,
   // so users see example output immediately without clicking Calculate.
+  run();
+}
+
+// Page template for calculators with inputLayout: 'explorer' (e.g.
+// Statistical Power Explorer) — a live-updating hero visualization
+// rather than the standard inputs-grid + Calculate button + results
+// table. calc.calculate() returns a single { title, subtitle, chartSvg,
+// legend, stats, footnote } object here instead of the usual row
+// array (or the usual [err(...)] array on invalid input, handled the
+// same way every other calculator does). Every control — sliders AND
+// the tails <select> — re-runs immediately with no Calculate click,
+// since watching the chart move *is* the point of this layout.
+function renderExplorerCalculator(calc) {
+  const initialValues = {};
+  calc.inputs.forEach(inp => { initialValues[inp.id] = inp.default; });
+
+  const controlsHtml = calc.inputs.map(inp => {
+    if (inp.type === 'select') {
+      const opts = inp.options.map(o =>
+        `<option value="${esc(o.value)}"${o.value === inp.default ? ' selected' : ''}>${esc(o.label)}</option>`
+      ).join('');
+      return `
+        <div class="explorer-control explorer-control-select">
+          <label class="explorer-control-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+          <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
+        </div>`;
+    }
+    const display = inp.format ? inp.format(inp.default) : String(inp.default);
+    return `
+      <div class="explorer-control">
+        <label class="explorer-control-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+        <input class="input-slider explorer-slider" type="range" id="inp-${inp.id}" data-id="${inp.id}"
+               min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">
+        <div class="explorer-control-value" id="val-${inp.id}">${esc(display)}</div>
+      </div>`;
+  }).join('');
+
+  const notation = NOTATION[calc.id] || [];
+  const notationHtml = notation.map(n => `
+    <div class="notation-row">
+      <div class="notation-symbol">${tryKatex(n.symbol, false)}</div>
+      <div class="notation-meaning">${esc(n.meaning)}</div>
+    </div>
+  `).join('');
+
+  view().innerHTML = `
+    <div class="calc-eyebrow">
+      <a class="calc-back" href="#" aria-label="Back to all calculators">← All</a>
+      ${esc(calc.category)}
+    </div>
+
+    <div class="explorer-header">
+      <h1 class="explorer-title" id="explorer-title">${esc(calc.name)}</h1>
+      <p class="explorer-subtitle" id="explorer-subtitle"></p>
+    </div>
+
+    ${calc.example ? `
+    <details class="example-block">
+      <summary class="example-summary">Medical Example — when &amp; how to use this</summary>
+      <p class="example-body" id="example-body"></p>
+    </details>` : ''}
+
+    <div class="explorer-controls">${controlsHtml}</div>
+
+    <div class="explorer-chart-card">
+      <div id="explorer-chart"></div>
+      <div class="explorer-legend" id="explorer-legend"></div>
+      <div class="explorer-stats" id="explorer-stats"></div>
+      <p class="explorer-footnote" id="explorer-footnote"></p>
+    </div>
+
+    <div class="formula-block">
+      <div class="block-label">Formula</div>
+      <div class="formula-list">${calc.formulas.map(f => `
+        <div>
+          <div class="formula-row-label">${esc(f.label)}</div>
+          <div class="formula-katex">${tryKatex(f.latex, true)}</div>
+        </div>`).join('')}</div>
+    </div>
+
+    ${notation.length ? `
+    <div class="notation-block">
+      <div class="block-label">Notation</div>
+      <div class="notation-list">${notationHtml}</div>
+    </div>` : ''}
+  `;
+  document.getElementById('main').scrollTop = 0;
+
+  function run() {
+    const values = readInputs(calc);
+    const result = calc.calculate(values);
+
+    if (Array.isArray(result)) {
+      // Same [err(...)] shape every other calculator returns on invalid input.
+      document.getElementById('explorer-title').textContent = calc.name;
+      document.getElementById('explorer-subtitle').textContent = '';
+      document.getElementById('explorer-chart').innerHTML = '';
+      document.getElementById('explorer-legend').innerHTML = '';
+      document.getElementById('explorer-footnote').textContent = '';
+      document.getElementById('explorer-stats').innerHTML =
+        `<div class="explorer-stat explorer-stat-error">${esc(result[0].value)}</div>`;
+      return;
+    }
+
+    document.getElementById('explorer-title').textContent = result.title;
+    document.getElementById('explorer-subtitle').textContent = result.subtitle;
+    document.getElementById('explorer-chart').innerHTML = result.chartSvg;
+    document.getElementById('explorer-legend').innerHTML = result.legend.map(item => `
+      <span class="explorer-legend-item">
+        <span class="explorer-legend-swatch" style="background:${item.color}"></span>
+        ${esc(item.label)}
+      </span>`).join('');
+    document.getElementById('explorer-stats').innerHTML = result.stats.map(s => `
+      <div class="explorer-stat">
+        <div class="explorer-stat-label">${esc(s.label)}</div>
+        <div class="explorer-stat-value">${esc(String(s.value))}</div>
+      </div>`).join('');
+    document.getElementById('explorer-footnote').textContent = result.footnote;
+
+    updateExample(calc, values);
+  }
+
+  calc.inputs.forEach(inp => {
+    const el = document.getElementById('inp-' + inp.id);
+    if (!el) return;
+    el.addEventListener(inp.type === 'select' ? 'change' : 'input', () => {
+      if (inp.type === 'slider') {
+        const label = document.getElementById('val-' + inp.id);
+        if (label) label.textContent = inp.format ? inp.format(parseFloat(el.value)) : el.value;
+      }
+      run();
+    });
+  });
+
   run();
 }
 
