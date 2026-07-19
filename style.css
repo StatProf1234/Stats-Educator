@@ -483,45 +483,22 @@ body {
 .alt-banner .wizard-banner-icon { background: var(--amber); }
 .alt-banner .wizard-banner-arrow { color: var(--amber); }
 
-/* External-resource card (e.g. Stats with Crayons on the Learn hub) —
-   deliberately a bordered card rather than another .wizard-banner, so
-   it doesn't read as an in-site destination the way the banners above
-   it do; the visible source domain and hover color are the "this
-   leaves the site" signal instead. */
-.resource-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0 12px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.resource-divider::before,
-.resource-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
+/* External-resource card (e.g. Stats with Crayons in the Quick
+   Reference category on the Learn hub) — lives inside the same
+   .home-cards grid as a regular guide card (via class="home-card
+   resource-card"), but the icon-plus-domain layout below and the
+   amber hover (overriding .home-card:hover's blue via the extra
+   class for specificity, since source order alone isn't reliable)
+   both signal "this leaves the site" before the click. */
 .resource-card {
   display: flex;
   gap: 14px;
   align-items: flex-start;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 22px;
-  text-decoration: none;
-  transition: border-color .15s, box-shadow .15s;
+  padding: 16px;
 }
-.resource-card:hover {
+.home-card.resource-card:hover {
   border-color: var(--amber);
-  box-shadow: 0 2px 10px rgba(224, 123, 44, .12);
+  box-shadow: 0 0 0 3px rgba(224,123,44,.09), var(--shadow-sm);
 }
 .resource-icon {
   width: 36px;

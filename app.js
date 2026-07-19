@@ -511,13 +511,28 @@ function renderLearnHub() {
 
   const catEntries = Object.entries(groups);
 
+  const externalResourceCard = `
+    <a class="home-card resource-card" href="https://www.dental.upenn.edu/research/center-for-integrative-global-oral-health/education/stats-with-crayons/" target="_blank" rel="noopener">
+      <span class="resource-icon">🐾</span>
+      <span class="resource-body">
+        <span class="resource-title-row">
+          <span class="resource-title">Stats with Crayons</span>
+          <span class="resource-source">dental.upenn.edu ↗</span>
+        </span>
+        <span class="resource-desc">Short vignettes where a dog teaches a cat statistics — from Penn Dental Medicine's <em>Center for Integrative Global Oral Health</em>. Opens in a new tab.</span>
+      </span>
+    </a>`;
+
   const sections = catEntries.map(([cat, guides]) => {
+    const isQuickRef = cat === 'Quick Reference';
+
     const cards = guides.map(g => `
       <a class="home-card" href="#learn/${g.id}">
         <div class="home-card-name">${esc(g.title)}</div>
         <div class="home-card-desc">${esc(g.blurb)}</div>
-      </a>`).join('');
+      </a>`).join('') + (isQuickRef ? externalResourceCard : '');
 
+    const itemCount = guides.length + (isQuickRef ? 1 : 0);
     const isOpen = expandedLearnCategories.has(cat);
 
     return `
@@ -526,7 +541,7 @@ function renderLearnHub() {
           <button type="button" class="home-section-header${isOpen ? ' open' : ''}" aria-expanded="${isOpen}">
             <span class="home-section-chevron">▸</span>
             <span class="home-section-title">${esc(cat)}</span>
-            <span class="home-section-count">${guides.length} guide${guides.length === 1 ? '' : 's'}</span>
+            <span class="home-section-count">${itemCount} guide${itemCount === 1 ? '' : 's'}</span>
           </button>
         </h2>
         <div class="home-cards">${cards}</div>
@@ -547,19 +562,6 @@ function renderLearnHub() {
       <span class="wizard-banner-text">${calcTotal} calculators across ${calcCategories} categories — ${calcAvailLabel}.</span>
       <span class="wizard-banner-arrow">→</span>
     </a>
-
-    <div class="resource-divider">More like this</div>
-    <a class="resource-card" href="https://www.dental.upenn.edu/research/center-for-integrative-global-oral-health/education/stats-with-crayons/" target="_blank" rel="noopener">
-      <span class="resource-icon">🐾</span>
-      <span class="resource-body">
-        <span class="resource-title-row">
-          <span class="resource-title">Stats with Crayons</span>
-          <span class="resource-source">dental.upenn.edu ↗</span>
-        </span>
-        <span class="resource-desc">Short vignettes where a dog teaches a cat statistics — from Penn Dental Medicine's <em>Center for Integrative Global Oral Health</em>. Opens in a new tab.</span>
-      </span>
-    </a>
-
     ${sections}
   `;
 
