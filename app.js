@@ -1350,8 +1350,15 @@ function esc(s) {
 // capital forms (e.g. α → Α), which render visually identical to
 // ordinary Latin letters (Α looks like "A"), silently corrupting any
 // stats notation in a label like "Interpretation (α = 0.05)".
+// Uppercases English words but leaves standalone single-letter Latin
+// math symbols (n, p, t, r, z...) alone — a blanket per-character
+// uppercase would turn "Sample Size (n)" into "SAMPLE SIZE (N)",
+// wrongly implying population size (N) instead of sample size (n),
+// the opposite of this site's own n/N convention. Matching runs of
+// 2+ lowercase letters (i.e. actual words) rather than every single
+// lowercase letter leaves isolated one-letter symbols untouched.
 function upperAscii(s) {
-  return String(s).replace(/[a-z]/g, c => c.toUpperCase());
+  return String(s).replace(/[a-z]{2,}/g, word => word.toUpperCase());
 }
 
 // Turns a result row's label (e.g. "Forest Plot vs Reference") into a

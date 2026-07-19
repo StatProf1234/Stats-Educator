@@ -12325,24 +12325,35 @@ function powerExplorerSVG(mu0, muA, se, critUpper, critLower, alpha, beta, power
   // In-chart designations for α, β, and Power — the legend below the
   // chart already names the colors, but labeling the regions directly
   // lets a reader identify each shaded area without cross-referencing
-  // a separate legend first.
+  // a separate legend first. Each label's Y position tracks the
+  // ACTUAL local height of the relevant curve at its X (a fraction of
+  // phi(x, mean), not a fixed pixel offset from the baseline) — with
+  // a fixed offset, a label could end up floating above a region
+  // that's shrunk thin, or sitting below the top of one that's grown
+  // tall, since it wouldn't move as the shape changes with the
+  // sliders. Anchoring it to the curve's own height at that point
+  // keeps it visually inside the region regardless of how α, Δ, σ,
+  // or n reshape the curves.
   const clampX = x => Math.max(PL + 14, Math.min(W - PR - 14, x));
-  const regionLabel = (x, y, text, color) =>
-    `<text x="${x}" y="${y}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${color}">${text}</text>`;
+  const regionLabel = (xData, mean, text, color, heightFrac = 0.42) => {
+    const x = clampX(toX(xData));
+    const y = toY(phi(xData, mean) * heightFrac) - 4;
+    return `<text x="${x}" y="${y}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${color}">${text}</text>`;
+  };
 
   const alphaColor = '#2D4FBA', betaColor = '#A8672A', powerColor = '#B35A12';
-  const alphaUpperLabelX = clampX(toX((Math.max(critUpper, xMin) + xMax) / 2));
-  const alphaLowerLabelX = isTwoTailed ? clampX(toX((xMin + Math.min(critLower, xMax)) / 2)) : null;
-  const betaLabelX = clampX(toX(isTwoTailed
+  const alphaUpperCenter = (Math.max(critUpper, xMin) + xMax) / 2;
+  const alphaLowerCenter = isTwoTailed ? (xMin + Math.min(critLower, xMax)) / 2 : null;
+  const betaCenter = isTwoTailed
     ? (Math.max(critLower, xMin) + Math.min(critUpper, xMax)) / 2
-    : (xMin + Math.min(critUpper, xMax)) / 2));
+    : (xMin + Math.min(critUpper, xMax)) / 2;
 
   const regionLabels = `
-    ${alphaUpper ? regionLabel(alphaUpperLabelX, baseline - 12, isTwoTailed ? 'α/2' : 'α', alphaColor) : ''}
-    ${alphaLower ? regionLabel(alphaLowerLabelX, baseline - 12, 'α/2', alphaColor) : ''}
-    ${betaBand   ? regionLabel(betaLabelX, baseline - 32, 'β', betaColor) : ''}
-    ${powerUpper ? regionLabel(alphaUpperLabelX, baseline - 58, 'Power', powerColor) : ''}
-    ${(isTwoTailed && powerLower) ? regionLabel(alphaLowerLabelX, baseline - 58, 'Power', powerColor) : ''}
+    ${alphaUpper ? regionLabel(alphaUpperCenter, mu0, isTwoTailed ? 'α/2' : 'α', alphaColor) : ''}
+    ${alphaLower ? regionLabel(alphaLowerCenter, mu0, 'α/2', alphaColor) : ''}
+    ${betaBand   ? regionLabel(betaCenter, muA, 'β', betaColor, 0.5) : ''}
+    ${powerUpper ? regionLabel(alphaUpperCenter, muA, 'Power', powerColor, 0.5) : ''}
+    ${(isTwoTailed && powerLower) ? regionLabel(alphaLowerCenter, muA, 'Power', powerColor, 0.5) : ''}
   `;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Null and alternative distributions with alpha, beta, and power separately shaded">
