@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A static, client-side library of statistical/biostatistics calculators (`Statistical Calculators`). No build step, no backend, no package.json — open `index.html` in a browser to run it. Dependencies (KaTeX for formula rendering, jStat for distribution functions) are loaded from CDN in `index.html`; there is nothing to `npm install`.
+A static, client-side biostatistics resource (`The Biostat Toolkit`): a library of statistical/biostatistics calculators plus a "Learn" section of critical appraisal guides, reporting-guideline reference, downloadable worksheets, and a notation glossary. No build step, no backend, no package.json — open `index.html` in a browser to run it. Dependencies (KaTeX for formula rendering, jStat for distribution functions) are loaded from CDN in `index.html`; there is nothing to `npm install`.
 
 There is no test suite, linter, or build/bundling command in this repo. Verify changes by opening `index.html` in a browser and exercising the affected calculator(s) directly.
 

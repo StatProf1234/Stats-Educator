@@ -1,4 +1,4 @@
-// app.js — Statistical Calculators
+// app.js — The Biostat Toolkit
 
 document.addEventListener('DOMContentLoaded', () => {
   buildNav();
@@ -273,6 +273,22 @@ function buildNav(filter) {
 
 /* ── HOME VIEW ──────────────────────────────────────────── */
 
+// Shared by the calculator home page and the Learn hub's cross-link
+// banner, so neither has to hardcode a count that drifts out of sync
+// as calculators are added.
+function calculatorCountSummary() {
+  const total      = CALCULATOR_INDEX.length;
+  const available  = CALCULATOR_INDEX.filter(e => e.status === 'available').length;
+  const categories  = new Set(CALCULATOR_INDEX.map(e => e.category)).size;
+  const availLabel  = available === total
+    ? `<strong>all ${total} available</strong>`
+    : `<strong>${available} available now</strong>, the rest coming soon`;
+  const plainLabel  = available === total
+    ? `all available now`
+    : `${available} available now`;
+  return { total, available, categories, availLabel, plainLabel };
+}
+
 function renderHome() {
   // Group CALCULATOR_INDEX by category, preserving insertion order
   const groups = {};
@@ -280,8 +296,7 @@ function renderHome() {
     (groups[entry.category] = groups[entry.category] || []).push(entry);
   }
 
-  const total     = CALCULATOR_INDEX.length;
-  const available = CALCULATOR_INDEX.filter(e => e.status === 'available').length;
+  const { total, availLabel } = calculatorCountSummary();
 
   const sections = Object.entries(groups).map(([cat, entries]) => {
     const cards = entries.map(entry => {
@@ -335,12 +350,18 @@ function renderHome() {
     <h1 class="home-title">Full Calculator Index</h1>
     <p class="home-desc">
       ${total} calculators across ${Object.keys(groups).length} categories —
-      <strong>${available} available now</strong>, the rest coming soon.
-      Click any available calculator to open it.
+      ${availLabel}.
+      Click any available calculator to open it. Looking for critical appraisal
+      guides, worksheets, or a notation glossary instead? See Learn.
     </p>
     <a class="wizard-banner" href="#wizard">
       <span class="wizard-banner-icon">?</span>
       <span class="wizard-banner-text">Answer a few quick questions to find the right calculator.</span>
+      <span class="wizard-banner-arrow">→</span>
+    </a>
+    <a class="wizard-banner alt-banner" href="#learn">
+      <span class="wizard-banner-icon">L</span>
+      <span class="wizard-banner-text">Critical appraisal guides, reporting-guideline checklists, and a notation glossary — all under Learn.</span>
       <span class="wizard-banner-arrow">→</span>
     </a>
     <div class="home-sections-grid">${sections}</div>
@@ -486,6 +507,8 @@ function renderLearnHub() {
     (groups[g.category] = groups[g.category] || []).push(g);
   }
 
+  const { total: calcTotal, categories: calcCategories, plainLabel: calcAvailLabel } = calculatorCountSummary();
+
   const catEntries = Object.entries(groups);
 
   const sections = catEntries.map(([cat, guides]) => {
@@ -511,12 +534,17 @@ function renderLearnHub() {
   }).join('');
 
   view().innerHTML = `
-    <div class="home-eyebrow">Statistical Calculator Library</div>
+    <div class="home-eyebrow">Critical Appraisal &amp; Reference</div>
     <h1 class="home-title">Learn</h1>
-    <p class="home-desc">Reference guides for using this site well — how to recognize the kind of data you're working with, how to read the charts these calculators produce, and how to critically appraise the studies you're applying them to.</p>
+    <p class="home-desc">Reference guides for using this site well — how to recognize the kind of data you're working with, how to read the charts these calculators produce, and how to critically appraise the studies you're applying them to. Looking for a specific calculator instead? See the Calculator Index.</p>
     <a class="wizard-banner" href="#learnwizard">
       <span class="wizard-banner-icon">?</span>
       <span class="wizard-banner-text">Not sure where to start? Answer a few quick questions to find the right guide.</span>
+      <span class="wizard-banner-arrow">→</span>
+    </a>
+    <a class="wizard-banner alt-banner" href="#">
+      <span class="wizard-banner-icon">C</span>
+      <span class="wizard-banner-text">${calcTotal} calculators across ${calcCategories} categories — ${calcAvailLabel}.</span>
       <span class="wizard-banner-arrow">→</span>
     </a>
     ${sections}

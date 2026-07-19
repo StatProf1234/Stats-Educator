@@ -1,5 +1,5 @@
 /* ============================================================
-   Statistical Calculators
+   The Biostat Toolkit
    Design: deep-indigo sidebar · periwinkle accent · amber data
    ============================================================ */
 
@@ -115,7 +115,7 @@ body {
   padding: 14px 16px;
   border-top: 1px solid var(--sidebar-border);
   font-size: 11px;
-  color: var(--sidebar-muted);
+  color: var(--sidebar-text);
 }
 
 .brand-abbr {
@@ -135,6 +135,15 @@ body {
   font-weight: 600;
   color: #EEEAF8;
   line-height: 1.3;
+}
+
+.brand-tagline {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--sidebar-text);
+  margin-top: 8px;
 }
 
 /* Search */
@@ -299,7 +308,7 @@ body {
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
-  color: var(--sidebar-muted);
+  color: var(--sidebar-text);
 }
 
 .nav-group {
@@ -364,13 +373,13 @@ body {
 .nav-item-hint {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--sidebar-muted);
+  color: var(--sidebar-text);
   display: block;
   margin-top: 3px;
   letter-spacing: .01em;
 }
 
-.nav-item.active .nav-item-hint { color: rgba(200,196,232,.65); }
+.nav-item.active .nav-item-hint { color: rgba(200,196,232,.85); }
 
 /* ── MAIN CONTENT ──────────────────────────────────── */
 
@@ -457,6 +466,22 @@ body {
   font-weight: 500;
   color: var(--text-2);
 }
+
+/* Second banner, same component as .wizard-banner, recolored amber so
+   it reads as a distinct destination rather than a repeat of the
+   wizard prompt above it. Used on both the calculator home page (to
+   point at Learn) and the Learn hub (to point back at the calculator
+   index), so it's named for what it looks like, not one direction. */
+.alt-banner {
+  background: rgba(224, 123, 44, .07);
+  border-color: rgba(224, 123, 44, .3);
+}
+.alt-banner:hover {
+  border-color: var(--amber);
+  background: rgba(224, 123, 44, .12);
+}
+.alt-banner .wizard-banner-icon { background: var(--amber); }
+.alt-banner .wizard-banner-arrow { color: var(--amber); }
 
 .wizard-banner-arrow {
   font-size: 14px;
