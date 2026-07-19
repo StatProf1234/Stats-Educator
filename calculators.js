@@ -5830,6 +5830,7 @@ const CALCULATORS = [
 
       const stats = isTwoTailed
         ? [
+            { label: 'SE', value: f(se) },
             { label: 'Lower CV', value: f(critLower) },
             { label: 'Upper CV', value: f(critUpper) },
             { label: 'α (Total)', value: f(alpha) },
@@ -5837,6 +5838,7 @@ const CALCULATORS = [
             { label: 'Power (1−β)', value: f(power) },
           ]
         : [
+            { label: 'SE', value: f(se) },
             { label: 'Critical Value', value: f(critUpper) },
             { label: 'α (Total)', value: f(alpha) },
             { label: 'β (Type II)', value: f(beta) },
@@ -5850,7 +5852,7 @@ const CALCULATORS = [
       return {
         title: `Statistical Power — ${isTwoTailed ? 'Two' : 'One'}-Tailed Test`,
         subtitle: 'Visualizing H₀, Hₐ, critical values, α regions, β, and power (1−β)',
-        chartSvg: powerExplorerSVG(mu0, muA, se, critUpper, critLower, isTwoTailed),
+        chartSvg: powerExplorerSVG(mu0, muA, se, critUpper, critLower, alpha, beta, power, isTwoTailed),
         legend: isTwoTailed
           ? [
               { color: '#4E6EDB',           label: 'H₀ distribution' },
@@ -12265,7 +12267,7 @@ function powerDistributionsSVG(mu0, muA, se, criticalValue, alpha, beta, power, 
 // and labels each critical value individually rather than folding
 // both into one caption line — matching a two-tailed test's two
 // independent boundaries instead of treating them as one shared shade.
-function powerExplorerSVG(mu0, muA, se, critUpper, critLower, isTwoTailed) {
+function powerExplorerSVG(mu0, muA, se, critUpper, critLower, alpha, beta, power, isTwoTailed) {
   const W = 640, H = 320;
   const PL = 16, PR = 16, PT = 48, PB = 46;
   const plotH = H - PT - PB;
@@ -12320,6 +12322,29 @@ function powerExplorerSVG(mu0, muA, se, critUpper, critLower, isTwoTailed) {
        <text x="${W - PR - 6}" y="${H - 10}" text-anchor="end" style="${F}" font-size="8.5" fill="#7B8099">from H₀ right tail →</text>`
     : `<text x="${W - PR - 6}" y="${H - 10}" text-anchor="end" style="${F}" font-size="8.5" fill="#7B8099">from H₀ right tail →</text>`;
 
+  // In-chart designations for α, β, and Power — the legend below the
+  // chart already names the colors, but labeling the regions directly
+  // lets a reader identify each shaded area without cross-referencing
+  // a separate legend first.
+  const clampX = x => Math.max(PL + 14, Math.min(W - PR - 14, x));
+  const regionLabel = (x, y, text, color) =>
+    `<text x="${x}" y="${y}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${color}">${text}</text>`;
+
+  const alphaColor = '#2D4FBA', betaColor = '#A8672A', powerColor = '#B35A12';
+  const alphaUpperLabelX = clampX(toX((Math.max(critUpper, xMin) + xMax) / 2));
+  const alphaLowerLabelX = isTwoTailed ? clampX(toX((xMin + Math.min(critLower, xMax)) / 2)) : null;
+  const betaLabelX = clampX(toX(isTwoTailed
+    ? (Math.max(critLower, xMin) + Math.min(critUpper, xMax)) / 2
+    : (xMin + Math.min(critUpper, xMax)) / 2));
+
+  const regionLabels = `
+    ${alphaUpper ? regionLabel(alphaUpperLabelX, baseline - 12, isTwoTailed ? 'α/2' : 'α', alphaColor) : ''}
+    ${alphaLower ? regionLabel(alphaLowerLabelX, baseline - 12, 'α/2', alphaColor) : ''}
+    ${betaBand   ? regionLabel(betaLabelX, baseline - 32, 'β', betaColor) : ''}
+    ${powerUpper ? regionLabel(alphaUpperLabelX, baseline - 58, 'Power', powerColor) : ''}
+    ${(isTwoTailed && powerLower) ? regionLabel(alphaLowerLabelX, baseline - 58, 'Power', powerColor) : ''}
+  `;
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Null and alternative distributions with alpha, beta, and power separately shaded">
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
   ${alphaUpper ? `<polygon points="${alphaUpper}" fill="#4E6EDB" opacity=".28"/>` : ''}
@@ -12333,8 +12358,10 @@ function powerExplorerSVG(mu0, muA, se, critUpper, critLower, isTwoTailed) {
   ${cvLabel(critUpperX, critUpper, isTwoTailed ? 'CV_upper' : 'Critical')}
   <text x="${toX(mu0).toFixed(1)}" y="${PT - 6}" text-anchor="middle" style="${F}" font-size="10" font-weight="600" fill="#4E6EDB">H₀</text>
   <text x="${toX(muA).toFixed(1)}" y="${PT - 6}" text-anchor="middle" style="${F}" font-size="10" font-weight="600" fill="#E07B2C">Hₐ</text>
+  ${regionLabels}
   ${tailAnnotations}
-</svg>`;
+</svg>
+<p class="viz-caption">Curve width reflects precision (SE = σ/√n) — smaller SE means a narrower, more precise sampling distribution. Peak height is fixed for readability across the slider range, not a true probability-density scale (a true density would grow taller as SE shrinks).</p>`;
 }
 
 // Two-tailed power vs. effect size, for three benchmark alpha levels,

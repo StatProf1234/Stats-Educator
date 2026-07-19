@@ -774,14 +774,14 @@ function renderExplorerCalculator(calc) {
       ).join('');
       return `
         <div class="explorer-control explorer-control-select">
-          <label class="explorer-control-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+          <label class="explorer-control-label" for="inp-${inp.id}">${esc(upperAscii(inp.label))}</label>
           <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
         </div>`;
     }
     const display = inp.format ? inp.format(inp.default) : String(inp.default);
     return `
       <div class="explorer-control">
-        <label class="explorer-control-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+        <label class="explorer-control-label" for="inp-${inp.id}">${esc(upperAscii(inp.label))}</label>
         <input class="input-slider explorer-slider" type="range" id="inp-${inp.id}" data-id="${inp.id}"
                min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">
         <div class="explorer-control-value" id="val-${inp.id}">${esc(display)}</div>
@@ -865,7 +865,7 @@ function renderExplorerCalculator(calc) {
       </span>`).join('');
     document.getElementById('explorer-stats').innerHTML = result.stats.map(s => `
       <div class="explorer-stat">
-        <div class="explorer-stat-label">${esc(s.label)}</div>
+        <div class="explorer-stat-label">${esc(upperAscii(s.label))}</div>
         <div class="explorer-stat-value">${esc(String(s.value))}</div>
       </div>`).join('');
     document.getElementById('explorer-footnote').textContent = result.footnote;
