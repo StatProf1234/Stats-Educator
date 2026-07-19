@@ -825,13 +825,14 @@ function renderExplorerCalculator(calc) {
 
     <div class="explorer-chart-card">
       <div class="result-viz">
+        ${calc.chartIsSVG === false ? '' : `
         <div class="viz-toolbar">
           <button type="button" class="export-chart-btn" data-format="png" data-filename="${esc(calc.id)}-chart" title="Download this chart as a PNG image">PNG ⬇</button>
           <button type="button" class="export-chart-btn" data-format="jpg" data-filename="${esc(calc.id)}-chart" title="Download this chart as a JPG image">JPG ⬇</button>
-        </div>
+        </div>`}
         <div id="explorer-chart"></div>
       </div>
-      <div class="explorer-legend" id="explorer-legend"></div>
+      <div class="explorer-legend" id="explorer-legend" hidden></div>
       <div class="explorer-stats" id="explorer-stats"></div>
       <p class="explorer-footnote" id="explorer-footnote"></p>
     </div>
@@ -862,6 +863,7 @@ function renderExplorerCalculator(calc) {
       document.getElementById('explorer-title').textContent = calc.name;
       document.getElementById('explorer-subtitle').textContent = '';
       document.getElementById('explorer-chart').innerHTML = '';
+      document.getElementById('explorer-legend').hidden = true;
       document.getElementById('explorer-legend').innerHTML = '';
       document.getElementById('explorer-footnote').textContent = '';
       document.getElementById('explorer-stats').innerHTML =
@@ -872,7 +874,10 @@ function renderExplorerCalculator(calc) {
     document.getElementById('explorer-title').textContent = result.title;
     document.getElementById('explorer-subtitle').textContent = result.subtitle;
     document.getElementById('explorer-chart').innerHTML = result.chartSvg;
-    document.getElementById('explorer-legend').innerHTML = result.legend.map(item => `
+    const legendEl = document.getElementById('explorer-legend');
+    const legend = result.legend || [];
+    legendEl.hidden = legend.length === 0;
+    legendEl.innerHTML = legend.map(item => `
       <span class="explorer-legend-item">
         <span class="explorer-legend-swatch" style="background:${item.color}"></span>
         ${esc(item.label)}

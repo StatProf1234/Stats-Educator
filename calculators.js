@@ -5600,7 +5600,8 @@ const CALCULATORS = [
     name:        'Power with Graph',
     hint:        'Power = 1 − β, H₀ vs Hₐ overlap',
     category:    'Power & Sample Size',
-    description: 'Visualises the overlap of H₀ and Hₐ distributions, shading alpha, beta, and power — drag effect size, sample size, and alpha to explore live, with a toggle between one- and two-tailed tests.',
+    description: 'Visualises the overlap of H₀ and Hₐ distributions, shading alpha, beta, and power — drag μ₀, μA, σ, n, or α to explore live, with a toggle between one- and two-tailed tests.',
+    inputLayout: 'explorer',
 
     formulas: [
       {
@@ -5621,18 +5622,18 @@ const CALCULATORS = [
       }
     ],
 
-    inputLayout: 'grid',
     inputs: [
       { id: 'tails', type: 'select', label: 'Test Direction', default: 'one',
-        note: 'One-tailed tests only for an increase above μ₀ — one critical value, all of α on the upper side. Two-tailed tests for a difference in either direction — two critical values, α split evenly between both tails.',
         options: [
           { value: 'one', label: 'One-Tailed (tests for an increase only)' },
           { value: 'two', label: 'Two-Tailed (tests for a difference either way)' },
         ] },
-      { id: 'mu0',   label: 'Null Hypothesis Mean (μ₀)', default: 102   },
+      { id: 'mu0',   type: 'slider', label: 'Null Hypothesis Mean (μ₀)', default: 102, min: 50, max: 150, step: 0.5,
+        format: v => v.toFixed(1) },
       { id: 'muA',   type: 'slider', label: 'Alternative Mean (μA) — sets the effect size', default: 113.2, min: 70, max: 150, step: 0.1,
         format: v => v.toFixed(1) },
-      { id: 'sigma', label: 'Standard Deviation (σ)',     default: 16    },
+      { id: 'sigma', type: 'slider', label: 'Standard Deviation (σ)', default: 16, min: 1, max: 40, step: 0.5,
+        format: v => v.toFixed(1) },
       { id: 'n',     type: 'slider', label: 'Sample Size (n)', default: 16, min: 2, max: 100, step: 1,
         format: v => String(Math.round(v)) },
       { id: 'alpha', type: 'slider', label: 'Significance Level (α)', default: 0.025, min: 0.001, max: 0.5, step: 0.001,
@@ -5675,44 +5676,30 @@ const CALCULATORS = [
       const delta = muA - mu0;
       const isTwoTailed = tails === 'two';
 
-      let zCrit, criticalValue, criticalLower = null, beta;
+      let critUpper, critLower = null, beta;
       if (isTwoTailed) {
-        zCrit = jStat.normal.inv(1 - alpha / 2, 0, 1);
-        criticalValue = mu0 + zCrit * se;
-        criticalLower = mu0 - zCrit * se;
-        const zUpper = (criticalValue - muA) / se;
-        const zLower = (criticalLower - muA) / se;
-        beta = jStat.normal.cdf(zUpper, 0, 1) - jStat.normal.cdf(zLower, 0, 1);
+        const zCrit = jStat.normal.inv(1 - alpha / 2, 0, 1);
+        critUpper = mu0 + zCrit * se;
+        critLower = mu0 - zCrit * se;
+        beta = jStat.normal.cdf((critUpper - muA) / se, 0, 1) - jStat.normal.cdf((critLower - muA) / se, 0, 1);
       } else {
-        zCrit = jStat.normal.inv(1 - alpha, 0, 1);
-        criticalValue = mu0 + zCrit * se;
-        const zBeta = (criticalValue - muA) / se;
-        beta = jStat.normal.cdf(zBeta, 0, 1);
+        const zCrit = jStat.normal.inv(1 - alpha, 0, 1);
+        critUpper = mu0 + zCrit * se;
+        beta = jStat.normal.cdf((critUpper - muA) / se, 0, 1);
       }
       const power = 1 - beta;
 
-      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const f = (v, dp = 3) => +(v.toFixed(dp));
 
-      const rows = [
-        { label: 'Standard Error (SE)',   value: f(se), ci: null, isRatio: false },
-        { label: 'Effect Size (δ = μA − μ₀)', value: f(delta), ci: null, isRatio: false },
-        { label: 'z-Critical',            value: f(zCrit), ci: null, isRatio: false },
+      const stats = [
+        { label: 'SE', value: f(se) },
+        ...(isTwoTailed
+          ? [{ label: 'Lower CV', value: f(critLower) }, { label: 'Upper CV', value: f(critUpper) }]
+          : [{ label: 'Critical Value', value: f(critUpper) }]),
+        { label: 'Effect Size (δ)', value: f(delta) },
+        { label: 'β (Type II)', value: f(beta) },
+        { label: 'Power (1−β)', value: f(power) },
       ];
-
-      if (isTwoTailed) {
-        rows.push(
-          { label: 'Critical Value (Lower)', value: f(criticalLower), ci: null, isRatio: false },
-          { label: 'Critical Value (Upper)', value: f(criticalValue), ci: null, isRatio: false },
-        );
-      } else {
-        rows.push({ label: 'Critical Value', value: f(criticalValue), ci: null, isRatio: false });
-      }
-
-      rows.push(
-        { label: 'Beta (β)',              value: f(beta), ci: null, isRatio: false },
-        { label: 'Power (1 − β)',         value: f(power), ci: null, isRatio: false, highlight: true },
-        { label: 'H₀ vs Hₐ', isSVG: true, svg: powerDistributionsSVG(mu0, muA, se, criticalValue, alpha, beta, power, criticalLower) },
-      );
 
       // One-tailed is built to detect an INCREASE above μ₀ — its critical
       // value always sits above μ₀. If μA isn't above μ₀, power won't
@@ -5723,12 +5710,37 @@ const CALCULATORS = [
       // critical value. Two-tailed doesn't have this issue — it's
       // symmetric, so power rises correctly with n regardless of which
       // direction μA sits relative to μ₀.
-      if (!isTwoTailed && delta <= 0) {
-        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
-          value: "μA is at or below μ₀, but this one-tailed test only checks for an increase above μ₀. With no true increase to detect, power won't rise with n — at μA = μ₀ it stays flat at α regardless of sample size, and if μA < μ₀ it actually falls toward 0 as n grows. If you're testing for a decrease, swap which value you call μ₀ vs. μA; if you don't know the direction in advance, switch to Two-Tailed above." });
-      }
+      const directionWarning = (!isTwoTailed && delta <= 0)
+        ? " μA is at or below μ₀, but this one-tailed test only checks for an increase above μ₀ — with no true increase to detect, power won't rise with n (it stays flat at α if μA = μ₀, and falls toward 0 as n grows if μA < μ₀). If you're testing for a decrease, swap which value you call μ₀ vs. μA; if you don't know the direction in advance, switch to Two-Tailed above."
+        : '';
 
-      return rows;
+      const footnote = (isTwoTailed
+        ? 'Both critical values are derived from H₀. The lower CV marks the left α/2 tail of H₀; the upper CV marks the right α/2 tail. Power is the area under Hₐ that falls beyond either critical value.'
+        : "The critical value is derived from H₀'s upper α tail (this test only checks for an increase above μ₀). Power is the area under Hₐ that falls beyond it; β is the area under Hₐ that doesn't.")
+        + directionWarning;
+
+      return {
+        title: `Power with Graph — ${isTwoTailed ? 'Two' : 'One'}-Tailed Test`,
+        subtitle: 'Visualizing H₀, Hₐ, critical values, α regions, β, and power (1−β)',
+        chartSvg: powerExplorerSVG(mu0, muA, se, critUpper, critLower, alpha, beta, power, isTwoTailed),
+        legend: isTwoTailed
+          ? [
+              { color: '#4E6EDB',              label: 'H₀ distribution' },
+              { color: '#E07B2C',              label: 'Hₐ distribution' },
+              { color: 'rgba(78,110,219,.28)', label: 'α/2 (rejection regions)' },
+              { color: 'rgba(224,123,44,.45)', label: 'Power (1−β)' },
+              { color: '#F6C9A0',              label: 'β (Type II error)' },
+            ]
+          : [
+              { color: '#4E6EDB',              label: 'H₀ distribution' },
+              { color: '#E07B2C',              label: 'Hₐ distribution' },
+              { color: 'rgba(78,110,219,.28)', label: 'α (rejection region)' },
+              { color: 'rgba(224,123,44,.45)', label: 'Power (1−β)' },
+              { color: '#F6C9A0',              label: 'β (Type II error)' },
+            ],
+        stats,
+        footnote,
+      };
     }
   },
 
@@ -5845,9 +5857,18 @@ const CALCULATORS = [
             { label: 'Power (1−β)', value: f(power) },
           ];
 
-      const footnote = isTwoTailed
+      // One-tailed only checks for an INCREASE above μ₀=0 — if Δ isn't
+      // positive, there's no true increase to detect, so power won't
+      // rise with n the way it usually does (see 'Power with Graph'
+      // for the same caveat with a raw μ₀/μA parameterization).
+      const directionWarning = (!isTwoTailed && delta <= 0)
+        ? ' Δ is at or below 0, but this one-tailed test only checks for an increase above μ₀ — with no true increase to detect, power won\'t rise with n (it stays flat at α if Δ = 0, and falls toward 0 as n grows if Δ < 0). If you\'re testing for a decrease, enter Δ as positive and reinterpret the sign, or switch to Two-Tailed above.'
+        : '';
+
+      const footnote = (isTwoTailed
         ? 'Both critical values are derived from H₀. The lower CV marks the left α/2 tail of H₀; the upper CV marks the right α/2 tail. Power is the area under Hₐ that falls beyond either critical value.'
-        : "The critical value is derived from H₀'s upper α tail (this test only checks for an increase above μ₀). Power is the area under Hₐ that falls beyond it; β is the area under Hₐ that doesn't.";
+        : "The critical value is derived from H₀'s upper α tail (this test only checks for an increase above μ₀). Power is the area under Hₐ that falls beyond it; β is the area under Hₐ that doesn't.")
+        + directionWarning;
 
       return {
         title: `Statistical Power — ${isTwoTailed ? 'Two' : 'One'}-Tailed Test`,
@@ -5884,6 +5905,7 @@ const CALCULATORS = [
     hint:        'Power(δ) curves at α = .01/.05/.10',
     category:    'Power & Sample Size',
     description: 'Plots power as a function of effect size and significance level for a given sample size.',
+    inputLayout: 'explorer',
 
     formulas: [
       {
@@ -5892,12 +5914,15 @@ const CALCULATORS = [
       }
     ],
 
-    inputLayout: 'grid',
     inputs: [
-      { id: 'sigma', label: 'Standard Deviation (σ)', default: 16   },
-      { id: 'n',     label: 'Sample Size (n)',        default: 16   },
-      { id: 'delta', label: 'Effect Size (δ) to Highlight', default: 5.6 },
-      { id: 'alpha', label: 'Significance Level (α) to Highlight', default: 0.05 },
+      { id: 'sigma', type: 'slider', label: 'Standard Deviation (σ)', default: 16, min: 1, max: 40, step: 0.5,
+        format: v => v.toFixed(1) },
+      { id: 'n',     type: 'slider', label: 'Sample Size (n)', default: 16, min: 2, max: 100, step: 1,
+        format: v => String(Math.round(v)) },
+      { id: 'delta', type: 'slider', label: 'Effect Size (δ) to Highlight', default: 5.6, min: 0, max: 20, step: 0.1,
+        format: v => v.toFixed(1) },
+      { id: 'alpha', type: 'slider', label: 'Significance Level (α) to Highlight', default: 0.05, min: 0.01, max: 0.30, step: 0.005,
+        format: v => v.toFixed(3) },
     ],
 
     example({ sigma, n, delta, alpha }) {
@@ -5920,12 +5945,22 @@ const CALCULATORS = [
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
       const power = normalPowerTwoTailed(delta, sigma, n, alpha);
-      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const se = sigma / Math.sqrt(n);
+      const f = (v, dp = 3) => +(v.toFixed(dp));
 
-      return [
-        { label: `Power at δ = ${f(delta, 2)}, α = ${alpha}`, value: f(power), ci: null, isRatio: false, highlight: true },
-        { label: 'Power Curves', isSVG: true, svg: powerCurveLineSVG(sigma, n, delta, alpha) },
-      ];
+      return {
+        title: 'Power vs Effect Size & Alpha',
+        subtitle: 'Two-tailed power as a continuous function of effect size, for three benchmark α levels',
+        chartSvg: powerCurveLineSVG(sigma, n, delta, alpha),
+        legend: [],
+        stats: [
+          { label: 'SE', value: f(se) },
+          { label: 'Highlighted δ', value: f(delta, 2) },
+          { label: 'Highlighted α', value: alpha },
+          { label: 'Power', value: f(power) },
+        ],
+        footnote: `With n = ${Math.round(n)} fixed (SD ${sigma}), this plots power across a whole range of possible effect sizes and alpha levels at once, rather than one δ/α pair at a time — useful for seeing, before running a study, how much power you'd lose by insisting on a stricter α or by the true effect turning out smaller than hoped.`,
+      };
     }
   },
 
@@ -6128,6 +6163,8 @@ const CALCULATORS = [
     hint:        'Decision matrix: α, β, and power',
     category:    'Power & Sample Size',
     description: 'An interactive decision matrix showing all four possible outcomes of a hypothesis test — two correct decisions and two errors — and how trading off α against power shifts the risk of each.',
+    inputLayout: 'explorer',
+    chartIsSVG:  false,
 
     formulas: [
       {
@@ -6136,7 +6173,6 @@ const CALCULATORS = [
       }
     ],
 
-    inputLayout: 'grid',
     inputs: [
       { id: 'alpha', type: 'slider', label: 'Significance Level (α) — Type I error rate', default: 0.05, min: 0.01, max: 0.30, step: 0.01,
         format: v => v.toFixed(2) },
@@ -6159,15 +6195,19 @@ const CALCULATORS = [
       const beta = 1 - power;
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
-      return [
-        { label: 'Decision Matrix', isSVG: true, svg: decisionMatrixHTML(alpha, power) },
-        { label: 'P(Type I Error) = α',              value: f(alpha),     ci: null, isRatio: false, highlight: true },
-        { label: 'P(Type II Error) = β',             value: f(beta),      ci: null, isRatio: false, highlight: true },
-        { label: 'P(Correctly retain H₀) = 1 − α',   value: f(1 - alpha), ci: null, isRatio: false },
-        { label: 'P(Correctly reject H₀) = Power',   value: f(power),     ci: null, isRatio: false },
-        { label: 'Note', isText: true, ci: null, isRatio: false,
-          value: "α and Power are set independently here so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out." },
-      ];
+      return {
+        title: 'Type I & Type II Error Explorer',
+        subtitle: 'Visualizing all four outcomes of a hypothesis test as α and Power change',
+        chartSvg: decisionMatrixHTML(alpha, power),
+        legend: [],
+        stats: [
+          { label: 'α (Type I)',              value: f(alpha) },
+          { label: 'β (Type II)',             value: f(beta) },
+          { label: '1−α (Correct Retain)',    value: f(1 - alpha) },
+          { label: 'Power (Correct Reject)',  value: f(power) },
+        ],
+        footnote: "α and Power are set independently here so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out.",
+      };
     }
   },
 
@@ -8007,6 +8047,7 @@ const CALCULATORS = [
     hint:        'PPV, NPV as prevalence varies, Se/Sp fixed',
     category:    'Diagnostic Testing',
     description: 'Shows how positive and negative predictive value change with disease prevalence, for a test with fixed sensitivity and specificity.',
+    inputLayout: 'explorer',
 
     formulas: [
       {
@@ -8015,10 +8056,11 @@ const CALCULATORS = [
       }
     ],
 
-    inputLayout: 'grid',
     inputs: [
-      { id: 'Se',         label: 'Sensitivity (0–1)', default: 0.85 },
-      { id: 'Sp',         label: 'Specificity (0–1)', default: 0.90 },
+      { id: 'Se', type: 'slider', label: 'Sensitivity (Se)', default: 0.85, min: 0.01, max: 0.99, step: 0.01,
+        format: v => (v * 100).toFixed(0) + '%' },
+      { id: 'Sp', type: 'slider', label: 'Specificity (Sp)', default: 0.90, min: 0.01, max: 0.99, step: 0.01,
+        format: v => (v * 100).toFixed(0) + '%' },
       { id: 'prevalence', type: 'slider', label: 'Disease Prevalence', default: 0.10, min: 0.001, max: 0.999, step: 0.001,
         format: v => (v * 100).toFixed(1) + '%' },
     ],
@@ -8035,14 +8077,18 @@ const CALCULATORS = [
 
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
-      return [
-        { label: 'Prevalence', value: `${f(prevalence * 100, 1)}%`, ci: null, isRatio: false, isText: true },
-        { label: 'Positive Predictive Value (PPV)', value: f(PPV), ci: null, isRatio: false, highlight: true },
-        { label: 'Negative Predictive Value (NPV)', value: f(NPV), ci: null, isRatio: false, highlight: true },
-        { label: 'PPV & NPV vs Prevalence', isSVG: true, svg: ppvNpvPrevalenceCurveSVG(Se, Sp, prevalence) },
-        { label: 'Note', isText: true, ci: null, isRatio: false,
-          value: 'Sensitivity and specificity are properties of the test and stay fixed here — only PPV and NPV move as prevalence changes. Drag the slider to see why the same test can be far more (or less) useful in a screening population than in a referral clinic.' },
-      ];
+      return {
+        title: 'PPV & NPV vs Prevalence',
+        subtitle: 'Visualizing how predictive values shift with prevalence, holding sensitivity and specificity fixed',
+        chartSvg: ppvNpvPrevalenceCurveSVG(Se, Sp, prevalence),
+        legend: [],
+        stats: [
+          { label: 'Prevalence', value: `${f(prevalence * 100, 1)}%` },
+          { label: 'PPV', value: f(PPV) },
+          { label: 'NPV', value: f(NPV) },
+        ],
+        footnote: 'Sensitivity and specificity are properties of the test and stay fixed here — only PPV and NPV move as prevalence changes. Drag the slider to see why the same test can be far more (or less) useful in a screening population than in a referral clinic.',
+      };
     },
 
     example({ Se, Sp, prevalence }) {
