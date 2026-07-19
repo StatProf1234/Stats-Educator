@@ -12335,11 +12335,10 @@ function powerExplorerSVG(mu0, muA, se, critUpper, critLower, alpha, beta, power
   // keeps it visually inside the region regardless of how α, Δ, σ,
   // or n reshape the curves.
   const clampX = x => Math.max(PL + 14, Math.min(W - PR - 14, x));
-  const regionLabel = (xData, mean, text, color, heightFrac = 0.42) => {
-    const x = clampX(toX(xData));
-    const y = toY(phi(xData, mean) * heightFrac) - 4;
-    return `<text x="${x}" y="${y}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${color}">${text}</text>`;
-  };
+  const clampY = y => Math.max(PT + 12, Math.min(baseline - 6, y));
+  const curveY = (xData, mean, heightFrac) => clampY(toY(phi(xData, mean) * heightFrac) - 4);
+  const textEl = (xData, y, text, color) =>
+    `<text x="${clampX(toX(xData))}" y="${y}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${color}">${text}</text>`;
 
   const alphaColor = '#2D4FBA', betaColor = '#A8672A', powerColor = '#B35A12';
   const alphaUpperCenter = (Math.max(critUpper, xMin) + xMax) / 2;
@@ -12348,12 +12347,27 @@ function powerExplorerSVG(mu0, muA, se, critUpper, critLower, alpha, beta, power
     ? (Math.max(critLower, xMin) + Math.min(critUpper, xMax)) / 2
     : (xMin + Math.min(critUpper, xMax)) / 2;
 
+  // α/2 (or α) and Power sit at the same X — both live in the "beyond
+  // the critical value" region, just measured against different
+  // curves — so their curve-relative heights converge and the two
+  // labels overlap whenever the effect size is small enough that H₀
+  // and Hₐ nearly coincide. Power is pinned at least MIN_LABEL_GAP
+  // above wherever α/2 lands, rather than purely following its own
+  // local curve height, so the two stay legible at every slider
+  // position instead of only when Δ happens to be large.
+  const MIN_LABEL_GAP = 16;
+  const alphaUpperY = alphaUpper ? curveY(alphaUpperCenter, mu0, 0.42) : null;
+  const alphaLowerY = alphaLower ? curveY(alphaLowerCenter, mu0, 0.42) : null;
+  const betaY       = betaBand   ? curveY(betaCenter, muA, 0.5) : null;
+  const powerUpperY = powerUpper ? Math.min(curveY(alphaUpperCenter, muA, 0.5), (alphaUpperY ?? baseline) - MIN_LABEL_GAP) : null;
+  const powerLowerY = (isTwoTailed && powerLower) ? Math.min(curveY(alphaLowerCenter, muA, 0.5), (alphaLowerY ?? baseline) - MIN_LABEL_GAP) : null;
+
   const regionLabels = `
-    ${alphaUpper ? regionLabel(alphaUpperCenter, mu0, isTwoTailed ? 'α/2' : 'α', alphaColor) : ''}
-    ${alphaLower ? regionLabel(alphaLowerCenter, mu0, 'α/2', alphaColor) : ''}
-    ${betaBand   ? regionLabel(betaCenter, muA, 'β', betaColor, 0.5) : ''}
-    ${powerUpper ? regionLabel(alphaUpperCenter, muA, 'Power', powerColor, 0.5) : ''}
-    ${(isTwoTailed && powerLower) ? regionLabel(alphaLowerCenter, muA, 'Power', powerColor, 0.5) : ''}
+    ${alphaUpper ? textEl(alphaUpperCenter, alphaUpperY, isTwoTailed ? 'α/2' : 'α', alphaColor) : ''}
+    ${alphaLower ? textEl(alphaLowerCenter, alphaLowerY, 'α/2', alphaColor) : ''}
+    ${betaBand   ? textEl(betaCenter, betaY, 'β', betaColor) : ''}
+    ${powerUpper ? textEl(alphaUpperCenter, powerUpperY, 'Power', powerColor) : ''}
+    ${(isTwoTailed && powerLower) ? textEl(alphaLowerCenter, powerLowerY, 'Power', powerColor) : ''}
   `;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Null and alternative distributions with alpha, beta, and power separately shaded">
