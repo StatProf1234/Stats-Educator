@@ -965,6 +965,13 @@ body {
   gap: 20px;
 }
 
+/* Flex items default to min-width:auto, which lets them grow to fit
+   wide content instead of shrinking to the container's width — so an
+   unusually wide formula (e.g. Sample Size — 1-Sample Proportion or
+   Difference of Two Proportions) pushed the whole box wider instead
+   of triggering .formula-katex's own overflow-x:auto below. */
+.formula-list > div { min-width: 0; }
+
 .formula-row-label {
   font-size: 11px;
   font-weight: 500;
