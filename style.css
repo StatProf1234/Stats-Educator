@@ -592,6 +592,7 @@ body {
   transition: box-shadow .15s, border-color .15s, transform .1s;
   text-decoration: none;
   display: block;
+  min-width: 0;
 }
 
 .home-card:hover {
@@ -622,6 +623,7 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-3);
+  overflow-wrap: break-word;
 }
 
 .home-card-desc {
@@ -685,6 +687,7 @@ body {
 
 .home-section {
   margin-bottom: 44px;
+  min-width: 0;
 }
 
 /* Collapsed sections are just a thin header row with nothing below —
