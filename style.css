@@ -1448,6 +1448,16 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* Reuses .result-viz/.viz-toolbar/.export-chart-btn as-is (same PNG/
+   JPG export buttons, same delegated click handler in app.js) for the
+   PNG/JPG download buttons above the chart — this override just drops
+   .result-viz's own table-row padding/border, since .explorer-chart-
+   card already provides the surrounding box. */
+.explorer-chart-card .result-viz {
+  padding: 0;
+  border-bottom: none;
+}
+
 .explorer-legend {
   display: flex;
   flex-wrap: wrap;

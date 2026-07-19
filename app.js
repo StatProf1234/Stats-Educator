@@ -816,7 +816,13 @@ function renderExplorerCalculator(calc) {
     <div class="explorer-controls">${controlsHtml}</div>
 
     <div class="explorer-chart-card">
-      <div id="explorer-chart"></div>
+      <div class="result-viz">
+        <div class="viz-toolbar">
+          <button type="button" class="export-chart-btn" data-format="png" data-filename="${esc(calc.id)}-chart" title="Download this chart as a PNG image">PNG ⬇</button>
+          <button type="button" class="export-chart-btn" data-format="jpg" data-filename="${esc(calc.id)}-chart" title="Download this chart as a JPG image">JPG ⬇</button>
+        </div>
+        <div id="explorer-chart"></div>
+      </div>
       <div class="explorer-legend" id="explorer-legend"></div>
       <div class="explorer-stats" id="explorer-stats"></div>
       <p class="explorer-footnote" id="explorer-footnote"></p>
