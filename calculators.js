@@ -10634,6 +10634,7 @@ const CALCULATORS = [
       const ciPct = Math.round((1 - alpha) * 100);
 
       const rows = [
+        { label: 'Groups (k) / Comparisons (m)', value: `${k} / ${pairs.length}`, ci: null, isRatio: false, isText: true },
         { label: 'MS Within (MSW)', value: f(msw), ci: null, isRatio: false },
         { label: 'df Within',       value: dfW,    ci: null, isRatio: false },
       ];
@@ -10656,7 +10657,12 @@ const CALCULATORS = [
         value: `Pooled-variance t-tests (using the ANOVA's MSW and dfW) with Holm-Šídák step-down correction across all pairs. The ${ciPct}% CI shown on each mean difference uses the unadjusted t critical value for context — significance (highlighted) is judged against α = ${alpha.toFixed(2)} using the Holm-Šídák-adjusted p-value instead.`
       });
 
-      const fwerMax = Math.max(20, pairs.length);
+      // C(6,2) = 15 — the most pairwise comparisons this calculator can
+      // ever produce, since it runs all-pairs comparisons capped at 6
+      // groups (this calculator's own groupMax). Fixed rather than
+      // scaled to the entered data, so the axis never implies a number
+      // of comparisons this tool can't actually reach.
+      const fwerMax = 15;
       const uncorrectedFwer = 1 - Math.pow(1 - alpha, pairs.length);
       rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(alpha, pairs.length, fwerMax) });
       rows.push({
