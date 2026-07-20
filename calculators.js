@@ -215,6 +215,8 @@ const CALCULATORS = [
         { label: 'Matched Odds Ratio (OR)', value: f(OR), ci: [f(ciLow), f(ciHigh)], isRatio: true, highlight: true },
         { label: 'Interpretation', isText: true, ci: null, isRatio: false,
           value: `Because controls in a nested case-control study are sampled from the risk set at the time each case occurred (incidence-density sampling), this matched OR = ${f(OR)} is a direct estimate of the incidence rate ratio — not merely an approximation of it the way an unmatched case-control OR would be under the rare-disease assumption.` },
+        { label: 'Note', isText: true, isHtml: true, ci: null, isRatio: false,
+          value: `This is a relative measure only — the matched-pairs table above can't produce an absolute incidence figure, since it covers just the sampled cases and their matched controls, not the full cohort's case count and person-time. For the actual rate (e.g., events per 1,000 person-years), use the <a href="#incidence-rate">Incidence Rate &amp; Rate Ratio</a> calculator with your full cohort's data.` },
       ];
     }
   },
@@ -14666,6 +14668,7 @@ const WIZARD_TREE = {
   nestedCaseControlResult: {
     results: [
       { id: 'nested-case-control', why: 'Matched OR from 1:1 case-control pairs — a direct estimate of the incidence rate ratio when controls were sampled from the risk set.' },
+      { id: 'incidence-rate', why: "If you also have your full cohort's case count and person-time, this gives you the actual incidence rate (not just the ratio) alongside a second group to compare it to." },
     ]
   },
   interactionTestResult: {
@@ -15442,7 +15445,9 @@ const NOTATION = {
     { symbol: '\\chi^2_{corrected}', meaning: 'Continuity-corrected chi-square statistic, more accurate when the number of discordant pairs is small.' },
   ],
   'nested-case-control': [
-    { symbol: 'b, c', meaning: 'The two discordant cell counts — pairs where the case was exposed and the control was not (b), or the reverse (c). Concordant pairs (a, d) contribute nothing to the estimate.' },
+    { symbol: 'Concordant', meaning: 'A matched pair where the case and control share the same exposure status (both exposed, or both unexposed) — cells a and d. These pairs carry no information about the exposure-outcome association.' },
+    { symbol: 'Discordant', meaning: 'A matched pair where the case and control differ in exposure status — cells b and c. Only discordant pairs contribute to the matched odds ratio.' },
+    { symbol: 'b, c', meaning: 'The two discordant cell counts — pairs where the case was exposed and the control was not (b), or the reverse (c).' },
     { symbol: 'OR_{\\text{matched}}', meaning: 'Matched Odds Ratio — b divided by c. Because of risk-set sampling, this directly estimates the incidence rate ratio.' },
   ],
   'cochrans-q': [

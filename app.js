@@ -1238,10 +1238,17 @@ function showResults(results, calcId) {
 
     const labelText = r.isText ? upperAscii(r.label) : r.label;
 
+    // isHtml opts a single row out of escaping so its value can contain
+    // an internal link (e.g. "see the X calculator") — only for
+    // isText rows, whose value is always calculator-authored template
+    // text, never raw user input, matching the same trust level as
+    // GUIDES html content elsewhere in the app.
+    const valueHtml = (r.isText && r.isHtml) ? valStr : esc(valStr);
+
     return `
       <div class="${rowCls}">
         <div class="result-label">${esc(labelText)}</div>
-        <div class="result-value ${r.isText ? 'is-text' : ''}">${esc(valStr)}</div>
+        <div class="result-value ${r.isText ? 'is-text' : ''}">${valueHtml}</div>
         ${ciCell}
       </div>
     `;
