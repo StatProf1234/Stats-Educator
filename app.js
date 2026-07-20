@@ -1024,7 +1024,7 @@ function renderGroupedInputs(calc) {
       return `
         <div class="group-cell">
           <input class="input-el" type="${isText ? 'text' : 'number'}" id="inp-${inp.id}" data-id="${inp.id}"
-                 value="${esc(inp.default)}" ${isText ? '' : 'step="any"'} aria-label="${term} ${i} ${esc(f.label)}">
+                 value="${esc(inp.default)}" ${isText ? '' : 'step="any"'} aria-label="${term} ${i} ${escAttr(f.label)}">
         </div>`;
     }).join('');
     return rowHeader + cells;
@@ -1355,6 +1355,20 @@ function esc(s) {
     // in many web fonts — see .over-bar in style.css for why — so
     // replace the combining mark with a real CSS overline instead.
     .replace(/([A-Za-z])̄/g, '<span class="over-bar">$1</span>');
+}
+
+// Plain-text escape for use INSIDE an HTML attribute value (e.g.
+// aria-label="..."). Unlike esc(), this never injects markup — esc()'s
+// over-bar <span> substitution is only safe in element content; inside
+// an attribute, the span's own quote characters would prematurely
+// close the attribute and spill the rest of the tag out as visible text.
+function escAttr(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 // Uppercases only plain a-z ASCII letters, leaving everything else —

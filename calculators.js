@@ -296,6 +296,102 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 3b. HEDGES' g ───────────────────────────────────────────────────
+     Bias-corrected version of Cohen's d — d slightly overestimates the
+     population effect size in small samples, and g corrects for that
+     via a shrinkage factor J that approaches 1 as df grows. This is
+     the standardized-mean-difference measure meta-analysis software
+     (and the Meta-Analysis calculators on this site) actually expects
+     as input, precisely because it's unbiased where raw d isn't.    */
+  {
+    id:          'hedges-g',
+    name:        "Hedges' g",
+    hint:        "g = d × J — bias-corrected Cohen's d, with a CI",
+    category:    'Effect Sizes & Agreement',
+    description: "Corrects Cohen's d for small-sample bias and reports a confidence interval — the standardized mean difference typically used as the effect-size input to a meta-analysis.",
+
+    formulas: [
+      {
+        label: "Pooled Standard Deviation & Cohen's d",
+        latex: 's_{\\text{pooled}} = \\sqrt{\\dfrac{(n_1-1)s_1^2+(n_2-1)s_2^2}{n_1+n_2-2}}, \\qquad d=\\dfrac{\\bar{x}_1-\\bar{x}_2}{s_{\\text{pooled}}}'
+      },
+      {
+        label: 'Small-Sample Correction Factor',
+        latex: 'J = 1-\\dfrac{3}{4(n_1+n_2-2)-1}'
+      },
+      {
+        label: "Hedges' g & Its Variance",
+        latex: 'g=J\\cdot d, \\qquad V_g = J^2\\left(\\dfrac{n_1+n_2}{n_1 n_2}+\\dfrac{d^2}{2(n_1+n_2)}\\right)'
+      },
+      {
+        label: '95% CI',
+        latex: 'g \\pm 1.96\\sqrt{V_g}'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupFields: [
+      { prefix: 'mean', label: 'Mean (x̄)' },
+      { prefix: 'sd',   label: 'SD (s)' },
+      { prefix: 'n',    label: 'Size (n)' },
+    ],
+    inputs: [
+      { id: 'mean1', label: 'Group 1 Mean (x̄₁)', default: 85 },
+      { id: 'mean2', label: 'Group 2 Mean (x̄₂)', default: 78 },
+      { id: 'sd1',   label: 'Group 1 SD (s₁)',    default: 10 },
+      { id: 'sd2',   label: 'Group 2 SD (s₂)',    default: 12 },
+      { id: 'n1',    label: 'Group 1 Size (n₁)',  default: 12 },
+      { id: 'n2',    label: 'Group 2 Size (n₂)',  default: 10 },
+    ],
+
+    example({ mean1, mean2, sd1, sd2, n1, n2 }) {
+      if (!isFinite(mean1) || !isFinite(mean2) || !isFinite(sd1) || sd1 <= 0 || !isFinite(sd2) || sd2 <= 0 ||
+          !isFinite(n1) || n1 < 2 || !isFinite(n2) || n2 < 2)
+        return 'Enter means, SDs, and sample sizes for both groups to see a worked medical example here.';
+      const sp = Math.sqrt(((n1 - 1) * sd1 ** 2 + (n2 - 1) * sd2 ** 2) / (n1 + n2 - 2));
+      const d = (mean1 - mean2) / sp;
+      const df = n1 + n2 - 2;
+      const J = 1 - 3 / (4 * df - 1);
+      const g = J * d;
+      const f = v => +v.toFixed(2);
+      return `A pilot trial enrolls just ${n1} and ${n2} patients per arm. Raw Cohen's d = ${f(d)}, but with only ${df} total degrees of freedom that number is a slightly optimistic (biased) estimate of the true effect — Hedges' g = ${f(g)} applies the correction factor J = ${f(J)} to pull it back toward zero, and is the number a later meta-analysis pooling this study with others would actually want.`;
+    },
+
+    calculate({ mean1, mean2, sd1, sd2, n1, n2 }) {
+      if (n1 < 2 || n2 < 2)
+        return [err('Sample sizes must be at least 2')];
+      if (sd1 <= 0 || sd2 <= 0)
+        return [err('Standard deviations must be greater than 0')];
+
+      const sp  = Math.sqrt(((n1-1)*sd1**2 + (n2-1)*sd2**2) / (n1+n2-2));
+      const d   = (mean1 - mean2) / sp;
+      const df  = n1 + n2 - 2;
+      const J   = 1 - 3 / (4 * df - 1);
+      const g   = J * d;
+      const Vd  = (n1+n2)/(n1*n2) + d**2/(2*(n1+n2));
+      const Vg  = J**2 * Vd;
+      const seG = Math.sqrt(Vg);
+      const Z = 1.96;
+      const ciLow = g - Z * seG, ciHigh = g + Z * seG;
+
+      const absG = Math.abs(g);
+      const interp = absG < 0.2 ? 'Negligible (< 0.2)'
+                   : absG < 0.5 ? 'Small (0.2 – 0.5)'
+                   : absG < 0.8 ? 'Medium (0.5 – 0.8)'
+                   :              'Large (≥ 0.8)';
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Pooled SD (s_pooled)',        value: f(sp), ci: null, isRatio: false },
+        { label: "Cohen's d (uncorrected)",      value: f(d),  ci: null, isRatio: false },
+        { label: 'Correction Factor (J)',        value: f(J),  ci: null, isRatio: false },
+        { label: "Hedges' g", value: f(g), ci: [f(ciLow), f(ciHigh)], isRatio: false, highlight: true },
+        { label: 'Interpretation (Cohen, 1988)', value: interp, ci: null, isRatio: false, isText: true },
+      ];
+    }
+  },
+
   /* ── 4. STANDARD DEVIATION — CALCULATED & VISUALIZED ────────────────
      Sources: Variance and SD for samples.R, Variance and SD for populations.R */
   {
@@ -13839,6 +13935,7 @@ const CALCULATOR_INDEX = [
 
   // ── 8. EFFECT SIZES & AGREEMENT ──────────────────────────────────────
   { id: 'cohens-d',             name: "Cohen's d",                       category: 'Effect Sizes & Agreement',    description: "Quantifies the standardized difference between two group means using pooled standard deviation.", status: 'available' },
+  { id: 'hedges-g',             name: "Hedges' g",                       category: 'Effect Sizes & Agreement',    description: "Bias-corrected Cohen's d with a confidence interval — the standardized mean difference typically used as meta-analysis input.", status: 'available' },
   { id: 'cramers-v',            name: "Cramer's V",                      category: 'Effect Sizes & Agreement',    description: 'Measures the strength of association in contingency tables larger than 2×2.',                   status: 'available' },
   { id: 'phi-coefficient',      name: 'Phi Coefficient (2×2)',           category: 'Effect Sizes & Agreement',    description: 'Measures the association between two binary variables in a 2×2 table.',                        status: 'available' },
   { id: 'cohens-kappa',         name: "Cohen's Kappa",                   category: 'Effect Sizes & Agreement',    description: 'Measures inter-rater agreement for categorical data, corrected for chance.',                    status: 'available' },
@@ -14062,6 +14159,7 @@ const WIZARD_TREE = {
     results: [
       { id: 'paired-t-test', why: 'Standard test for the mean difference between paired/matched measurements.' },
       { id: 'cohens-d',      why: "Pair with this to report the effect size (how big the difference is), not just its p-value." },
+      { id: 'hedges-g',      why: 'A bias-corrected version of Cohen\'s d with a confidence interval — preferred if your sample is small or this result will feed into a meta-analysis.' },
     ]
   },
   wilcoxonResult: {
@@ -14091,6 +14189,7 @@ const WIZARD_TREE = {
     results: [
       { id: 'unpaired-t-test', why: "Welch's t-test for two independent means, without assuming equal variances." },
       { id: 'cohens-d',        why: 'Pair with this to report the effect size, not just the p-value.' },
+      { id: 'hedges-g',        why: 'A bias-corrected version of Cohen\'s d with a confidence interval — preferred if your sample is small or this result will feed into a meta-analysis.' },
       { id: 'se-mean-diff',    why: 'If you just want the standard error of the difference on its own.' },
     ]
   },
@@ -14734,6 +14833,7 @@ const SEARCH_KEYWORDS = {
 
   // Effect Sizes & Agreement
   'cohens-d':        ["cohen's d", 'effect size for a mean difference'],
+  'hedges-g':        ["hedges' g", "hedges g", 'bias-corrected cohen\'s d', 'standardized mean difference', 'smd'],
   'cramers-v':       ["cramer's v", 'effect size for chi-square', 'association strength categorical', 'r by c table'],
   'phi-coefficient': ['phi coefficient', 'effect size for a 2x2 table', 'case-control study'],
   'cohens-kappa':    ["cohen's kappa", 'inter-rater agreement', 'agreement between two raters categorical', 'unordered categories'],
@@ -15371,6 +15471,13 @@ const NOTATION = {
     { symbol: '\\bar{x}_1', meaning: 'Mean of Group 1.' },
     { symbol: '\\bar{x}_2', meaning: 'Mean of Group 2.' },
   ],
+  'hedges-g': [
+    { symbol: 's_{\\text{pooled}}', meaning: "Pooled standard deviation, same as in Cohen's d." },
+    { symbol: 'd', meaning: "Cohen's d, before the small-sample correction is applied." },
+    { symbol: 'J', meaning: 'Correction factor (always slightly less than 1) that shrinks d toward zero to remove its small-sample bias.' },
+    { symbol: 'g', meaning: "Hedges' g — the bias-corrected effect size, g = J·d." },
+    { symbol: 'V_g', meaning: "Variance of g, used to build its confidence interval and as the inverse-variance weight if this study is later pooled in a meta-analysis." },
+  ],
   'cramers-v': [
     { symbol: '\\chi^2', meaning: 'Chi-square statistic summarizing how far the observed table counts deviate from what independence would predict.' },
     { symbol: 'O_{ij}', meaning: 'Observed count in row i, column j of the contingency table.' },
@@ -15999,7 +16106,7 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Comparing a sample mean to a known value: <strong>1-Sample t-Test</strong>. Comparing two independent groups: <strong>Unpaired t-Test (Welch's)</strong>. Comparing two paired/matched measurements: <strong>Paired t-Test</strong>. Comparing three or more groups: <strong>1-Way ANOVA</strong> (independent groups) or <strong>Repeated Measures ANOVA</strong> (same subjects) — check the equal-variance assumption first with <strong>Levene's Test</strong>. Relationship between two continuous variables: <strong>Pearson's Correlation</strong>, <strong>Simple</strong> or <strong>Multiple Linear Regression</strong>. Standardized effect size for a mean difference: <strong>Cohen's d</strong>.</p>`,
+        html: `<p>Comparing a sample mean to a known value: <strong>1-Sample t-Test</strong>. Comparing two independent groups: <strong>Unpaired t-Test (Welch's)</strong>. Comparing two paired/matched measurements: <strong>Paired t-Test</strong>. Comparing three or more groups: <strong>1-Way ANOVA</strong> (independent groups) or <strong>Repeated Measures ANOVA</strong> (same subjects) — check the equal-variance assumption first with <strong>Levene's Test</strong>. Relationship between two continuous variables: <strong>Pearson's Correlation</strong>, <strong>Simple</strong> or <strong>Multiple Linear Regression</strong>. Standardized effect size for a mean difference: <strong>Cohen's d</strong>, or <strong>Hedges' g</strong> if the sample is small or the result will feed into a meta-analysis.</p>`,
       },
     ],
     related: [
@@ -16010,6 +16117,7 @@ const GUIDES = [
       { id: 'pearson-r', why: 'Measures the linear relationship between two continuous variables.' },
       { id: 'simple-regression', why: 'Fits a line predicting one continuous variable from another.' },
       { id: 'cohens-d', why: 'Standardized effect size for the difference between two means.' },
+      { id: 'hedges-g', why: "Bias-corrected version of Cohen's d, with a confidence interval — preferred for small samples or meta-analysis input." },
     ],
   },
 
@@ -17745,7 +17853,7 @@ const GUIDES = [
       },
       {
         heading: 'Agreement & Correlation',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>ICC</td><td>Intraclass Correlation Coefficient</td><td style="text-align:left;">Measures agreement/reliability between raters or repeated measurements on a continuous scale.</td><td style="text-align:left;">Intraclass Correlation (ICC)</td></tr><tr><td>κ (kappa)</td><td>Cohen's Kappa</td><td style="text-align:left;">Chance-corrected agreement between two raters on a categorical outcome.</td><td style="text-align:left;">Weighted Kappa</td></tr><tr><td>r / ρ</td><td>Pearson's r / Spearman's rho</td><td style="text-align:left;">r measures linear correlation between two continuous variables, ranging −1 to 1; ρ (rho) is its rank-based, non-parametric counterpart.</td><td style="text-align:left;">Pearson's Correlation; Standard Error of a Correlation Coefficient</td></tr><tr><td>r²</td><td>Coefficient of Determination (single predictor)</td><td style="text-align:left;">The squared Pearson r &mdash; the proportion of variance in one variable explained by its linear association with the other. Equals R² below in the single-predictor (Simple Linear Regression) case.</td><td style="text-align:left;">Pearson's Correlation; Simple Linear Regression</td></tr><tr><td>τ (Kendall's tau)</td><td>Kendall's tau</td><td style="text-align:left;">A rank correlation coefficient &mdash; a different quantity from τ² (tau-squared) below, despite the shared Greek letter; worth not confusing the two.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>d / g</td><td>Cohen's d / Hedges' g</td><td style="text-align:left;">Standardized mean difference between two groups &mdash; the difference in means divided by their pooled SD &mdash; and the sample-based, Latin-letter estimate of the population effect size δ (delta). Hedges' g applies a small-sample correction to d; this site's calculator computes d.</td><td style="text-align:left;">Cohen's d</td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>ICC</td><td>Intraclass Correlation Coefficient</td><td style="text-align:left;">Measures agreement/reliability between raters or repeated measurements on a continuous scale.</td><td style="text-align:left;">Intraclass Correlation (ICC)</td></tr><tr><td>κ (kappa)</td><td>Cohen's Kappa</td><td style="text-align:left;">Chance-corrected agreement between two raters on a categorical outcome.</td><td style="text-align:left;">Weighted Kappa</td></tr><tr><td>r / ρ</td><td>Pearson's r / Spearman's rho</td><td style="text-align:left;">r measures linear correlation between two continuous variables, ranging −1 to 1; ρ (rho) is its rank-based, non-parametric counterpart.</td><td style="text-align:left;">Pearson's Correlation; Standard Error of a Correlation Coefficient</td></tr><tr><td>r²</td><td>Coefficient of Determination (single predictor)</td><td style="text-align:left;">The squared Pearson r &mdash; the proportion of variance in one variable explained by its linear association with the other. Equals R² below in the single-predictor (Simple Linear Regression) case.</td><td style="text-align:left;">Pearson's Correlation; Simple Linear Regression</td></tr><tr><td>τ (Kendall's tau)</td><td>Kendall's tau</td><td style="text-align:left;">A rank correlation coefficient &mdash; a different quantity from τ² (tau-squared) below, despite the shared Greek letter; worth not confusing the two.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>d / g</td><td>Cohen's d / Hedges' g</td><td style="text-align:left;">Standardized mean difference between two groups &mdash; the difference in means divided by their pooled SD &mdash; and the sample-based, Latin-letter estimate of the population effect size δ (delta). Hedges' g applies a small-sample correction to d and adds a confidence interval.</td><td style="text-align:left;">Cohen's d; Hedges' g</td></tr></tbody></table></div>`,
       },
       {
         heading: 'Meta-Analysis',
