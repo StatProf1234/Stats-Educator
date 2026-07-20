@@ -10445,6 +10445,143 @@ const CALCULATORS = [
     }
   },
 
+  /* ── KOLMOGOROV-SMIRNOV TEST (ONE-SAMPLE) ────────────────────────────
+     Compares a sample's empirical CDF against a fully specified
+     Normal(μ₀, σ₀) — parameters fixed in advance, not estimated from
+     the same sample (that variant needs a Lilliefors correction, which
+     this calculator doesn't apply — use Shapiro-Wilk instead if the
+     reference mean/SD should come from the sample itself).           */
+  {
+    id:          'ks-test-one-sample',
+    name:        'Kolmogorov-Smirnov Test (One-Sample)',
+    hint:        'D = max|Fₙ(x) − Φ₀(x)| vs a specified Normal(μ₀,σ₀)',
+    category:    'Non-Parametric Tests',
+    description: "Tests whether a sample is consistent with a fully specified Normal(μ₀, σ₀) distribution, comparing the sample's empirical CDF against the hypothesized one.",
+
+    formulas: [
+      {
+        label: 'KS Statistic',
+        latex: 'D = \\max_i\\left(\\max\\!\\left[\\dfrac{i}{n}-F_0(x_{(i)}),\\; F_0(x_{(i)})-\\dfrac{i-1}{n}\\right]\\right)'
+      },
+      {
+        label: 'Asymptotic p-value (Stephens 1970 correction)',
+        latex: 'p = Q_{KS}\\!\\left(\\left[\\sqrt{n}+0.12+\\dfrac{0.11}{\\sqrt{n}}\\right]D\\right), \\quad Q_{KS}(t)=2\\sum_{k=1}^{\\infty}(-1)^{k-1}e^{-2k^2t^2}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'data',   type: 'textarea', label: 'Sample Data (comma-separated)', default: '3250,3410,2980,3600,3120,3340,3800,2890,3510,3260' },
+      { id: 'mu0',    label: 'Hypothesized Mean (μ₀)', default: 3300 },
+      { id: 'sigma0', label: 'Hypothesized SD (σ₀)',   default: 450 },
+    ],
+
+    example({ data, mu0, sigma0 }) {
+      const values = parseNumberList(data);
+      if (values.length < 3 || !isFinite(mu0) || !isFinite(sigma0) || sigma0 <= 0)
+        return 'Enter at least 3 numeric values and a positive hypothesized SD to see a worked medical example here.';
+      const { n, D, pValue } = ksOneSampleStats(values, mu0, sigma0);
+      const f = v => +v.toFixed(3);
+      const tail = pValue < 0.05
+        ? 'the sample departs significantly from that distribution'
+        : 'no significant departure from that distribution was detected';
+      return `A researcher wants to know whether ${n} birth weights (g) plausibly came from a Normal(${mu0}, ${sigma0}) reference distribution built from prior published norms, rather than estimating the mean and SD from this sample itself. D = ${f(D)}, ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate({ data, mu0, sigma0 }) {
+      const values = parseNumberList(data);
+      if (values.some(v => !isFinite(v))) return [err('All values must be numeric')];
+      if (values.length < 3) return [err('Enter at least 3 numeric values')];
+      if (!isFinite(mu0)) return [err('Hypothesized mean must be numeric')];
+      if (!isFinite(sigma0) || sigma0 <= 0) return [err('Hypothesized SD must be a positive number')];
+
+      const { n, Dplus, Dminus, D, pValue } = ksOneSampleStats(values, mu0, sigma0);
+      const isSignificant = pValue < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Sample Size (n)', value: n, ci: null, isRatio: false },
+        { label: 'D⁺ (max above reference CDF)', value: f(Dplus), ci: null, isRatio: false },
+        { label: 'D⁻ (max below reference CDF)', value: f(Dminus), ci: null, isRatio: false },
+        { label: 'KS Statistic (D)', value: f(D), ci: null, isRatio: false, highlight: true },
+        { label: 'p-value (asymptotic)', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? `Reject H₀ — the sample is not consistent with a Normal(${mu0}, ${sigma0}) distribution.`
+            : `Fail to reject H₀ — the sample is consistent with a Normal(${mu0}, ${sigma0}) distribution.` },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: "This test assumes μ₀ and σ₀ were fixed in advance, not estimated from this same sample — to test normality using the sample's own mean and SD, use the Shapiro-Wilk Test instead." },
+      ];
+    }
+  },
+
+  /* ── KOLMOGOROV-SMIRNOV TEST (TWO-SAMPLE) ────────────────────────────
+     Compares the empirical CDFs of two independent samples directly —
+     sensitive to any difference in distribution (location, spread, or
+     shape), unlike Mann-Whitney, which is really a test of stochastic
+     dominance/location. Shares the asymptotic Kolmogorov distribution
+     with the one-sample version, scaled by the effective sample size
+     n₁n₂/(n₁+n₂).                                                    */
+  {
+    id:          'ks-test-two-sample',
+    name:        'Kolmogorov-Smirnov Test (Two-Sample)',
+    hint:        'D = max|F₁(x) − F₂(x)|, nₑ = n₁n₂/(n₁+n₂)',
+    category:    'Non-Parametric Tests',
+    description: 'Non-parametric test comparing the full distributions of two independent samples — sensitive to differences in location, spread, or shape, not just central tendency.',
+
+    formulas: [
+      {
+        label: 'KS Statistic',
+        latex: 'D = \\max_x\\left|F_1(x) - F_2(x)\\right|'
+      },
+      {
+        label: 'Asymptotic p-value (Stephens 1970 correction)',
+        latex: 'p = Q_{KS}\\!\\left(\\left[\\sqrt{n_e}+0.12+\\dfrac{0.11}{\\sqrt{n_e}}\\right]D\\right), \\quad n_e=\\dfrac{n_1n_2}{n_1+n_2}, \\quad Q_{KS}(t)=2\\sum_{k=1}^{\\infty}(-1)^{k-1}e^{-2k^2t^2}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'sample1', type: 'textarea', label: 'Group 1 Data (comma-separated)', default: '85,87,90,95,91,88,93' },
+      { id: 'sample2', type: 'textarea', label: 'Group 2 Data (comma-separated)', default: '68,76,73,78,80,74,70' },
+    ],
+
+    example({ sample1, sample2 }) {
+      const x1 = parseNumberList(sample1), x2 = parseNumberList(sample2);
+      if (x1.some(v => !isFinite(v)) || x2.some(v => !isFinite(v)) || x1.length < 2 || x2.length < 2)
+        return 'Enter at least 2 numeric values in each group to see a worked medical example here.';
+      const { n1, n2, D, pValue } = ksTwoSampleStats(x1, x2);
+      const f = v => +v.toFixed(3);
+      const tail = pValue < 0.05
+        ? 'their overall distributions differ significantly'
+        : 'no significant difference in overall distribution was detected';
+      return `A trial compares recovery-time distributions (not just averages) between ${n1} patients on Method A and ${n2} on Method B — the KS test flags any difference in shape or spread, not only a shift in the center. D = ${f(D)}, ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate({ sample1, sample2 }) {
+      const x1 = parseNumberList(sample1), x2 = parseNumberList(sample2);
+      if (x1.some(v => !isFinite(v)) || x2.some(v => !isFinite(v)))
+        return [err('All values must be numeric')];
+      const n1 = x1.length, n2 = x2.length;
+      if (n1 < 2 || n2 < 2) return [err('Each group needs at least 2 values')];
+
+      const { D, pValue } = ksTwoSampleStats(x1, x2);
+      const isSignificant = pValue < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Group 1 Size (n₁)', value: n1, ci: null, isRatio: false },
+        { label: 'Group 2 Size (n₂)', value: n2, ci: null, isRatio: false },
+        { label: 'KS Statistic (D)', value: f(D), ci: null, isRatio: false, highlight: true },
+        { label: 'p-value (asymptotic)', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant ? "Reject H₀ — the two groups' distributions differ significantly" : 'Fail to reject H₀ — no significant difference between the two distributions' },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'Unlike Mann-Whitney, this test can flag groups with the same median but different spread or shape — but it has less power than Mann-Whitney when the only real difference is a shift in location.' },
+      ];
+    }
+  },
+
 ];
 
 
@@ -10476,6 +10613,63 @@ function chiSquarePValue(chi2) {
 // Two-tailed p-value for a standard normal (z) statistic: P(|Z| > |z|).
 function normalTwoTailedP(z) {
   return 1 - erf(Math.abs(z) / Math.SQRT2);
+}
+
+// Standard normal CDF Φ(x) — the reference distribution for the
+// one-sample Kolmogorov-Smirnov test.
+function normalCDF(x) {
+  return 0.5 * (1 + erf(x / Math.SQRT2));
+}
+
+// Asymptotic Kolmogorov distribution: P(K > t), the limiting null
+// distribution shared by both KS test calculators below.
+function kolmogorovQ(t) {
+  if (t < 0.2) return 1;
+  let sum = 0;
+  for (let k = 1; k <= 100; k++) sum += (k % 2 === 1 ? 1 : -1) * Math.exp(-2 * k * k * t * t);
+  return Math.max(0, Math.min(1, 2 * sum));
+}
+
+// One-sample KS test against a fully specified Normal(mu, sigma): D+/D-
+// are the largest gap above/below the hypothesized CDF at each sorted
+// data point, then the asymptotic p-value with Stephens' (1970)
+// small-sample correction to the effective n.
+function ksOneSampleStats(values, mu, sigma) {
+  const n = values.length;
+  const sorted = [...values].sort((a, b) => a - b);
+  let Dplus = -Infinity, Dminus = -Infinity;
+  sorted.forEach((x, idx) => {
+    const F0 = normalCDF((x - mu) / sigma);
+    Dplus  = Math.max(Dplus,  (idx + 1) / n - F0);
+    Dminus = Math.max(Dminus, F0 - idx / n);
+  });
+  const D = Math.max(Dplus, Dminus);
+  const en = Math.sqrt(n);
+  const pValue = kolmogorovQ((en + 0.12 + 0.11 / en) * D);
+  return { n, Dplus, Dminus, D, pValue };
+}
+
+// Two-sample KS test: the largest absolute gap between the two
+// samples' empirical CDFs, evaluated at every distinct value in
+// either sample (binary search since both samples are pre-sorted).
+function ksTwoSampleStats(x1, x2) {
+  const n1 = x1.length, n2 = x2.length;
+  const sorted1 = [...x1].sort((a, b) => a - b);
+  const sorted2 = [...x2].sort((a, b) => a - b);
+  const countLE = (sorted, v) => {
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] <= v) lo = mid + 1; else hi = mid; }
+    return lo;
+  };
+  const breakpoints = [...new Set([...sorted1, ...sorted2])];
+  let D = 0;
+  for (const v of breakpoints) {
+    D = Math.max(D, Math.abs(countLE(sorted1, v) / n1 - countLE(sorted2, v) / n2));
+  }
+  const ne = (n1 * n2) / (n1 + n2);
+  const en = Math.sqrt(ne);
+  const pValue = kolmogorovQ((en + 0.12 + 0.11 / en) * D);
+  return { n1, n2, D, pValue };
 }
 
 // Formats a p-value for a standalone numeric result row: returns a
@@ -13620,6 +13814,8 @@ const CALCULATOR_INDEX = [
   { id: 'dunns-test',           name: "Dunn's Test",                     category: 'Non-Parametric Tests',        description: 'Post-hoc pairwise comparisons following a significant Kruskal-Wallis test.',                  status: 'available' },
   { id: 'friedman-test',        name: 'Friedman Test',                   category: 'Non-Parametric Tests',        description: 'Non-parametric repeated measures test for comparing three or more related groups.',            status: 'available' },
   { id: 'art-anova',            name: 'Aligned Rank Transform (ART) ANOVA', category: 'Non-Parametric Tests',     description: 'Nonparametric alternative to a 2-way factorial ANOVA, testing both main effects and their interaction when normality or equal-variance assumptions are violated.', status: 'available' },
+  { id: 'ks-test-one-sample',   name: 'Kolmogorov-Smirnov Test (One-Sample)', category: 'Non-Parametric Tests', description: "Tests whether a sample is consistent with a fully specified Normal(μ₀, σ₀) distribution, comparing the sample's empirical CDF against the hypothesized one.", status: 'available' },
+  { id: 'ks-test-two-sample',   name: 'Kolmogorov-Smirnov Test (Two-Sample)', category: 'Non-Parametric Tests', description: 'Non-parametric test comparing the full distributions of two independent samples — sensitive to differences in location, spread, or shape, not just central tendency.', status: 'available' },
 
   // ── 6. ANOVA ──────────────────────────────────────────────────────────
   { id: 'anova-1way',           name: '1-Way ANOVA',                     category: 'ANOVA',                       description: 'Tests for differences in means across three or more independent groups.',                     status: 'available' },
@@ -13898,7 +14094,12 @@ const WIZARD_TREE = {
       { id: 'se-mean-diff',    why: 'If you just want the standard error of the difference on its own.' },
     ]
   },
-  mannWhitneyResult: { results: [ { id: 'mann-whitney', why: 'Non-parametric test comparing two independent groups using ranks.' } ] },
+  mannWhitneyResult: {
+    results: [
+      { id: 'mann-whitney',      why: 'Non-parametric test comparing two independent groups using ranks — most powerful when the only real difference is a shift in location.' },
+      { id: 'ks-test-two-sample', why: 'Compares the two groups\' entire distributions rather than just ranks — use this instead if you suspect a difference in spread or shape, not just location.' },
+    ]
+  },
 
   multiGroupContinuous: {
     question: 'Are you measuring the same subjects repeatedly (repeated measures), or different independent groups?',
@@ -14509,6 +14710,8 @@ const SEARCH_KEYWORDS = {
   'dunns-test':            ["dunn's test", 'post hoc after kruskal-wallis', 'pairwise comparison non-parametric'],
   'friedman-test':         ['friedman test', 'non-parametric repeated measures', 'ranks across conditions'],
   'art-anova':             ['aligned rank transform', 'art anova', 'non-parametric two-way anova', 'non-parametric factorial anova', 'rank transform anova', 'interaction effect non-normal data'],
+  'ks-test-one-sample':    ['kolmogorov-smirnov test', 'ks test', 'one sample ks test', 'goodness of fit test', 'test against a specified distribution', 'compare sample to normal distribution'],
+  'ks-test-two-sample':    ['kolmogorov-smirnov test', 'ks test', 'two sample ks test', 'compare two distributions', 'compare shape of two distributions', 'non-parametric distribution comparison'],
 
   // ANOVA
   'anova-1way':             ['one-way anova', 'compare three or more group means', 'analysis of variance'],
@@ -14972,6 +15175,21 @@ const NOTATION = {
     { symbol: 'MS_X', meaning: "Mean square for effect X, from a fresh 2-way ANOVA run on that effect's own ranked, aligned values." },
     { symbol: 'MS_E', meaning: 'Error mean square from that same ranked ANOVA pass.' },
     { symbol: 'F_X', meaning: "F-statistic for effect X — MS_X divided by MS_E, both from effect X's own alignment-and-rank pass." },
+  ],
+  'ks-test-one-sample': [
+    { symbol: 'D', meaning: 'Kolmogorov-Smirnov statistic — the largest gap anywhere between the sample\'s empirical CDF and the hypothesized Normal(μ₀, σ₀) CDF.' },
+    { symbol: 'D^{+}, D^{-}', meaning: 'Largest gap where the empirical CDF sits above (D⁺) or below (D⁻) the hypothesized CDF; D is the larger of the two.' },
+    { symbol: 'F_0(x)', meaning: 'The hypothesized Normal(μ₀, σ₀) cumulative distribution function, evaluated at each sorted data point.' },
+    { symbol: 'x_{(i)}', meaning: 'The i-th smallest value in the sample, after sorting.' },
+    { symbol: 'n', meaning: 'Sample size.' },
+    { symbol: 'Q_{KS}', meaning: "The asymptotic Kolmogorov distribution's upper tail — converts the scaled D statistic into a p-value." },
+  ],
+  'ks-test-two-sample': [
+    { symbol: 'D', meaning: 'Kolmogorov-Smirnov statistic — the largest gap anywhere between the two samples\' empirical CDFs.' },
+    { symbol: 'F_1(x), F_2(x)', meaning: 'Empirical CDFs of Group 1 and Group 2 — the fraction of each group\'s values at or below x.' },
+    { symbol: 'n_1, n_2', meaning: 'Number of values entered in Group 1 and Group 2.' },
+    { symbol: 'n_e', meaning: 'Effective sample size, n₁n₂/(n₁+n₂), used to scale D for the asymptotic p-value.' },
+    { symbol: 'Q_{KS}', meaning: "The asymptotic Kolmogorov distribution's upper tail — converts the scaled D statistic into a p-value." },
   ],
 
   // ANOVA
