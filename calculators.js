@@ -151,6 +151,73 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 1b. NESTED CASE-CONTROL (1:1 MATCHED) ────────────────────────────
+     Distinct from a standard (unmatched) case-control study: each case
+     is matched to one control sampled from the risk set at the exact
+     time the case occurred (incidence-density/risk-set sampling), so
+     the matched OR = b/c isn't merely approximating the incidence rate
+     ratio the way an unmatched case-control OR does under the
+     rare-disease assumption — it's a direct, unbiased estimate of it.
+     Same discordant-pairs math as McNemar's Test, different design
+     and a different interpretive claim about what the number means.  */
+  {
+    id:          'nested-case-control',
+    name:        'Nested Case-Control (1:1 Matched)',
+    hint:        'Matched OR = b/c — a direct estimate of the incidence rate ratio',
+    category:    'Epidemiology & Risk',
+    description: "Computes the matched odds ratio from a 1:1 nested case-control study, where each case is matched to one control sampled from the risk set at that case's event time. Because of that risk-set sampling, the resulting OR directly estimates the incidence rate ratio, not just an approximation of it.",
+
+    formulas: [
+      {
+        label: 'Matched Odds Ratio (Discordant Pairs)',
+        latex: 'OR_{\\text{matched}} = \\dfrac{b}{c}'
+      },
+      {
+        label: '95% CI (Log Scale)',
+        latex: 'CI = e^{\\,\\ln(OR)\\,\\pm\\,1.96\\sqrt{\\frac{1}{b}+\\frac{1}{c}}}'
+      }
+    ],
+
+    inputLayout: '2x2',
+    tableLabels: { colPos: 'Control Exposed', colNeg: 'Control Unexposed', rowPos: 'Case Exposed', rowNeg: 'Case Unexposed' },
+    inputs: [
+      { id: 'a', label: 'a', desc: 'Case Exposed & Control Exposed (concordant)',     default: 15 },
+      { id: 'b', label: 'b', desc: 'Case Exposed & Control Unexposed (discordant)',   default: 25 },
+      { id: 'c', label: 'c', desc: 'Case Unexposed & Control Exposed (discordant)',   default: 10 },
+      { id: 'd', label: 'd', desc: 'Case Unexposed & Control Unexposed (concordant)', default: 20 },
+    ],
+
+    example({ a, b, c, d }) {
+      if ([a, b, c, d].some(v => !isFinite(v) || v < 0) || b <= 0 || c <= 0)
+        return 'Enter counts for all four cells (with at least one pair each in b and c) to see a worked medical example here.';
+      const OR = b / c;
+      const f = v => +v.toFixed(2);
+      return `Within a large cohort, each of ${a + b + c + d} cases is matched to one control who was still event-free (part of the risk set) at that case's event time. ${b} pairs have an exposed case matched to an unexposed control, and ${c} pairs have the reverse; the ${a + d} concordant pairs contribute no information, just as in McNemar's test. Matched OR = ${f(OR)} — and because controls were sampled from the risk set rather than recruited independently, that number is a direct estimate of the incidence rate ratio, not merely an approximation of one.`;
+    },
+
+    calculate({ a, b, c, d }) {
+      if ([a, b, c, d].some(v => !isFinite(v) || v < 0))
+        return [err('All four cells must be zero or greater')];
+      if (b <= 0 || c <= 0)
+        return [err('Both discordant-pair cells (b and c) must be greater than 0 to compute a matched OR')];
+
+      const OR      = b / c;
+      const seLnOR  = Math.sqrt(1 / b + 1 / c);
+      const Z       = 1.96;
+      const ciLow   = Math.exp(Math.log(OR) - Z * seLnOR);
+      const ciHigh  = Math.exp(Math.log(OR) + Z * seLnOR);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Concordant Pairs (a + d) — uninformative', value: a + d, ci: null, isRatio: false },
+        { label: 'Discordant Pairs (b + c)',                 value: b + c, ci: null, isRatio: false },
+        { label: 'Matched Odds Ratio (OR)', value: f(OR), ci: [f(ciLow), f(ciHigh)], isRatio: true, highlight: true },
+        { label: 'Interpretation', isText: true, ci: null, isRatio: false,
+          value: `Because controls in a nested case-control study are sampled from the risk set at the time each case occurred (incidence-density sampling), this matched OR = ${f(OR)} is a direct estimate of the incidence rate ratio — not merely an approximation of it the way an unmatched case-control OR would be under the rare-disease assumption.` },
+      ];
+    }
+  },
 
   /* ── 2. OR → NNT & NNH ──────────────────────────────────────────────
      Source: OR to NNT and NNH.R                                       */
@@ -2413,6 +2480,159 @@ const CALCULATORS = [
         { label: 'Required Total Sample Size (N)',    value: n * 2, ci: null, isRatio: false },
         { label: 'z (α/2)',                           value: f(zAlpha), ci: null, isRatio: false },
         { label: 'z (power)',                         value: f(zPower), ci: null, isRatio: false },
+      ];
+    }
+  },
+
+  /* ── 26b. DESIGN EFFECT & EFFECTIVE SAMPLE SIZE ───────────────────────
+     A naive n from clustered/nested data (patients within hospitals,
+     students within classrooms, repeated measures within subjects)
+     overstates how much independent information it actually holds,
+     because observations within the same cluster are correlated
+     rather than independent. The design effect (DEFF) converts an
+     ICC and average cluster size into how much that naive n should be
+     discounted — feeds directly from the ICC calculator's multilevel-
+     modeling interpretation, and into the cluster-RCT sample size
+     calculator below.                                                */
+  {
+    id:          'design-effect',
+    name:        'Design Effect & Effective Sample Size',
+    hint:        'DEFF = 1+(m−1)ρ, n_eff = n / DEFF',
+    category:    'Power & Sample Size',
+    description: 'Converts an intraclass correlation (ICC) and average cluster size into a design effect, then discounts a naive total sample size down to its effective (independent-information-equivalent) size — the correction a naive analysis of clustered or nested data misses.',
+
+    formulas: [
+      {
+        label: 'Design Effect',
+        latex: 'DEFF = 1+(m-1)\\rho'
+      },
+      {
+        label: 'Effective Sample Size',
+        latex: 'n_{\\text{eff}} = \\dfrac{n}{DEFF}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'icc', label: 'Intraclass Correlation (ICC, ρ, 0–1)', default: 0.05 },
+      { id: 'm',   label: 'Average Cluster Size (m)',              default: 20 },
+      { id: 'n',   label: 'Total (Naive) Sample Size (n)',         default: 400 },
+    ],
+
+    example({ icc, m, n }) {
+      if (!isFinite(icc) || icc < 0 || icc > 1 || !isFinite(m) || m < 1 || !isFinite(n) || n <= 0)
+        return 'Enter an ICC between 0 and 1, an average cluster size ≥ 1, and a positive total sample size to see a worked medical example here.';
+      const deff = 1 + (m - 1) * icc;
+      const nEff = n / deff;
+      const f = (v, dp = 2) => +v.toFixed(dp);
+      return `A study enrolls ${n} patients averaging ${f(m, 1)} per clinic, with an ICC of ${icc} for the outcome across clinics. DEFF = ${f(deff)} means this design needs to be treated as if it only contained n_eff ≈ ${f(nEff, 1)} independent observations, not the full ${n} — ignoring that inflation and analyzing the data as if every patient were independent would understate the true standard errors and overstate significance.`;
+    },
+
+    calculate({ icc, m, n }) {
+      if (!isFinite(icc) || icc < 0 || icc > 1) return [err('ICC must be between 0 and 1')];
+      if (!isFinite(m) || m < 1)                return [err('Average Cluster Size must be at least 1')];
+      if (!isFinite(n) || n <= 0)                return [err('Total Sample Size must be greater than 0')];
+
+      const deff = 1 + (m - 1) * icc;
+      const nEff = n / deff;
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Design Effect (DEFF)',          value: f(deff), ci: null, isRatio: false, highlight: true },
+        { label: 'Effective Sample Size (n_eff)', value: f(nEff, 1), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation', isText: true, ci: null, isRatio: false,
+          value: `A naive n of ${n} carries the statistical information of only about ${f(nEff, 1)} truly independent observations once clustering is accounted for. The larger the ICC or the cluster size, the bigger that gap — DEFF = 1 means no penalty at all (no clustering effect), while DEFF = ${f(deff)} means standard errors computed as if every observation were independent would be too small by a factor of about ${f(Math.sqrt(deff), 2)}×.` },
+      ];
+    }
+  },
+
+  /* ── 26c. SAMPLE SIZE — CLUSTER-RANDOMIZED TRIAL (TWO PROPORTIONS) ────
+     Extends 'Sample Size — Difference of Two Proportions' with the
+     design-effect correction for cluster randomization (randomizing by
+     clinic, school, or community rather than by individual) — same
+     underlying two-proportion formula, then inflated by DEFF and
+     converted into a number of clusters via the average cluster size. */
+  {
+    id:          'sample-size-cluster-rct',
+    name:        'Sample Size — Cluster-Randomized Trial (Two Proportions)',
+    hint:        'n/arm = n_individual × DEFF, DEFF = 1+(m−1)ρ',
+    category:    'Power & Sample Size',
+    description: 'Determines the per-arm sample size and number of clusters needed to detect a difference between two proportions when randomization happens at the cluster level (e.g. clinic, school, or community) rather than the individual level, correcting the standard two-proportion formula with a design effect.',
+
+    formulas: [
+      {
+        label: 'Unadjusted Per-Arm n (Individual Randomization)',
+        latex: 'n_{\\text{ind}} = \\dfrac{\\left(z_{\\alpha/2}\\sqrt{2\\bar p(1-\\bar p)} + z_{power}\\sqrt{p_1(1-p_1)+p_2(1-p_2)}\\right)^{2}}{(p_1-p_2)^{2}}'
+      },
+      {
+        label: 'Design Effect & Cluster-Adjusted Per-Arm n',
+        latex: 'DEFF = 1+(m-1)\\rho \\qquad n_{\\text{arm}} = n_{\\text{ind}} \\times DEFF'
+      },
+      {
+        label: 'Clusters Needed (per Arm)',
+        latex: 'k_{\\text{arm}} = \\left\\lceil \\dfrac{n_{\\text{arm}}}{m} \\right\\rceil'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'alpha', label: 'Significance Level (α, two-tailed)', default: 0.05 },
+      { id: 'power', label: 'Target Power (1−β)',                 default: 0.80 },
+      { id: 'p1',    label: 'Group 1 Proportion (p₁, 0–1)',       default: 0.50 },
+      { id: 'p2',    label: 'Group 2 Proportion (p₂, 0–1)',       default: 0.35 },
+      { id: 'icc',   label: 'Intraclass Correlation (ICC, ρ, 0–1)', default: 0.05 },
+      { id: 'm',     label: 'Average Cluster Size (m)',            default: 20 },
+    ],
+
+    example({ alpha, power, p1, p2, icc, m }) {
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1 || !isFinite(power) || power <= 0 || power >= 1 ||
+          !isFinite(p1) || p1 <= 0 || p1 >= 1 || !isFinite(p2) || p2 <= 0 || p2 >= 1 || p1 === p2 ||
+          !isFinite(icc) || icc < 0 || icc > 1 || !isFinite(m) || m < 1 ||
+          typeof jStat === 'undefined' || !jStat.normal)
+        return 'Enter alpha, target power, two distinct group proportions, an ICC, and an average cluster size to see a worked medical example here.';
+      const pBar = (p1 + p2) / 2;
+      const zAlpha = jStat.normal.inv(1 - alpha / 2, 0, 1);
+      const zPower = jStat.normal.inv(power, 0, 1);
+      const num = zAlpha * Math.sqrt(2 * pBar * (1 - pBar)) + zPower * Math.sqrt(p1 * (1 - p1) + p2 * (1 - p2));
+      const nInd = num ** 2 / (p1 - p2) ** 2;
+      const deff = 1 + (m - 1) * icc;
+      const nArm = Math.ceil(nInd * deff);
+      const kArm = Math.ceil(nArm / m);
+      const f = v => +v.toFixed(2);
+      return `A trial randomizing whole clinics (averaging ${f(m)} patients each) compares a ${(p1 * 100).toFixed(0)}% response rate to ${(p2 * 100).toFixed(0)}%, with an ICC of ${icc} across clinics. Ignoring clustering, you'd need ${Math.ceil(nInd)} patients per arm — but DEFF = ${f(deff)} inflates that to ${nArm} patients per arm, meaning ${kArm} clinics per arm rather than however many the naive (individual-randomization) calculation implied.`;
+    },
+
+    calculate({ alpha, power, p1, p2, icc, m }) {
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
+      if (!isFinite(power) || power <= 0 || power >= 1) return [err('Target Power must be between 0 and 1 (exclusive)')];
+      if (!isFinite(p1) || p1 <= 0 || p1 >= 1)          return [err('Group 1 Proportion must be between 0 and 1 (exclusive)')];
+      if (!isFinite(p2) || p2 <= 0 || p2 >= 1)          return [err('Group 2 Proportion must be between 0 and 1 (exclusive)')];
+      if (p1 === p2)                                    return [err('Group 1 and Group 2 Proportions must differ')];
+      if (!isFinite(icc) || icc < 0 || icc > 1)          return [err('ICC must be between 0 and 1')];
+      if (!isFinite(m) || m < 1)                         return [err('Average Cluster Size must be at least 1')];
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const pBar   = (p1 + p2) / 2;
+      const zAlpha = jStat.normal.inv(1 - alpha / 2, 0, 1);
+      const zPower = jStat.normal.inv(power, 0, 1);
+      const num    = zAlpha * Math.sqrt(2 * pBar * (1 - pBar)) + zPower * Math.sqrt(p1 * (1 - p1) + p2 * (1 - p2));
+      const nInd   = num ** 2 / (p1 - p2) ** 2;
+      const deff   = 1 + (m - 1) * icc;
+      const nArm   = Math.ceil(nInd * deff);
+      const kArm   = Math.ceil(nArm / m);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Unadjusted Per-Arm n (Individual Randomization)', value: Math.ceil(nInd), ci: null, isRatio: false },
+        { label: 'Design Effect (DEFF)',                            value: f(deff), ci: null, isRatio: false },
+        { label: 'Cluster-Adjusted Per-Arm n',                      value: nArm, ci: null, isRatio: false, highlight: true },
+        { label: 'Clusters Needed (per Arm)',                       value: kArm, ci: null, isRatio: false, highlight: true },
+        { label: 'Clusters Needed (Total)',                         value: kArm * 2, ci: null, isRatio: false },
+        { label: 'z (α/2)', value: f(zAlpha), ci: null, isRatio: false },
+        { label: 'z (power)', value: f(zPower), ci: null, isRatio: false },
       ];
     }
   },
@@ -13955,6 +14175,8 @@ const CALCULATOR_INDEX = [
   { id: 'sample-size-2mean',    name: 'Sample Size — Difference of Two Means', category: 'Power & Sample Size',   description: 'Determines the per-group sample size needed to detect a specified difference between two independent means, given a common σ, alpha, and target power.', status: 'available' },
   { id: 'sample-size-1prop',    name: 'Sample Size — 1-Sample Proportion', category: 'Power & Sample Size',       description: 'Determines the sample size needed to detect a difference between a hypothesized proportion and an alternative, given alpha and target power.', status: 'available' },
   { id: 'sample-size-2prop',    name: 'Sample Size — Difference of Two Proportions', category: 'Power & Sample Size', description: 'Determines the per-group sample size needed to detect a difference between two independent proportions, given alpha and target power.', status: 'available' },
+  { id: 'design-effect',        name: 'Design Effect & Effective Sample Size', category: 'Power & Sample Size', description: 'Converts an ICC and average cluster size into a design effect and discounts a naive sample size down to its effective, independent-information size.', status: 'available' },
+  { id: 'sample-size-cluster-rct', name: 'Sample Size — Cluster-Randomized Trial (Two Proportions)', category: 'Power & Sample Size', description: 'Cluster-randomization-adjusted version of the two-proportion sample size formula, reporting per-arm n and number of clusters needed.', status: 'available' },
   { id: 'sample-size-anova-f',  name: "Sample Size — ANOVA (Cohen's f)", category: 'Power & Sample Size', description: "Determines the per-cell sample size needed to detect a specified Cohen's f effect size for a fixed-effects ANOVA main effect or interaction, covering both one-way and factorial designs.", status: 'available' },
   { id: 'sample-size-survey',   name: 'Sample Size for a Survey',        category: 'Power & Sample Size',         description: 'Determines how many respondents are needed to estimate a population proportion within a target margin of error, with optional finite-population correction and response-rate adjustment.', status: 'available' },
   { id: 'power-ppv-fpp',        name: 'Power, Effect Size, PPV & FPP',   category: 'Power & Sample Size',         description: 'Links statistical power to positive predictive value and false positive probability.',          status: 'available' },
@@ -13963,6 +14185,7 @@ const CALCULATOR_INDEX = [
 
   // ── 10. EPIDEMIOLOGY & RISK ───────────────────────────────────────────
   { id: 'measures-of-association', name: 'Measures of Association',      category: 'Epidemiology & Risk',         description: 'Computes AR, ARD, RR, RRD, and OR with 95% CIs from a 2×2 exposure-outcome table.',           status: 'available' },
+  { id: 'nested-case-control',  name: 'Nested Case-Control (1:1 Matched)', category: 'Epidemiology & Risk',       description: 'Computes a matched odds ratio from 1:1 nested case-control pairs — a direct estimate of the incidence rate ratio due to risk-set sampling.', status: 'available' },
   { id: 'se-lnrr-lnor',            name: 'SE of ln(RR) & ln(OR) — 2×2 Table', category: 'Epidemiology & Risk',   description: 'Computes the standard error of a difference in proportions, ln(RR), and ln(OR) from a 2×2 table of exposure and outcome counts.', status: 'available' },
   { id: 'se-rate',                 name: 'Standard Error of a Rate',      category: 'Epidemiology & Risk',        description: 'Computes the standard error of an incidence rate from the number of events and total person-time.', status: 'available' },
   { id: 'se-rate-ratio',           name: 'Standard Error of a Rate Ratio', category: 'Epidemiology & Risk',       description: "Computes the standard error of ln(Rate Ratio) and a 95% CI from two groups' event counts and person-time.", status: 'available' },
@@ -14054,11 +14277,13 @@ const WIZARD_TREE = {
   multilevelFewClustersResult: {
     results: [
       { id: 'icc', why: 'With this few clusters, a full multilevel model can give unstable estimates of between-cluster variance — many methodologists suggest at least ~10 clusters before trusting one. Compute the ICC here first to see how much clustering actually exists; with few clusters, a fixed-effects-with-cluster-dummies approach or cluster-robust standard errors is often more practical than a full mixed-effects model.' },
+      { id: 'design-effect', why: 'Once you have the ICC, turn it into a design effect and effective sample size to see how much that clustering actually costs you in lost precision.' },
     ]
   },
   multilevelManyClustersResult: {
     results: [
       { id: 'icc', why: 'Compute the ICC for your grouping variable here. As a rule of thumb, an ICC above roughly 0.05–0.10 means enough outcome variance sits between clusters that a standard (non-clustered) test will understate your uncertainty — multilevel/mixed-effects modeling (or at least cluster-robust standard errors) is worth using instead of treating every observation as independent.' },
+      { id: 'design-effect', why: 'Once you have the ICC, turn it into a design effect and effective sample size to see how much that clustering actually costs you in lost precision.' },
     ]
   },
 
@@ -14435,6 +14660,12 @@ const WIZARD_TREE = {
       { label: 'Observational data I want to adjust for confounding (propensity scores)', next: 'ipwResult' },
       { label: "Multiple studies' OR/RR estimates to pool",                              next: 'predIntResult' },
       { label: 'Two subgroup effect estimates I want to compare (interaction test)',      next: 'interactionTestResult' },
+      { label: 'Matched pairs from a nested case-control study (1:1)',                    next: 'nestedCaseControlResult' },
+    ]
+  },
+  nestedCaseControlResult: {
+    results: [
+      { id: 'nested-case-control', why: 'Matched OR from 1:1 case-control pairs — a direct estimate of the incidence rate ratio when controls were sampled from the risk set.' },
     ]
   },
   interactionTestResult: {
@@ -14525,6 +14756,7 @@ const WIZARD_TREE = {
       { label: 'One sample proportion vs. a hypothesized value',   next: 'ss1propResult' },
       { label: 'Two independent proportions',                      next: 'ss2propResult' },
       { label: "I'm not testing a hypothesis — I just want to estimate a proportion (e.g. a survey)", next: 'ssSurveyResult' },
+      { label: 'Two proportions, but randomizing by cluster (clinic, school, community) rather than by individual', next: 'ssClusterResult' },
     ]
   },
   ss1meanResult: { results: [ { id: 'sample-size-1mean', why: 'Required n to detect a difference from a hypothesized mean.' } ] },
@@ -14533,6 +14765,12 @@ const WIZARD_TREE = {
   ssSurveyResult: { results: [ { id: 'sample-size-survey', why: 'How many respondents you need to estimate a proportion within a target margin of error — the formula most surveys actually need.' } ] },
   ss1propResult: { results: [ { id: 'sample-size-1prop', why: 'Required n to detect a difference from a hypothesized proportion.' } ] },
   ss2propResult: { results: [ { id: 'sample-size-2prop', why: 'Required per-group n to detect a difference between two independent proportions.' } ] },
+  ssClusterResult: {
+    results: [
+      { id: 'sample-size-cluster-rct', why: 'Cluster-randomization-adjusted version of the two-proportion sample size formula — reports both the per-arm n and the number of clusters needed.' },
+      { id: 'design-effect', why: 'Just the design-effect/effective-sample-size adjustment on its own, if you already have a target individual-level n.' },
+    ]
+  },
 
   survivalGoal: {
     question: 'Are you estimating one survival curve, or comparing two groups?',
@@ -14852,6 +15090,8 @@ const SEARCH_KEYWORDS = {
   'sample-size-2mean':  ['sample size for two means', 'sample size two groups', 'sample size two independent means', 'rct sample size', 'randomized controlled trial sample size', 'cohort study sample size'],
   'sample-size-1prop':  ['sample size for one proportion'],
   'sample-size-2prop':  ['sample size for two proportions', 'sample size two independent proportions', 'rct sample size', 'randomized controlled trial sample size', 'cohort study sample size'],
+  'design-effect':      ['design effect', 'deff', 'effective sample size', 'intraclass correlation adjustment', 'cluster adjustment', 'multilevel sample size'],
+  'sample-size-cluster-rct': ['cluster randomized trial sample size', 'cluster rct sample size', 'sample size for cluster randomization', 'number of clusters needed', 'group randomized trial sample size'],
   'sample-size-anova-f': ['sample size for anova', "cohen's f sample size", 'a priori power analysis anova', 'sample size main effect', 'sample size interaction', 'sample size factorial design', 'gpower anova', 'noncentral f sample size', 'how many per group anova'],
   'sample-size-survey': ['survey sample size', 'how many people to survey', 'margin of error', 'estimate a proportion', 'poll sample size', 'questionnaire sample size', 'response rate'],
   'power-ppv-fpp':      ['false positive risk', 'positive predictive value of a significant result'],
@@ -14860,6 +15100,7 @@ const SEARCH_KEYWORDS = {
 
   // Epidemiology & Risk
   'measures-of-association': ['relative risk', 'odds ratio', 'risk difference', '2x2 exposure outcome table', 'rct treatment effect', 'randomized controlled trial results', 'arr', 'rrr', 'cohort study', 'case-control study'],
+  'nested-case-control': ['nested case-control', 'matched case-control study', 'risk-set sampling', 'incidence density sampling', 'matched odds ratio', '1:1 matching'],
   'se-lnrr-lnor':            ['standard error of log relative risk', 'se of log odds ratio', 'cohort study', 'case-control study'],
   'se-rate':                 ['standard error of an incidence rate', 'cohort study'],
   'se-rate-ratio':           ['standard error of a rate ratio', 'cohort study'],
@@ -15199,6 +15440,10 @@ const NOTATION = {
     { symbol: '\\chi^2', meaning: 'Chi-square statistic testing whether the Before/After status changed more in one direction than the other.' },
     { symbol: 'b, c', meaning: 'The two discordant cell counts — subjects who switched from Before+/After− (b) or Before−/After+ (c).' },
     { symbol: '\\chi^2_{corrected}', meaning: 'Continuity-corrected chi-square statistic, more accurate when the number of discordant pairs is small.' },
+  ],
+  'nested-case-control': [
+    { symbol: 'b, c', meaning: 'The two discordant cell counts — pairs where the case was exposed and the control was not (b), or the reverse (c). Concordant pairs (a, d) contribute nothing to the estimate.' },
+    { symbol: 'OR_{\\text{matched}}', meaning: 'Matched Odds Ratio — b divided by c. Because of risk-set sampling, this directly estimates the incidence rate ratio.' },
   ],
   'cochrans-q': [
     { symbol: 'Q', meaning: "Cochran's Q statistic testing whether success rates differ across the k paired conditions." },
@@ -15629,6 +15874,21 @@ const NOTATION = {
     { symbol: 'z_{power}', meaning: 'Critical z-value corresponding to the Target Power (1−β).' },
     { symbol: 'p_1', meaning: 'Group 1 Proportion (p₁) — the expected rate in the first group (e.g. treatment).' },
     { symbol: 'p_2', meaning: 'Group 2 Proportion (p₂) — the expected rate in the second group (e.g. placebo).' },
+  ],
+  'design-effect': [
+    { symbol: '\\rho', meaning: 'Intraclass Correlation (ICC) — the proportion of total outcome variance that sits between clusters rather than within them.' },
+    { symbol: 'm', meaning: 'Average Cluster Size — the typical number of observations per cluster (e.g. patients per clinic).' },
+    { symbol: 'n', meaning: 'Total (Naive) Sample Size — the raw observation count, as if every observation were independent.' },
+    { symbol: 'DEFF', meaning: 'Design Effect — the factor by which clustering inflates the variance of an estimate relative to a simple random sample of the same size.' },
+    { symbol: 'n_{\\text{eff}}', meaning: 'Effective Sample Size — the naive n divided by DEFF, i.e. how many truly independent observations the clustered data is actually worth.' },
+  ],
+  'sample-size-cluster-rct': [
+    { symbol: 'n_{\\text{ind}}', meaning: 'Unadjusted per-arm sample size from the standard two-proportion formula, as if randomizing individuals rather than clusters.' },
+    { symbol: 'DEFF', meaning: 'Design Effect — inflates n_ind to account for correlation among individuals in the same cluster.' },
+    { symbol: 'n_{\\text{arm}}', meaning: 'Cluster-adjusted per-arm sample size — n_ind × DEFF.' },
+    { symbol: 'k_{\\text{arm}}', meaning: 'Number of clusters needed per arm — n_arm divided by the average cluster size, rounded up.' },
+    { symbol: 'm', meaning: 'Average Cluster Size (m) — the typical number of individuals per cluster.' },
+    { symbol: '\\rho', meaning: 'Intraclass Correlation (ICC, ρ) — how strongly outcomes within the same cluster resemble each other.' },
   ],
   'sample-size-anova-f': [
     { symbol: 'f', meaning: "Cohen's f — the standardized effect size for the ANOVA effect being tested (small ≈ 0.10, medium ≈ 0.25, large ≈ 0.40)." },
@@ -17853,7 +18113,7 @@ const GUIDES = [
       },
       {
         heading: 'Agreement & Correlation',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>ICC</td><td>Intraclass Correlation Coefficient</td><td style="text-align:left;">Measures agreement/reliability between raters or repeated measurements on a continuous scale.</td><td style="text-align:left;">Intraclass Correlation (ICC)</td></tr><tr><td>κ (kappa)</td><td>Cohen's Kappa</td><td style="text-align:left;">Chance-corrected agreement between two raters on a categorical outcome.</td><td style="text-align:left;">Weighted Kappa</td></tr><tr><td>r / ρ</td><td>Pearson's r / Spearman's rho</td><td style="text-align:left;">r measures linear correlation between two continuous variables, ranging −1 to 1; ρ (rho) is its rank-based, non-parametric counterpart.</td><td style="text-align:left;">Pearson's Correlation; Standard Error of a Correlation Coefficient</td></tr><tr><td>r²</td><td>Coefficient of Determination (single predictor)</td><td style="text-align:left;">The squared Pearson r &mdash; the proportion of variance in one variable explained by its linear association with the other. Equals R² below in the single-predictor (Simple Linear Regression) case.</td><td style="text-align:left;">Pearson's Correlation; Simple Linear Regression</td></tr><tr><td>τ (Kendall's tau)</td><td>Kendall's tau</td><td style="text-align:left;">A rank correlation coefficient &mdash; a different quantity from τ² (tau-squared) below, despite the shared Greek letter; worth not confusing the two.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>d / g</td><td>Cohen's d / Hedges' g</td><td style="text-align:left;">Standardized mean difference between two groups &mdash; the difference in means divided by their pooled SD &mdash; and the sample-based, Latin-letter estimate of the population effect size δ (delta). Hedges' g applies a small-sample correction to d and adds a confidence interval.</td><td style="text-align:left;">Cohen's d; Hedges' g</td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>ICC</td><td>Intraclass Correlation Coefficient</td><td style="text-align:left;">Measures agreement/reliability between raters or repeated measurements on a continuous scale.</td><td style="text-align:left;">Intraclass Correlation (ICC)</td></tr><tr><td>DEFF</td><td>Design Effect</td><td style="text-align:left;">How much clustering inflates the variance of an estimate relative to a simple random sample of the same size, computed from the ICC and average cluster size &mdash; used to discount a naive sample size to its effective (independent-information) size, or to inflate a required sample size for cluster randomization.</td><td style="text-align:left;">Design Effect &amp; Effective Sample Size; Sample Size &mdash; Cluster-Randomized Trial</td></tr><tr><td>κ (kappa)</td><td>Cohen's Kappa</td><td style="text-align:left;">Chance-corrected agreement between two raters on a categorical outcome.</td><td style="text-align:left;">Weighted Kappa</td></tr><tr><td>r / ρ</td><td>Pearson's r / Spearman's rho</td><td style="text-align:left;">r measures linear correlation between two continuous variables, ranging −1 to 1; ρ (rho) is its rank-based, non-parametric counterpart.</td><td style="text-align:left;">Pearson's Correlation; Standard Error of a Correlation Coefficient</td></tr><tr><td>r²</td><td>Coefficient of Determination (single predictor)</td><td style="text-align:left;">The squared Pearson r &mdash; the proportion of variance in one variable explained by its linear association with the other. Equals R² below in the single-predictor (Simple Linear Regression) case.</td><td style="text-align:left;">Pearson's Correlation; Simple Linear Regression</td></tr><tr><td>τ (Kendall's tau)</td><td>Kendall's tau</td><td style="text-align:left;">A rank correlation coefficient &mdash; a different quantity from τ² (tau-squared) below, despite the shared Greek letter; worth not confusing the two.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>d / g</td><td>Cohen's d / Hedges' g</td><td style="text-align:left;">Standardized mean difference between two groups &mdash; the difference in means divided by their pooled SD &mdash; and the sample-based, Latin-letter estimate of the population effect size δ (delta). Hedges' g applies a small-sample correction to d and adds a confidence interval.</td><td style="text-align:left;">Cohen's d; Hedges' g</td></tr></tbody></table></div>`,
       },
       {
         heading: 'Meta-Analysis',
