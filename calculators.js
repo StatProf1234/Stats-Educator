@@ -6399,7 +6399,7 @@ const CALCULATORS = [
         subtitle: 'Visualizing all four outcomes of a hypothesis test as α and Power change',
         chartSvg: decisionMatrixHTML(alpha, power) +
           `<div class="block-label" style="margin-top:18px;">Trade-Off as the Decision Threshold Shifts</div>` +
-          typeErrorTradeoffSVG(effectSize, alpha),
+          typeErrorTradeoffSVG(effectSize, alpha, power),
         legend: [],
         stats: [
           { label: 'α (Type I)',              value: f(alpha) },
@@ -6407,7 +6407,7 @@ const CALCULATORS = [
           { label: '1−α (Correct Retain)',    value: f(1 - alpha) },
           { label: 'Power (Correct Reject)',  value: f(power) },
         ],
-        footnote: `α and Power above are set independently so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The chart below makes that constraint concrete: for the standardized effect size (d) you've set, moving the decision threshold can only trade α against β, never lower both — at your chosen α, this effect size implies β ≈ ${f(impliedBeta * 100, 1)}% (Power ≈ ${f((1 - impliedBeta) * 100, 1)}%), which may differ from the Power slider above since that one was chosen independently. The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out.`,
+        footnote: `α and Power above are set independently so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The chart below makes that constraint concrete: for the standardized effect size (d) you've set, moving the decision threshold can only trade α against β, never lower both — at your chosen α, this effect size implies β ≈ ${f(impliedBeta * 100, 1)}% (Power ≈ ${f((1 - impliedBeta) * 100, 1)}%), shown as the amber marker, versus the dashed green line marking the β your Power slider asked for (${f(beta * 100, 1)}%) — the two coincide only when the Power slider's value matches what your chosen α and effect size actually deliver. The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out.`,
       };
     }
   },
@@ -10570,16 +10570,21 @@ const CALCULATORS = [
       { prefix: 'sd',   label: 'SD (s)' },
       { prefix: 'n',    label: 'Size (n)' },
     ],
-    inputs: groupInputs([
-      { mean: 31.2, sd: 5.4, n: 10 },
-      { mean: 36.6, sd: 6.1, n: 10 },
-      { mean: 46.1, sd: 8.8, n: 10 },
-    ]),
+    inputs: [
+      ...groupInputs([
+        { mean: 31.2, sd: 5.4, n: 10 },
+        { mean: 36.6, sd: 6.1, n: 10 },
+        { mean: 46.1, sd: 8.8, n: 10 },
+      ]),
+      { id: 'alpha', type: 'slider', label: 'Significance Level (α)', default: 0.05, min: 0.01, max: 0.10, step: 0.01,
+        format: v => v.toFixed(2) },
+    ],
 
     example(values) {
       const { groups, error } = gatherGroups(values);
+      const alpha = values.alpha;
       if (error || groups.length < 3 || groups.some(g => g.sd <= 0) || groups.some(g => g.n < 2) ||
-          typeof jStat === 'undefined' || !jStat.studentt)
+          !isFinite(alpha) || alpha <= 0 || alpha >= 1 || typeof jStat === 'undefined' || !jStat.studentt)
         return 'Enter mean, SD, and n for at least 3 groups to see a worked medical example here.';
       const { k, dfW, msw } = anovaStats(groups);
       if (dfW < 1) return 'Enter larger group sizes to see a worked medical example here.';
@@ -10593,8 +10598,9 @@ const CALCULATORS = [
         }
       }
       const adjustedEx = holmSidakAdjust(pairs);
-      const nSig = adjustedEx.filter(p => p < 0.05).length;
-      return `Following a significant ANOVA across ${k} post-surgical rehabilitation protocols (recovery time, in days), the Holm-Šídák procedure tests all ${pairs.length} pairwise mean differences with ordinary t-tests, then corrects the p-values step-by-step (the smallest p-value corrected the most) to hold the overall false-positive rate at 5%: ${nSig} of ${pairs.length} pairs remain significant after correction.`;
+      const nSig = adjustedEx.filter(p => p < alpha).length;
+      const f = v => +(v * 100).toFixed(1);
+      return `Following a significant ANOVA across ${k} post-surgical rehabilitation protocols (recovery time, in days), the Holm-Šídák procedure tests all ${pairs.length} pairwise mean differences with ordinary t-tests, then corrects the p-values step-by-step (the smallest p-value corrected the most) to hold the overall false-positive rate at ${f(alpha)}%: ${nSig} of ${pairs.length} pairs remain significant after correction.`;
     },
 
     calculate(values) {
@@ -10603,6 +10609,8 @@ const CALCULATORS = [
       if (groups.length < 3)              return [err('Enter Mean, SD, and N for at least 3 groups')];
       if (groups.some(g => g.sd <= 0))    return [err('Each group SD must be greater than 0')];
       if (groups.some(g => g.n < 2))      return [err('Each group Size (n) must be at least 2')];
+      const alpha = values.alpha;
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
       if (typeof jStat === 'undefined' || !jStat.studentt)
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
@@ -10621,8 +10629,9 @@ const CALCULATORS = [
         }
       }
       const adjusted = holmSidakAdjust(pairs.map(pr => pr.p));
-      const tCrit = jStat.studentt.inv(0.975, dfW);
+      const tCrit = jStat.studentt.inv(1 - alpha / 2, dfW);
       const f = (v, dp = 4) => +(v.toFixed(dp));
+      const ciPct = Math.round((1 - alpha) * 100);
 
       const rows = [
         { label: 'MS Within (MSW)', value: f(msw), ci: null, isRatio: false },
@@ -10636,23 +10645,23 @@ const CALCULATORS = [
           value:     f(pr.diff),
           ci:        [f(pr.diff - tCrit * pr.se), f(pr.diff + tCrit * pr.se)],
           isRatio:   false,
-          highlight: adjP < 0.05,
+          highlight: adjP < alpha,
         });
         rows.push({ label: `${pr.gi.label} vs ${pr.gj.label} — t / p / Holm-Šídák-adjusted p`, isText: true, ci: null, isRatio: false,
-          value: `t(${dfW}) = ${f(pr.t)}, ${formatPText(pr.p)}, adj. ${formatPText(adjP)}${adjP < 0.05 ? ' — significant' : ''}` });
+          value: `t(${dfW}) = ${f(pr.t)}, ${formatPText(pr.p)}, adj. ${formatPText(adjP)}${adjP < alpha ? ' — significant' : ''}` });
       });
 
       rows.push({
         label: 'Method', isText: true, ci: null, isRatio: false,
-        value: "Pooled-variance t-tests (using the ANOVA's MSW and dfW) with Holm-Šídák step-down correction across all pairs. The 95% CI shown on each mean difference uses the unadjusted t critical value for context — significance (highlighted) is judged on the Holm-Šídák-adjusted p-value instead."
+        value: `Pooled-variance t-tests (using the ANOVA's MSW and dfW) with Holm-Šídák step-down correction across all pairs. The ${ciPct}% CI shown on each mean difference uses the unadjusted t critical value for context — significance (highlighted) is judged against α = ${alpha.toFixed(2)} using the Holm-Šídák-adjusted p-value instead.`
       });
 
       const fwerMax = Math.max(20, pairs.length);
-      const uncorrectedFwer = 1 - Math.pow(1 - 0.05, pairs.length);
-      rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(0.05, pairs.length, fwerMax) });
+      const uncorrectedFwer = 1 - Math.pow(1 - alpha, pairs.length);
+      rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(alpha, pairs.length, fwerMax) });
       rows.push({
         label: 'Why the Correction Matters', isText: true, ci: null, isRatio: false,
-        value: `Testing all ${pairs.length} pairs at an uncorrected α = 0.05 each would carry a 1−(1−0.05)^${pairs.length} = ${f(uncorrectedFwer * 100, 1)}% chance of at least one false positive by chance alone — the Holm-Šídák step-down correction above holds that family-wise rate back down to ≈5%.`
+        value: `Testing all ${pairs.length} pairs at an uncorrected α = ${alpha.toFixed(2)} each would carry a 1−(1−${alpha.toFixed(2)})^${pairs.length} = ${f(uncorrectedFwer * 100, 1)}% chance of at least one false positive by chance alone — the Holm-Šídák step-down correction above holds that family-wise rate back down to ≈${f(alpha * 100, 1)}%.`
       });
 
       return rows;
@@ -13177,8 +13186,15 @@ function decisionMatrixHTML(alpha, power) {
 // language as ppvNpvPrevalenceCurveSVG (distinct marker shapes, legend
 // in the margin above the plot so a curve can never cross it, value
 // callouts anchored to their own marker so they separate even where
-// the two curves cross).
-function typeErrorTradeoffSVG(effectSize, alpha) {
+// the two curves cross). The dashed green target-beta line is driven
+// solely by the independent Power slider (the decision matrix's other
+// input, β_target = 1-power) — it doesn't touch either curve, since
+// this chart's curves depend only on effectSize, but it gives that
+// slider its own visible effect here too, and shows at a glance
+// whether the chosen alpha/effect-size pair actually hits the power
+// you asked for (the green line and the amber β marker coincide only
+// when it does).
+function typeErrorTradeoffSVG(effectSize, alpha, power) {
   const W = 560, H = 200;
   const PL = 36, PR = 14, PT = 28, PB = 28;
   const plotW = W - PL - PR, plotH = H - PT - PB;
@@ -13213,6 +13229,8 @@ function typeErrorTradeoffSVG(effectSize, alpha) {
   // curves are bounded within [PT, baseline], so the margin above
   // that is the only position guaranteed never to be crossed by one.
   const legend = `
+    <rect x="${W - PR - 210}" y="9" width="7" height="7" fill="#2E8E5A"/>
+    <text x="${W - PR - 200}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Target β (Power)</text>
     <circle cx="${W - PR - 92}" cy="12" r="3" fill="#4E6EDB"/>
     <text x="${W - PR - 84}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">α</text>
     <circle cx="${W - PR - 44}" cy="12" r="3" fill="#E07B2C"/>
@@ -13224,6 +13242,15 @@ function typeErrorTradeoffSVG(effectSize, alpha) {
   const alphaVal = alphaAt(z0), betaVal = betaAt(z0);
   const myAlpha = +toY(alphaVal).toFixed(1);
   const myBeta  = +toY(betaVal).toFixed(1);
+
+  // Independent of both curves (which depend only on effectSize) — this
+  // is the only piece of the chart the Power slider itself drives, so
+  // moving it always visibly moves this line, and its height relative
+  // to the amber β marker shows whether the chosen alpha/effect-size
+  // pair actually achieves the power you asked for.
+  const targetBeta = Math.max(0, Math.min(1, 1 - power));
+  const tbY = +toY(targetBeta).toFixed(1);
+  const tbLabelY = Math.max(PT + 9, Math.min(tbY - 5, baseline - 4));
 
   const diamondMarker = (x, y, color) => `
     <polygon points="${x},${(y - 7).toFixed(1)} ${(x + 7).toFixed(1)},${y} ${x},${(y + 7).toFixed(1)} ${(x - 7).toFixed(1)},${y}" fill="#fff" stroke="#fff" stroke-width="4"/>
@@ -13237,15 +13264,19 @@ function typeErrorTradeoffSVG(effectSize, alpha) {
     <text x="${mx}" y="${(myAlpha - 11).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#4E6EDB">α ${pct(alphaVal)}</text>
     <text x="${mx}" y="${(myBeta + 18).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#E07B2C">β ${pct(betaVal)}</text>`;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Type I error (alpha) and Type II error (beta) as the decision threshold shifts, currently alpha ${pct(alphaVal)} and beta ${pct(betaVal)} at this threshold">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Type I error (alpha) and Type II error (beta) as the decision threshold shifts, currently alpha ${pct(alphaVal)} and beta ${pct(betaVal)} at this threshold, versus a target beta of ${pct(targetBeta)} implied by the Power slider">
   ${gridY}
   <line x1="${mx}" y1="${PT}" x2="${mx}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1" stroke-dasharray="3,3"/>
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <line x1="${PL}" y1="${tbY}" x2="${W - PR}" y2="${tbY}" stroke="#2E8E5A" stroke-width="1.6" stroke-dasharray="5,4"/>
   <polyline points="${linePts(alphaAt)}" fill="none" stroke="#4E6EDB" stroke-width="2.2"/>
   <polyline points="${linePts(betaAt)}" fill="none" stroke="#E07B2C" stroke-width="2.2"/>
   ${legend}
   ${gridX}
   <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 1}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">decision threshold</text>
+  <text x="${PL + 4}" y="${tbLabelY.toFixed(1)}" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#2E8E5A">target β (Power slider)</text>
+  <circle cx="${mx}" cy="${tbY}" r="4" fill="#fff"/>
+  <circle cx="${mx}" cy="${tbY}" r="2.6" fill="#2E8E5A" stroke="#1A1A2E" stroke-width="0.8"/>
   ${diamondMarker(mx, myAlpha, '#4E6EDB')}
   ${circleMarker(mx, myBeta, '#E07B2C')}
   ${callouts}
@@ -16024,7 +16055,7 @@ const NOTATION = {
     { symbol: 'p_{(i)}^{HS}', meaning: 'Holm-Šídák-adjusted p-value for the i-th ranked comparison, controlling the false-positive rate across all pairwise tests.' },
     { symbol: 'p_{(j)}', meaning: 'Unadjusted p-value of the j-th comparison when comparisons are sorted from smallest to largest p-value.' },
     { symbol: 'm', meaning: 'Total number of pairwise comparisons being adjusted for.' },
-    { symbol: '\\alpha', meaning: 'Per-comparison significance threshold (0.05 here) if left uncorrected.' },
+    { symbol: '\\alpha', meaning: 'Significance level, set by the slider — the per-comparison threshold if left uncorrected, and the family-wise rate Holm-Šídák holds to after correction.' },
     { symbol: '\\text{FWER}', meaning: 'Family-wise error rate — the chance of at least one false positive across all m comparisons if each were tested uncorrected at α.' },
   ],
   'shapiro-wilk-test': [
