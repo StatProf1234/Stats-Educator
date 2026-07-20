@@ -9441,7 +9441,7 @@ const CALCULATORS = [
         });
 
         rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
-          value: "The GLMM (one-stage) approach models the raw event counts directly with a binomial likelihood, so it needs no continuity correction even for studies with 0% or 100% events. The fixed-effect GLMM fixes τ² at 0, assuming every study shares one true rate and treating all between-study spread as sampling noise — this is the one-stage analogue of a fixed-effect (inverse-variance) pool. The random-effects GLMM instead estimates τ² directly by maximum likelihood alongside the pooled rate, allowing the true rate to vary across studies. Because both are fit in one step from the raw counts rather than the two-stage transform-then-pool approach, neither has a Cochran's Q or I² — τ² above is the random-effects model's own direct estimate of between-study variance instead." });
+          value: "The GLMM (one-stage) approach models the raw event counts directly with a binomial likelihood, so it needs no continuity correction even for studies with 0% or 100% events. The fixed-effect GLMM fixes τ² at 0, assuming every study shares one true rate and treating all between-study spread as sampling noise — this is the one-stage analog of a fixed-effect (inverse-variance) pool. The random-effects GLMM instead estimates τ² directly by maximum likelihood alongside the pooled rate, allowing the true rate to vary across studies. Because both are fit in one step from the raw counts rather than the two-stage transform-then-pool approach, neither has a Cochran's Q or I² — τ² above is the random-effects model's own direct estimate of between-study variance instead." });
 
         rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
           value: `Fixed-effect GLMM pooled proportion = ${toPct(muFixed)}%, 95% CI [${toPct(muFixed - Z * seMuFixed)}%, ${toPct(muFixed + Z * seMuFixed)}%]. Random-effects GLMM pooled proportion = ${toPct(mu)}%, 95% CI [${toPct(mu - Z * seMu)}%, ${toPct(mu + Z * seMu)}%]. ${tau2 < 0.01
@@ -11243,7 +11243,7 @@ function parseLongFactorial(text) {
 
 // Reads group{1..6} textarea values out of the raw input values,
 // skipping blanks (so groups 4–6 are naturally optional) — the
-// textarea analogue of gatherGroups() used by the ANOVA calculators.
+// textarea analog of gatherGroups() used by the ANOVA calculators.
 function gatherDataGroups(values, maxGroups = 6) {
   const groups = [];
   for (let i = 1; i <= maxGroups; i++) {
@@ -11519,7 +11519,7 @@ function fitProportionGLMM(studies) {
 // above, but with tau^2 fixed at 0 — i.e. no random study effect, so
 // every study is assumed to share one true logit(p) and any
 // between-study spread is treated as pure sampling noise. This is
-// the one-stage analogue of a fixed-effect (inverse-variance) pool:
+// the one-stage analog of a fixed-effect (inverse-variance) pool:
 // there's a single common p, so it corresponds to pooling all
 // events/non-events into one binomial-likelihood optimization over
 // mu alone. Because glmmStudyLogLik already falls back to the exact
@@ -11685,7 +11685,7 @@ function fitNetworkMetaAnalysis(comparisons, referenceTreatment) {
   };
 }
 
-// Rücker & Schwarzer (2015) P-scores: the frequentist analogue of
+// Rücker & Schwarzer (2015) P-scores: the frequentist analog of
 // SUCRA, computed directly from the network's normal-theory
 // estimates and covariance rather than by resampling. P_i is the
 // average probability, across every other treatment j, that i is
@@ -15890,7 +15890,7 @@ const NOTATION = {
     { symbol: '\\hat\\theta_{FE},\\ \\hat\\theta_{RE}', meaning: 'Fixed-effect and random-effects pooled estimates on the transformed scale, back-transformed to a percentage for reporting.' },
     { symbol: '\\hat p', meaning: 'The back-transformed pooled proportion — sin²(θ̂) for Arcsine, the inverse-logit for Logit, or θ̂ itself for Raw.' },
     { symbol: '\\mu', meaning: 'Random-Effects GLMM: the overall logit-scale mean, fit jointly with τ² from the raw counts by maximum likelihood, rather than by pooling per-study transforms.' },
-    { symbol: '\\mu_{\\text{Fixed}}', meaning: "Fixed-Effect GLMM: the same kind of overall logit-scale mean, but fit with τ² forced to 0 — the one-stage analogue of a fixed-effect (inverse-variance) pool." },
+    { symbol: '\\mu_{\\text{Fixed}}', meaning: "Fixed-Effect GLMM: the same kind of overall logit-scale mean, but fit with τ² forced to 0 — the one-stage analog of a fixed-effect (inverse-variance) pool." },
     { symbol: 'u_i', meaning: "Random-Effects GLMM only: study i's own random deviation from μ, assumed Normal(0, τ²) — this is what τ² measures. The fixed-effect GLMM has no u_i, since τ² is fixed at 0." },
     { symbol: 'L_i(\\mu,\\tau^2)', meaning: "Either GLMM's per-study marginal likelihood — numerically integrating the random effect out of the binomial likelihood for the random-effects model, or (with τ²=0) simply the binomial likelihood itself for the fixed-effect model." },
   ],
@@ -15973,7 +15973,7 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. For tables larger than 2&times;2 with several low expected cell counts, the <strong>Monte Carlo Exact Test</strong> is the r&times;c analogue of Fisher's Exact Test. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
+        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. For tables larger than 2&times;2 with several low expected cell counts, the <strong>Monte Carlo Exact Test</strong> is the r&times;c analog of Fisher's Exact Test. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
       },
     ],
     related: [
@@ -17664,7 +17664,7 @@ const GUIDES = [
       },
       {
         heading: 'What this design can — and cannot — tell you',
-        html: `<p>A well-validated AI model, tested on a genuinely external dataset, can tell you how well it discriminates on cases resembling that validation population. It cannot, on its own, tell you whether deploying it changes clinician behavior or improves patient outcomes &mdash; a highly accurate model that clinicians ignore, override, or use in a way that introduces new errors delivers no clinical benefit despite excellent offline performance. That question requires a separate, typically prospective study of the tool's actual impact in practice, the AI-specific analogue of the randomized trials increasingly being run and reported under the CONSORT-AI extension.</p>`,
+        html: `<p>A well-validated AI model, tested on a genuinely external dataset, can tell you how well it discriminates on cases resembling that validation population. It cannot, on its own, tell you whether deploying it changes clinician behavior or improves patient outcomes &mdash; a highly accurate model that clinicians ignore, override, or use in a way that introduces new errors delivers no clinical benefit despite excellent offline performance. That question requires a separate, typically prospective study of the tool's actual impact in practice, the AI-specific analog of the randomized trials increasingly being run and reported under the CONSORT-AI extension.</p>`,
       },
       {
         heading: 'Reading tip',
@@ -17829,7 +17829,7 @@ const GUIDES = [
       },
       {
         heading: 'Probability & Distributions',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>PMF</td><td>Probability Mass Function</td><td style="text-align:left;">Gives the probability of each possible outcome of a discrete random variable (e.g., the probability of exactly 3 successes out of 10 trials).</td><td style="text-align:left;">Binomial Probability Calculator</td></tr><tr><td>PDF</td><td>Probability Density Function</td><td style="text-align:left;">The continuous analogue of a PMF. The height of the curve is not itself a probability &mdash; only the area under the curve over an interval is.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>CDF</td><td>Cumulative Distribution Function</td><td style="text-align:left;">The probability that a random variable takes a value less than or equal to a given value x.</td><td style="text-align:left;">z-Distribution Table, t-Distribution Table</td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td>PMF</td><td>Probability Mass Function</td><td style="text-align:left;">Gives the probability of each possible outcome of a discrete random variable (e.g., the probability of exactly 3 successes out of 10 trials).</td><td style="text-align:left;">Binomial Probability Calculator</td></tr><tr><td>PDF</td><td>Probability Density Function</td><td style="text-align:left;">The continuous analog of a PMF. The height of the curve is not itself a probability &mdash; only the area under the curve over an interval is.</td><td style="text-align:left;">&mdash;</td></tr><tr><td>CDF</td><td>Cumulative Distribution Function</td><td style="text-align:left;">The probability that a random variable takes a value less than or equal to a given value x.</td><td style="text-align:left;">z-Distribution Table, t-Distribution Table</td></tr></tbody></table></div>`,
       },
       {
         heading: 'Descriptive Statistics',
