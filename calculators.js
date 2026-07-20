@@ -117,6 +117,17 @@ const CALCULATORS = [
 
       const rows = [];
 
+      rows.push({ label: 'Exposure/Outcome Flow', isSVG: true, svg: twoStageFlowSVG('Population', [
+        { label: 'Exposed', value: n1, color: '#4E6EDB', children: [
+          { label: 'Outcome +', value: a, color: '#4E6EDB' },
+          { label: 'Outcome −', value: b, color: '#4E6EDB' },
+        ] },
+        { label: 'Unexposed', value: n2, color: '#E07B2C', children: [
+          { label: 'Outcome +', value: c, color: '#E07B2C' },
+          { label: 'Outcome −', value: d, color: '#E07B2C' },
+        ] },
+      ]) });
+
       if (isCaseControl) {
         rows.push({
           label: 'Absolute Risk, Risk Difference & RR — NOT VALID for this design', isText: true, ci: null, isRatio: false, isError: true,
@@ -3196,6 +3207,16 @@ const CALCULATORS = [
       const isCaseControl = sampleType === 'case-control';
 
       const rows = [
+        { label: 'Patient Flow', isSVG: true, svg: twoStageFlowSVG('Population', [
+          { label: 'Disease Present', value: diseased, color: '#4E6EDB', children: [
+            { label: 'TP', value: a, color: '#4E6EDB' },
+            { label: 'FN', value: c, color: '#4E6EDB' },
+          ] },
+          { label: 'Disease Absent', value: healthy, color: '#E07B2C', children: [
+            { label: 'FP', value: b, color: '#E07B2C' },
+            { label: 'TN', value: d, color: '#E07B2C' },
+          ] },
+        ]) },
         { label: 'Sensitivity (Se)', value: f(Se), ci: [f(CI_Se[0]), f(CI_Se[1])], isRatio: false, highlight: true },
         { label: 'Specificity (Sp)', value: f(Sp), ci: [f(CI_Sp[0]), f(CI_Sp[1])], isRatio: false, highlight: true },
       ];
@@ -6331,12 +6352,15 @@ const CALCULATORS = [
     category:    'Power & Sample Size',
     description: 'An interactive decision matrix showing all four possible outcomes of a hypothesis test — two correct decisions and two errors — and how trading off α against power shifts the risk of each.',
     inputLayout: 'explorer',
-    chartIsSVG:  false,
 
     formulas: [
       {
         label: 'The Four Outcomes of a Hypothesis Test',
         latex: 'P(\\text{Type I}) = \\alpha \\qquad P(\\text{Type II}) = \\beta = 1-\\text{Power} \\qquad P(\\text{Correct}) = (1-\\alpha) + \\text{Power}'
+      },
+      {
+        label: 'The Real Trade-Off: Moving the Decision Threshold (z)',
+        latex: '\\alpha(z) = 1-\\Phi(z) \\qquad \\beta(z) = \\Phi(z-d), \\quad d = \\dfrac{\\mu_A-\\mu_0}{\\sigma}'
       }
     ],
 
@@ -6345,6 +6369,8 @@ const CALCULATORS = [
         format: v => v.toFixed(2) },
       { id: 'power', type: 'slider', label: 'Statistical Power (1 − β)', default: 0.80, min: 0.05, max: 0.99, step: 0.01,
         format: v => v.toFixed(2) },
+      { id: 'effectSize', type: 'slider', label: 'Standardized Effect Size (d = (μA−μ0)/σ)', default: 2.0, min: 0.5, max: 4.0, step: 0.1,
+        format: v => v.toFixed(1) },
     ],
 
     example({ alpha, power }) {
@@ -6355,17 +6381,25 @@ const CALCULATORS = [
       return `A trial is designed with α = ${alpha} and power = ${power}. If the drug truly does nothing, there's a ${f(alpha)}% chance the trial wrongly declares it works (Type I error) and a ${f(1 - alpha)}% chance it correctly finds no effect. If the drug truly works, there's a ${f(power)}% chance the trial correctly detects that (this is exactly what "power" means) and a ${f(beta)}% chance it misses a real effect (Type II error) — the same tradeoff every hypothesis test makes, just with different numbers.`;
     },
 
-    calculate({ alpha, power }) {
+    calculate({ alpha, power, effectSize }) {
       if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
       if (!isFinite(power) || power <= 0 || power >= 1) return [err('Statistical Power must be between 0 and 1 (exclusive)')];
+      if (!isFinite(effectSize) || effectSize <= 0) return [err('Standardized Effect Size must be greater than 0')];
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
 
       const beta = 1 - power;
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
+      const zAlpha = jStat.normal.inv(1 - alpha, 0, 1);
+      const impliedBeta = jStat.normal.cdf(zAlpha - effectSize, 0, 1);
+
       return {
         title: 'Type I & Type II Error Explorer',
         subtitle: 'Visualizing all four outcomes of a hypothesis test as α and Power change',
-        chartSvg: decisionMatrixHTML(alpha, power),
+        chartSvg: decisionMatrixHTML(alpha, power) +
+          `<div class="block-label" style="margin-top:18px;">Trade-Off as the Decision Threshold Shifts</div>` +
+          typeErrorTradeoffSVG(effectSize, alpha),
         legend: [],
         stats: [
           { label: 'α (Type I)',              value: f(alpha) },
@@ -6373,7 +6407,7 @@ const CALCULATORS = [
           { label: '1−α (Correct Retain)',    value: f(1 - alpha) },
           { label: 'Power (Correct Reject)',  value: f(power) },
         ],
-        footnote: "α and Power are set independently here so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out.",
+        footnote: `α and Power above are set independently so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The chart below makes that constraint concrete: for the standardized effect size (d) you've set, moving the decision threshold can only trade α against β, never lower both — at your chosen α, this effect size implies β ≈ ${f(impliedBeta * 100, 1)}% (Power ≈ ${f((1 - impliedBeta) * 100, 1)}%), which may differ from the Power slider above since that one was chosen independently. The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out.`,
       };
     }
   },
@@ -8111,9 +8145,12 @@ const CALCULATORS = [
       const U1 = R1 - n1 * (n1 + 1) / 2;
       const AUC = U1 / (n1 * n0);
 
-      // Sweep thresholds (descending, grouping ties) to build the curve.
+      // Sweep thresholds (descending, grouping ties) to build the curve —
+      // also records each step's actual threshold value alongside its
+      // Se/Sp, reused below for the Se/Sp-vs-cutoff chart.
       const sorted = matrix.slice().sort((a, b) => b[0] - a[0]);
       const points = [[0, 0]];
+      const sweepDesc = [{ threshold: sorted[0][0] + 1, se: 0, sp: 1 }];
       let tp = 0, fp = 0, i = 0;
       while (i < sorted.length) {
         const scoreVal = sorted[i][0];
@@ -8123,8 +8160,20 @@ const CALCULATORS = [
           j++;
         }
         points.push([fp / n0, tp / n1]);
+        sweepDesc.push({ threshold: scoreVal, se: tp / n1, sp: 1 - fp / n0 });
         i = j;
       }
+      const sweep = sweepDesc.slice().reverse(); // ascending threshold, for left-to-right display
+
+      // Youden's J (Se + Sp − 1) maximized — the standard "balanced"
+      // cutoff to mark, since there's no user-set threshold slider here
+      // (the threshold comes from the pasted data, not a live control).
+      let optIdx = 0, bestJ = -Infinity;
+      sweep.forEach((pt, idx) => {
+        const j = pt.se + pt.sp - 1;
+        if (j > bestJ) { bestJ = j; optIdx = idx; }
+      });
+      const opt = sweep[optIdx];
 
       const discrimination = AUC < 0.6 ? 'poor' : AUC < 0.7 ? 'fair' : AUC < 0.8 ? 'acceptable' : AUC < 0.9 ? 'excellent' : 'outstanding';
 
@@ -8136,6 +8185,9 @@ const CALCULATORS = [
         { label: 'Interpretation (Hosmer-Lemeshow rule of thumb)', isText: true, ci: null, isRatio: false,
           value: `${discrimination[0].toUpperCase()}${discrimination.slice(1)} discrimination (AUC = ${f(AUC)}).` },
         { label: 'ROC Curve', isSVG: true, svg: rocCurveSVG(points, AUC) },
+        { label: 'Sensitivity & Specificity vs. Cutoff', isSVG: true, svg: sensSpecThresholdSVG(sweep, optIdx) },
+        { label: 'Youden-Optimal Cutoff', isText: true, ci: null, isRatio: false,
+          value: `Threshold ≈ ${f(opt.threshold, 2)} maximizes Se + Sp − 1 (Youden's J = ${f(bestJ, 3)}), giving Se = ${f(opt.se * 100, 1)}% and Sp = ${f(opt.sp * 100, 1)}% — a standard "balanced" reference cutoff, though the right cutoff for a real test also depends on the relative cost of a false positive vs. a false negative for that specific use.` },
       ];
     }
   },
@@ -10505,6 +10557,10 @@ const CALCULATORS = [
       {
         label: 'Holm-Šídák Step-Down Adjustment',
         latex: 'p_{(i)}^{HS} = \\max_{j \\le i}\\Big\\{1-(1-p_{(j)})^{\\,m-j+1}\\Big\\}'
+      },
+      {
+        label: 'Uncorrected Family-Wise Error Rate',
+        latex: '\\text{FWER} = 1-(1-\\alpha)^{m}'
       }
     ],
 
@@ -10589,6 +10645,14 @@ const CALCULATORS = [
       rows.push({
         label: 'Method', isText: true, ci: null, isRatio: false,
         value: "Pooled-variance t-tests (using the ANOVA's MSW and dfW) with Holm-Šídák step-down correction across all pairs. The 95% CI shown on each mean difference uses the unadjusted t critical value for context — significance (highlighted) is judged on the Holm-Šídák-adjusted p-value instead."
+      });
+
+      const fwerMax = Math.max(20, pairs.length);
+      const uncorrectedFwer = 1 - Math.pow(1 - 0.05, pairs.length);
+      rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(0.05, pairs.length, fwerMax) });
+      rows.push({
+        label: 'Why the Correction Matters', isText: true, ci: null, isRatio: false,
+        value: `Testing all ${pairs.length} pairs at an uncorrected α = 0.05 each would carry a 1−(1−0.05)^${pairs.length} = ${f(uncorrectedFwer * 100, 1)}% chance of at least one false positive by chance alone — the Holm-Šídák step-down correction above holds that family-wise rate back down to ≈5%.`
       });
 
       return rows;
@@ -12017,6 +12081,82 @@ function holmSidakAdjust(pValues) {
   return adjusted;
 }
 
+// Family-wise error rate (uncorrected) vs. number of comparisons —
+// FWER(k) = 1-(1-alpha)^k climbs quickly even at modest k, which is
+// the entire reason a step-down correction like Holm-Šídák exists.
+// Marks this analysis's own actual number of pairwise comparisons (m)
+// on that rising curve, alongside the flat line at the nominal alpha
+// that Holm-Šídák holds the *true* family-wise rate at regardless of
+// m — same visual language as the site's other trade-off charts
+// (distinct marker shapes, legend in the margin, value callouts
+// anchored to their own marker).
+function familywiseErrorSVG(alpha, m, mMax) {
+  const W = 560, H = 200;
+  const PL = 36, PR = 14, PT = 28, PB = 28;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+  const baseline = PT + plotH;
+
+  const toX = k => PL + ((k - 1) / (mMax - 1)) * plotW;
+  const toY = v => baseline - v * plotH;
+
+  const fwerAt = k => 1 - Math.pow(1 - alpha, k);
+
+  const steps = 100;
+  const fwerPts = Array.from({ length: steps + 1 }, (_, i) => {
+    const k = 1 + (i / steps) * (mMax - 1);
+    return `${toX(k).toFixed(1)},${toY(fwerAt(k)).toFixed(1)}`;
+  }).join(' ');
+
+  const gridY = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(v => {
+    const y = toY(v).toFixed(1);
+    return `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#EEF1F7" stroke-width="1"/>
+      <text x="${PL - 6}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${v.toFixed(1)}</text>`;
+  }).join('');
+
+  const kTicks = Array.from({ length: 6 }, (_, i) => Math.round(1 + (i / 5) * (mMax - 1)));
+  const gridX = kTicks.map(k => `<text x="${toX(k).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${k}</text>`).join('');
+
+  // Sits at y < PT, strictly above the plot rectangle — see the same
+  // fix in ppvNpvPrevalenceCurveSVG for why this matters.
+  const legend = `
+    <circle cx="${W - PR - 150}" cy="12" r="3" fill="#4E6EDB"/>
+    <text x="${W - PR - 142}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Uncorrected FWER</text>
+    <circle cx="${W - PR - 44}" cy="12" r="3" fill="#E07B2C"/>
+    <text x="${W - PR - 36}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Held at α</text>`;
+
+  const mClamped = Math.max(1, Math.min(m, mMax));
+  const mx = +toX(mClamped).toFixed(1);
+  const fwerVal = fwerAt(mClamped);
+  const myFwer = +toY(fwerVal).toFixed(1);
+  const myAlpha = +toY(alpha).toFixed(1);
+
+  const diamondMarker = (x, y, color) => `
+    <polygon points="${x},${(y - 7).toFixed(1)} ${(x + 7).toFixed(1)},${y} ${x},${(y + 7).toFixed(1)} ${(x - 7).toFixed(1)},${y}" fill="#fff" stroke="#fff" stroke-width="4"/>
+    <polygon points="${x},${(y - 5).toFixed(1)} ${(x + 5).toFixed(1)},${y} ${x},${(y + 5).toFixed(1)} ${(x - 5).toFixed(1)},${y}" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+  const circleMarker = (x, y, color) => `
+    <circle cx="${x}" cy="${y}" r="7" fill="#fff"/>
+    <circle cx="${x}" cy="${y}" r="5" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+
+  const pct = v => (v * 100).toFixed(1) + '%';
+  const callouts = `
+    <text x="${mx}" y="${(myFwer - 11).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#4E6EDB">FWER ${pct(fwerVal)}</text>
+    <text x="${mx}" y="${(myAlpha + 18).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#E07B2C">α ${pct(alpha)}</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Uncorrected family-wise error rate vs. number of comparisons, currently ${pct(fwerVal)} at ${mClamped} comparisons, versus ${pct(alpha)} held by Holm-Sidak">
+  ${gridY}
+  <line x1="${mx}" y1="${PT}" x2="${mx}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <polyline points="${fwerPts}" fill="none" stroke="#4E6EDB" stroke-width="2.2"/>
+  <line x1="${PL}" y1="${toY(alpha).toFixed(1)}" x2="${W - PR}" y2="${toY(alpha).toFixed(1)}" stroke="#E07B2C" stroke-width="2.2"/>
+  ${legend}
+  ${gridX}
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 1}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">number of comparisons (k)</text>
+  ${diamondMarker(mx, myFwer, '#4E6EDB')}
+  ${circleMarker(mx, myAlpha, '#E07B2C')}
+  ${callouts}
+</svg>`;
+}
+
 // Shapiro-Wilk test of normality — Royston's (1995) algorithm AS R94,
 // the same approximation used internally by R's shapiro.test() and
 // SciPy. Computes W from the correlation between the ordered sample
@@ -12860,7 +13000,7 @@ function powerCurveLineSVG(sigma, n, highlightDelta, highlightAlpha) {
 // themselves) depend on the population the test is applied to.
 function ppvNpvPrevalenceCurveSVG(Se, Sp, prevalence) {
   const W = 560, H = 200;
-  const PL = 36, PR = 14, PT = 20, PB = 28;
+  const PL = 36, PR = 14, PT = 28, PB = 28;
   const plotW = W - PL - PR, plotH = H - PT - PB;
   const baseline = PT + plotH;
   const eps = 0.001;
@@ -12887,20 +13027,46 @@ function ppvNpvPrevalenceCurveSVG(Se, Sp, prevalence) {
     return `<text x="${x}" y="${H - 8}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${(p * 100).toFixed(0)}%</text>`;
   }).join('');
 
+  // Sits at y < PT, strictly above the plot rectangle (which spans
+  // [PT, baseline]) — curves are mathematically bounded within that
+  // rectangle (toY(0)=baseline, toY(1)=PT), so placing the legend in
+  // the margin above it guarantees it's never covered by a curve, even
+  // when Se and Sp are both high enough that PPV and NPV hug the very
+  // top of the plot for most of the prevalence range.
   const legend = `
-    <circle cx="${W - PR - 92}" cy="${PT}" r="3" fill="#4E6EDB"/>
-    <text x="${W - PR - 84}" y="${PT + 3}" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">PPV</text>
-    <circle cx="${W - PR - 44}" cy="${PT}" r="3" fill="#E07B2C"/>
-    <text x="${W - PR - 36}" y="${PT + 3}" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">NPV</text>`;
+    <circle cx="${W - PR - 92}" cy="12" r="3" fill="#4E6EDB"/>
+    <text x="${W - PR - 84}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">PPV</text>
+    <circle cx="${W - PR - 44}" cy="12" r="3" fill="#E07B2C"/>
+    <text x="${W - PR - 36}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">NPV</text>`;
 
   const p0 = Math.max(eps, Math.min(prevalence, 1 - eps));
-  const mx = toX(p0).toFixed(1);
-  const myPPV = toY(ppvAt(p0)).toFixed(1);
-  const myNPV = toY(npvAt(p0)).toFixed(1);
-  const marker = (x, y, color) =>
-    `<polygon points="${x},${(+y - 5).toFixed(1)} ${(+x + 5).toFixed(1)},${y} ${x},${(+y + 5).toFixed(1)} ${(+x - 5).toFixed(1)},${y}" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+  const mx = +toX(p0).toFixed(1);
+  const ppvVal = ppvAt(p0), npvVal = npvAt(p0);
+  const myPPV = +toY(ppvVal).toFixed(1);
+  const myNPV = +toY(npvVal).toFixed(1);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="PPV and NPV as a function of disease prevalence">
+  // Distinct shapes (diamond vs. circle), not just distinct colors, so
+  // the two current-value markers stay distinguishable even where the
+  // curves cross and the markers land on top of each other. A white
+  // halo behind each one keeps it legible against the curves/gridlines
+  // passing directly underneath.
+  const diamondMarker = (x, y, color) => `
+    <polygon points="${x},${(y - 7).toFixed(1)} ${(x + 7).toFixed(1)},${y} ${x},${(y + 7).toFixed(1)} ${(x - 7).toFixed(1)},${y}" fill="#fff" stroke="#fff" stroke-width="4"/>
+    <polygon points="${x},${(y - 5).toFixed(1)} ${(x + 5).toFixed(1)},${y} ${x},${(y + 5).toFixed(1)} ${(x - 5).toFixed(1)},${y}" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+  const circleMarker = (x, y, color) => `
+    <circle cx="${x}" cy="${y}" r="7" fill="#fff"/>
+    <circle cx="${x}" cy="${y}" r="5" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+
+  // Value callouts always sit a fixed offset above the PPV marker and
+  // below the NPV marker — since each offset is anchored to its own
+  // marker (not to the other curve), the two callouts naturally pull
+  // apart even when the markers themselves coincide near a crossing.
+  const pct = v => (v * 100).toFixed(0) + '%';
+  const callouts = `
+    <text x="${mx}" y="${(myPPV - 11).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#4E6EDB">PPV ${pct(ppvVal)}</text>
+    <text x="${mx}" y="${(myNPV + 18).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#E07B2C">NPV ${pct(npvVal)}</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="PPV and NPV as a function of disease prevalence, currently PPV ${pct(ppvVal)} and NPV ${pct(npvVal)} at ${pct(p0)} prevalence">
   ${gridY}
   <line x1="${mx}" y1="${PT}" x2="${mx}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1" stroke-dasharray="3,3"/>
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
@@ -12909,8 +13075,9 @@ function ppvNpvPrevalenceCurveSVG(Se, Sp, prevalence) {
   ${legend}
   ${gridX}
   <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 1}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">disease prevalence</text>
-  ${marker(mx, myPPV, '#4E6EDB')}
-  ${marker(mx, myNPV, '#E07B2C')}
+  ${diamondMarker(mx, myPPV, '#4E6EDB')}
+  ${circleMarker(mx, myNPV, '#E07B2C')}
+  ${callouts}
 </svg>`;
 }
 
@@ -12998,6 +13165,91 @@ function decisionMatrixHTML(alpha, power) {
       </div>
     </div>
   `;
+}
+
+// Type I (alpha) vs Type II (beta) error trade-off as the decision
+// threshold shifts, for two unit-variance normal distributions (H0 vs
+// Ha) separated by a standardized effect size d — the real constraint
+// the decision-matrix table above doesn't show, since its alpha/power
+// sliders are deliberately independent so each outcome can be seen on
+// its own. Here, for a FIXED effect size, moving the cutoff can only
+// trade alpha against beta, never lower both at once. Same visual
+// language as ppvNpvPrevalenceCurveSVG (distinct marker shapes, legend
+// in the margin above the plot so a curve can never cross it, value
+// callouts anchored to their own marker so they separate even where
+// the two curves cross).
+function typeErrorTradeoffSVG(effectSize, alpha) {
+  const W = 560, H = 200;
+  const PL = 36, PR = 14, PT = 28, PB = 28;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+  const baseline = PT + plotH;
+
+  const zMin = -1, zMax = effectSize + 1;
+  const toX = z => PL + ((z - zMin) / (zMax - zMin)) * plotW;
+  const toY = v => baseline - v * plotH;
+
+  const alphaAt = z => 1 - jStat.normal.cdf(z, 0, 1);
+  const betaAt  = z => jStat.normal.cdf(z - effectSize, 0, 1);
+
+  const steps = 100;
+  const linePts = fn => Array.from({ length: steps + 1 }, (_, i) => {
+    const z = zMin + (i / steps) * (zMax - zMin);
+    return `${toX(z).toFixed(1)},${toY(fn(z)).toFixed(1)}`;
+  }).join(' ');
+
+  const gridY = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(v => {
+    const y = toY(v).toFixed(1);
+    return `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#EEF1F7" stroke-width="1"/>
+      <text x="${PL - 6}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${v.toFixed(1)}</text>`;
+  }).join('');
+
+  const gridX = [
+    { z: 0, label: 'μ₀' },
+    { z: effectSize, label: 'μA' },
+  ].map(({ z, label }) => `<text x="${toX(z).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${label}</text>`).join('');
+
+  // Sits at y < PT, strictly above the plot rectangle — see the
+  // identical fix in ppvNpvPrevalenceCurveSVG for why this matters:
+  // curves are bounded within [PT, baseline], so the margin above
+  // that is the only position guaranteed never to be crossed by one.
+  const legend = `
+    <circle cx="${W - PR - 92}" cy="12" r="3" fill="#4E6EDB"/>
+    <text x="${W - PR - 84}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">α</text>
+    <circle cx="${W - PR - 44}" cy="12" r="3" fill="#E07B2C"/>
+    <text x="${W - PR - 36}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">β</text>`;
+
+  const zAlpha = jStat.normal.inv(1 - alpha, 0, 1);
+  const z0 = Math.max(zMin, Math.min(zAlpha, zMax));
+  const mx = +toX(z0).toFixed(1);
+  const alphaVal = alphaAt(z0), betaVal = betaAt(z0);
+  const myAlpha = +toY(alphaVal).toFixed(1);
+  const myBeta  = +toY(betaVal).toFixed(1);
+
+  const diamondMarker = (x, y, color) => `
+    <polygon points="${x},${(y - 7).toFixed(1)} ${(x + 7).toFixed(1)},${y} ${x},${(y + 7).toFixed(1)} ${(x - 7).toFixed(1)},${y}" fill="#fff" stroke="#fff" stroke-width="4"/>
+    <polygon points="${x},${(y - 5).toFixed(1)} ${(x + 5).toFixed(1)},${y} ${x},${(y + 5).toFixed(1)} ${(x - 5).toFixed(1)},${y}" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+  const circleMarker = (x, y, color) => `
+    <circle cx="${x}" cy="${y}" r="7" fill="#fff"/>
+    <circle cx="${x}" cy="${y}" r="5" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+
+  const pct = v => (v * 100).toFixed(1) + '%';
+  const callouts = `
+    <text x="${mx}" y="${(myAlpha - 11).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#4E6EDB">α ${pct(alphaVal)}</text>
+    <text x="${mx}" y="${(myBeta + 18).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#E07B2C">β ${pct(betaVal)}</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Type I error (alpha) and Type II error (beta) as the decision threshold shifts, currently alpha ${pct(alphaVal)} and beta ${pct(betaVal)} at this threshold">
+  ${gridY}
+  <line x1="${mx}" y1="${PT}" x2="${mx}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <polyline points="${linePts(alphaAt)}" fill="none" stroke="#4E6EDB" stroke-width="2.2"/>
+  <polyline points="${linePts(betaAt)}" fill="none" stroke="#E07B2C" stroke-width="2.2"/>
+  ${legend}
+  ${gridX}
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 1}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">decision threshold</text>
+  ${diamondMarker(mx, myAlpha, '#4E6EDB')}
+  ${circleMarker(mx, myBeta, '#E07B2C')}
+  ${callouts}
+</svg>`;
 }
 
 // Compact "Heterogeneity: τ²=…; χ²=… (df=…, P=…); I²=…%" caption,
@@ -13559,6 +13811,179 @@ function rocCurveSVG(points, auc) {
   <text x="${(PL + plotW / 2).toFixed(1)}" y="${S - 4}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">False Positive Rate (1 − Sp)</text>
   <text x="12" y="${(PT + plotH / 2).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099" transform="rotate(-90 12 ${(PT + plotH / 2).toFixed(1)})">True Positive Rate (Se)</text>
   <text x="${(PL + plotW - 8).toFixed(1)}" y="${(PT + 16).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="11" font-weight="600" fill="#1A1A2E">AUC = ${(+auc.toFixed(3))}</text>
+</svg>`;
+}
+
+// Sensitivity(threshold) and Specificity(threshold) as the diagnostic
+// cutoff moves across the actual score scale — the same threshold
+// sweep 'roc-auc' already computes for the ROC curve above, just
+// re-plotted against the real cutoff value instead of against each
+// other, which is often the more concrete framing for an actual
+// biomarker cutoff than the abstract FPR/TPR axes of an ROC curve.
+// Same visual language as the other trade-off charts on this site
+// (distinct marker shapes, legend in the margin so a curve can never
+// cross it, value callouts anchored to their own marker). The marker
+// sits at the Youden-optimal cutoff (Se+Sp−1 maximized) rather than a
+// user-set slider, since here the threshold comes from pasted data,
+// not a live control.
+function sensSpecThresholdSVG(sweep, optIdx) {
+  const W = 560, H = 200;
+  const PL = 36, PR = 14, PT = 28, PB = 28;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+  const baseline = PT + plotH;
+
+  const tMin = sweep[0].threshold, tMax = sweep[sweep.length - 1].threshold;
+  const tSpan = (tMax - tMin) || 1;
+  const toX = t => PL + ((t - tMin) / tSpan) * plotW;
+  const toY = v => baseline - v * plotH;
+
+  const sePts = sweep.map(pt => `${toX(pt.threshold).toFixed(1)},${toY(pt.se).toFixed(1)}`).join(' ');
+  const spPts = sweep.map(pt => `${toX(pt.threshold).toFixed(1)},${toY(pt.sp).toFixed(1)}`).join(' ');
+
+  const gridY = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(v => {
+    const y = toY(v).toFixed(1);
+    return `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#EEF1F7" stroke-width="1"/>
+      <text x="${PL - 6}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${v.toFixed(1)}</text>`;
+  }).join('');
+
+  const gridX = [tMin, (tMin + tMax) / 2, tMax].map(t =>
+    `<text x="${toX(t).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${t.toFixed(1)}</text>`
+  ).join('');
+
+  // Sits at y < PT, strictly above the plot rectangle — see the same
+  // fix in ppvNpvPrevalenceCurveSVG for why this matters.
+  const legend = `
+    <circle cx="${W - PR - 92}" cy="12" r="3" fill="#4E6EDB"/>
+    <text x="${W - PR - 84}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Se</text>
+    <circle cx="${W - PR - 44}" cy="12" r="3" fill="#E07B2C"/>
+    <text x="${W - PR - 36}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Sp</text>`;
+
+  const opt = sweep[optIdx];
+  const mx = +toX(opt.threshold).toFixed(1);
+  const mySe = +toY(opt.se).toFixed(1);
+  const mySp = +toY(opt.sp).toFixed(1);
+
+  const diamondMarker = (x, y, color) => `
+    <polygon points="${x},${(y - 7).toFixed(1)} ${(x + 7).toFixed(1)},${y} ${x},${(y + 7).toFixed(1)} ${(x - 7).toFixed(1)},${y}" fill="#fff" stroke="#fff" stroke-width="4"/>
+    <polygon points="${x},${(y - 5).toFixed(1)} ${(x + 5).toFixed(1)},${y} ${x},${(y + 5).toFixed(1)} ${(x - 5).toFixed(1)},${y}" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+  const circleMarker = (x, y, color) => `
+    <circle cx="${x}" cy="${y}" r="7" fill="#fff"/>
+    <circle cx="${x}" cy="${y}" r="5" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
+
+  const pct = v => (v * 100).toFixed(1) + '%';
+  const callouts = `
+    <text x="${mx}" y="${(mySe - 11).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#4E6EDB">Se ${pct(opt.se)}</text>
+    <text x="${mx}" y="${(mySp + 18).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#E07B2C">Sp ${pct(opt.sp)}</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Sensitivity and specificity as the test cutoff shifts, with the Youden-optimal cutoff marked at threshold ${opt.threshold.toFixed(2)}, Se ${pct(opt.se)}, Sp ${pct(opt.sp)}">
+  ${gridY}
+  <line x1="${mx}" y1="${PT}" x2="${mx}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <polyline points="${sePts}" fill="none" stroke="#4E6EDB" stroke-width="2.2"/>
+  <polyline points="${spPts}" fill="none" stroke="#E07B2C" stroke-width="2.2"/>
+  ${legend}
+  ${gridX}
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 1}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">test cutoff (threshold)</text>
+  ${diamondMarker(mx, mySe, '#4E6EDB')}
+  ${circleMarker(mx, mySp, '#E07B2C')}
+  ${callouts}
+</svg>`;
+}
+
+/* ── TWO-STAGE SANKEY-STYLE FLOW DIAGRAM ─────────────────────────────────
+   Shared by 'diagnostic-accuracy' (Population -> Disease +/- -> Test
+   +/-, the "natural frequencies" tree used to teach where TP/FP/FN/TN
+   come from) and 'measures-of-association' (Population -> Exposed/
+   Unexposed -> Outcome +/-). Both read a 2x2 table as a fixed
+   1 -> 2 -> 4 tree, so each branch's two children can simply subdivide
+   that branch's own vertical band — no general Sankey layout
+   algorithm is needed for this shape.                                  */
+
+// Proportionally stacks `values` into [y0,y1], contiguous (no gap) —
+// used for the LEFT (source) edge of a ribbon, since a flow hasn't
+// visually split yet at the point it leaves its parent bar.
+function stackContiguous(values, y0, y1) {
+  const total = values.reduce((s, v) => s + v, 0) || 1;
+  const scale = (y1 - y0) / total;
+  let y = y0;
+  return values.map(v => {
+    const h = v * scale;
+    const seg = { y0: y, y1: y + h };
+    y += h;
+    return seg;
+  });
+}
+
+// Same, but with a gap between siblings — used for the bars/nodes
+// themselves (and the RIGHT/destination edge of a ribbon), so sibling
+// groups read as visually distinct.
+function stackWithGap(values, y0, y1, gap) {
+  const total = values.reduce((s, v) => s + v, 0) || 1;
+  const scale = Math.max((y1 - y0) - gap * (values.length - 1), 1) / total;
+  let y = y0;
+  return values.map(v => {
+    const h = Math.max(v * scale, 0.5);
+    const seg = { y0: y, y1: y + h };
+    y += h + gap;
+    return seg;
+  });
+}
+
+// Symmetric cubic-Bezier "S-curve" ribbon joining the (y1Top,y1Bot)
+// segment of a left bar to the (y2Top,y2Bot) segment of a right bar —
+// the standard Sankey-diagram flow shape.
+function sankeyRibbonPath(x1, y1Top, y1Bot, x2, y2Top, y2Bot) {
+  const xm = (x1 + x2) / 2;
+  return `M${x1.toFixed(1)},${y1Top.toFixed(1)} C${xm.toFixed(1)},${y1Top.toFixed(1)} ${xm.toFixed(1)},${y2Top.toFixed(1)} ${x2.toFixed(1)},${y2Top.toFixed(1)} L${x2.toFixed(1)},${y2Bot.toFixed(1)} C${xm.toFixed(1)},${y2Bot.toFixed(1)} ${xm.toFixed(1)},${y1Bot.toFixed(1)} ${x1.toFixed(1)},${y1Bot.toFixed(1)} Z`;
+}
+
+// branches: exactly 2 entries, each { label, value, color, children:
+// [{label, value, color}, {label, value, color}] } (exactly 2 children).
+function twoStageFlowSVG(rootLabel, branches) {
+  const W = 680, H = 280;
+  const PT = 16, PB = 16;
+  const usableH = H - PT - PB;
+  const barW = 14;
+  const x0 = 6, x1 = 250, x2 = 490;
+  const branchGap = 14, childGap = 6;
+
+  const branchValues = branches.map(b => b.value);
+  const rootSegs   = stackContiguous(branchValues, PT, PT + usableH);
+  const branchSegs = stackWithGap(branchValues, PT, PT + usableH, branchGap);
+
+  const total = branchValues.reduce((s, v) => s + v, 0);
+
+  const rootBar = `<rect x="${x0}" y="${PT}" width="${barW}" height="${usableH.toFixed(1)}" fill="#B7BEDA" rx="2"/>`;
+  const rootLabelText = `<text x="${x0}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="700" fill="#1A1A2E">${rootLabel} (N=${total})</text>`;
+
+  let ribbons = '', bars = '', labels = '';
+
+  branches.forEach((b, i) => {
+    const bSeg = branchSegs[i];
+    ribbons += `<path d="${sankeyRibbonPath(x0 + barW, rootSegs[i].y0, rootSegs[i].y1, x1, bSeg.y0, bSeg.y1)}" fill="${b.color}" opacity="0.25"/>`;
+    bars += `<rect x="${x1}" y="${bSeg.y0.toFixed(1)}" width="${barW}" height="${(bSeg.y1 - bSeg.y0).toFixed(1)}" fill="${b.color}" rx="2"/>`;
+    labels += `<text x="${x1 + barW + 6}" y="${((bSeg.y0 + bSeg.y1) / 2 + 3.5).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="700" fill="#1A1A2E">${b.label} (${b.value})</text>`;
+
+    const childValues = b.children.map(c => c.value);
+    const childContig = stackContiguous(childValues, bSeg.y0, bSeg.y1);
+    const childGapped = stackWithGap(childValues, bSeg.y0, bSeg.y1, childGap);
+
+    b.children.forEach((c, j) => {
+      const cSeg = childGapped[j];
+      ribbons += `<path d="${sankeyRibbonPath(x1 + barW, childContig[j].y0, childContig[j].y1, x2, cSeg.y0, cSeg.y1)}" fill="${c.color}" opacity="0.25"/>`;
+      bars += `<rect x="${x2}" y="${cSeg.y0.toFixed(1)}" width="${barW}" height="${(cSeg.y1 - cSeg.y0).toFixed(1)}" fill="${c.color}" rx="2"/>`;
+      labels += `<text x="${x2 + barW + 6}" y="${((cSeg.y0 + cSeg.y1) / 2 + 3.5).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="10" fill="#1A1A2E">${c.label} (${c.value})</text>`;
+    });
+  });
+
+  const ariaLabel = `Flow diagram: ${rootLabel} (N=${total}) splits into ${branches.map(b => `${b.label} (${b.value})`).join(' and ')}, each further split into ${branches.map(b => b.children.map(c => `${c.label} (${c.value})`).join(' and ')).join('; ')}`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="${ariaLabel}">
+  ${ribbons}
+  ${rootBar}
+  ${bars}
+  ${rootLabelText}
+  ${labels}
 </svg>`;
 }
 
@@ -14985,6 +15410,7 @@ const LEARN_WIZARD_TREE = {
   quickRefResult: { results: [
     { id: 'reference-glossary-abbreviations', why: 'Grouped by topic, with links to the fuller guide or calculator where one exists.' },
     { id: 'reference-appraisal-worksheets', why: 'Six fill-in-the-blank worksheets, one per clinical question type.' },
+    { id: 'reference-visual-tradeoff-tools', why: 'An index of every interactive chart on this site that shows a quantity trading off against another as you move a parameter.' },
   ]},
 
 };
@@ -15598,6 +16024,8 @@ const NOTATION = {
     { symbol: 'p_{(i)}^{HS}', meaning: 'Holm-Šídák-adjusted p-value for the i-th ranked comparison, controlling the false-positive rate across all pairwise tests.' },
     { symbol: 'p_{(j)}', meaning: 'Unadjusted p-value of the j-th comparison when comparisons are sorted from smallest to largest p-value.' },
     { symbol: 'm', meaning: 'Total number of pairwise comparisons being adjusted for.' },
+    { symbol: '\\alpha', meaning: 'Per-comparison significance threshold (0.05 here) if left uncorrected.' },
+    { symbol: '\\text{FWER}', meaning: 'Family-wise error rate — the chance of at least one false positive across all m comparisons if each were tested uncorrected at α.' },
   ],
   'shapiro-wilk-test': [
     { symbol: 'W', meaning: "Shapiro-Wilk test statistic — how closely the sample's shape matches a normal distribution (closer to 1 = more normal)." },
@@ -15932,6 +16360,9 @@ const NOTATION = {
     { symbol: '\\alpha', meaning: 'Significance Level — the probability of a Type I error (a false positive), set directly by the slider.' },
     { symbol: '\\text{Power}', meaning: 'Statistical Power (1 − β) — the probability of correctly detecting a real effect, set directly by the slider.' },
     { symbol: '\\beta', meaning: 'Type II error rate — the probability of missing a real effect (a false negative), derived as 1 − Power.' },
+    { symbol: 'd', meaning: 'Standardized Effect Size — how far apart the null (μ₀) and alternative (μA) means are, in SD units. Used only by the trade-off chart below the decision matrix.' },
+    { symbol: 'z', meaning: 'The decision threshold (critical value), in SD units from μ₀ — the x-axis of the trade-off chart. Moving it trades α against β for a fixed d.' },
+    { symbol: '\\Phi', meaning: 'The standard normal CDF — used to convert a threshold z into a tail probability (α or β).' },
   ],
 
   // Epidemiology & Risk
@@ -16531,6 +16962,55 @@ const GUIDES = [
       { id: 'hksj-meta-analysis', why: 'Same forest-plot grammar, comparing the standard random-effects CI to the wider Hartung-Knapp-Sidik-Jonkman adjustment.' },
       { id: 'meta-analysis-proportions', why: 'Same grammar applied to pooled proportions, via Arcsine/Logit/Raw transforms or a one-stage GLMM.' },
       { id: 'network-meta-analysis', why: 'Extends the same forest-plot grammar to every treatment compared against a common reference.' },
+    ],
+  },
+
+  {
+    id: 'reading-flow-diagrams',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Flow Diagram (Sankey Diagram)',
+    blurb: 'What the bars and ribbons mean, and how one population splits step by step into a 2×2 table.',
+    dek: `Diagnostic Test Accuracy (2&times;2) and Measures of Association both draw the same picture: a population split one way, then split again within each branch &mdash; the same 2&times;2 table you already entered, just redrawn as a flow instead of a grid. This style of chart is commonly called a <strong>Sankey diagram</strong>, after the engineer who popularized it for visualizing energy and material flows &mdash; the same shape works just as well for a population flowing through categories.`,
+    figure: twoStageFlowSVG('Population', [
+      { label: 'Disease Present', value: 100, color: '#4E6EDB', children: [
+        { label: 'TP', value: 80, color: '#4E6EDB' },
+        { label: 'FN', value: 20, color: '#4E6EDB' },
+      ] },
+      { label: 'Disease Absent', value: 900, color: '#E07B2C', children: [
+        { label: 'FP', value: 90, color: '#E07B2C' },
+        { label: 'TN', value: 810, color: '#E07B2C' },
+      ] },
+    ]),
+    figureCaption: `1,000 patients: 100 have the disease, 900 don't. Splitting each group again by test result shows exactly where TP, FP, FN, and TN come from.`,
+    legendColumns: [
+      [
+        { colLabel: 'Bars', swatchClass: 'is-square', swatchStyle: 'background:#B7BEDA', text: `Each bar's <strong>height</strong> is proportional to its count — the leftmost bar is the whole population; it splits into two branch bars, and each of those splits into two leaf bars.` },
+        { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB', text: `Color marks which top-level branch a bar belongs to — everything downstream of "Disease Present" stays blue, everything downstream of "Disease Absent" stays amber, so you can trace a leaf back to its branch at a glance.` },
+      ],
+      [
+        { colLabel: 'Ribbons', swatchStyle: 'background:#4E6EDB;opacity:.4', text: `A ribbon's <strong>width</strong> at each end matches the bar it connects to — width never changes along its length, since no patients are gained or lost between columns, only regrouped.` },
+        { swatchStyle: 'background:#E07B2C;opacity:.4', text: `Reading left to right at any point tells you what fraction of the population has reached that combination of categories so far.` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'Two splits, not one',
+        html: `<p>The diagram always has exactly three columns: the whole population, a first split into two groups, and a second split of each of those groups into two more. In the diagnostic-testing version shown above, the first split is by true disease status (present/absent) and the second is by test result (positive/negative) &mdash; deliberately in that order, since disease status is the fixed ground truth the test is being judged against. In the exposure/outcome version (Measures of Association), the first split is by exposure and the second is by outcome.</p>`,
+      },
+      {
+        heading: 'This is the same 2×2 table you entered',
+        html: `<p>The four rightmost bars are exactly the four cells (a, b, c, d) of the 2&times;2 table above the results &mdash; the flow diagram doesn't add new information, it just makes the relative sizes of those four numbers immediately visible in a way a table of raw counts doesn't. A test with excellent sensitivity but poor specificity, for instance, looks obviously different here (a thin False Negative leaf, a fat False Positive leaf) than it does as four similarly-sized numbers in a table.</p>`,
+      },
+      {
+        heading: 'Why this is the same picture behind PPV/NPV and prevalence',
+        html: `<p>This diagram is also a direct visualization of why predictive values swing with prevalence (see the guide linked below): shrink the "Disease Present" branch relative to "Disease Absent" &mdash; i.e., lower the prevalence &mdash; and the True Positive leaf shrinks with it, while the False Positive leaf (branching off the now-larger Disease Absent group) stays comparatively large. PPV is the True Positive leaf's share of the whole Test+ column, so a smaller disease-present branch mechanically drags PPV down even though sensitivity and specificity (each computed within their own branch) don't change at all.</p>`,
+      },
+    ],
+    related: [
+      { id: 'diagnostic-accuracy', why: 'Draws this exact diagram from your own 2×2 table, alongside Se, Sp, PPV, NPV, and the likelihood ratios.' },
+      { id: 'measures-of-association', why: 'Draws the same shape of diagram for an exposure/outcome table, alongside AR, RR, OR, and ARD.' },
+      { id: 'sensitivity-specificity', why: 'The focused Se/Sp/LR-only version of the diagnostic-accuracy calculator above.' },
+      { id: 'appraisal-diagnostic-tests-prevalence', why: 'Explains in words the same prevalence effect this diagram shows visually.' },
     ],
   },
 
@@ -18160,6 +18640,40 @@ const GUIDES = [
 <tr><td>Therapy</td><td>An article testing whether a treatment or intervention works &mdash; typically a randomized trial. See also <a href="#learn/appraisal-appraising-rcts">Appraising Randomized Controlled Trials</a>.</td><td><a href="assets/appraisal-worksheets/critical-appraisal-therapy.docx" download>critical-appraisal-therapy.docx</a></td></tr>
 </tbody></table></div>`,
       },
+    ],
+  },
+
+  {
+    id: 'reference-visual-tradeoff-tools',
+    category: 'Quick Reference',
+    title: 'Visual Trade-off Tools on This Site',
+    blurb: 'An index of every interactive chart on this site that shows a quantity trading off against another as you move a parameter — sensitivity vs. specificity, Type I vs. Type II error, and more.',
+    dek: `Several calculators on this site include a chart built around the same idea: pick one parameter you control (a decision threshold, a sample size, a number of comparisons) and watch two competing quantities move as it changes. None of these charts is a new statistical test &mdash; each one visualizes a trade-off that's already implicit in the calculator's numbers, made explicit so the underlying tension is easier to reason about than a single point estimate would be. This page collects them in one place.`,
+    sections: [
+      {
+        heading: 'What these charts have in common',
+        html: `<p>Every chart below plots two curves (or a curve against a reference line) across a range of one parameter, rather than showing a single number for one fixed setting. The point is never that one end of the curve is "correct" &mdash; it's that improving one quantity (say, sensitivity, or power) generally costs you something on the other axis (specificity, or the Type I error rate), and the right operating point depends on context the chart itself can't supply: the relative cost of a false positive vs. a false negative, how the test or study will actually be used, how many comparisons a real analysis needs to run.</p><p>Each chart uses the same visual grammar throughout this site: a blue curve/marker for the first quantity, an amber curve/marker for the second, a diamond marker for one series and a circle for the other, and callouts anchored to their own marker so the labels stay legible even where the two curves cross.</p>`,
+      },
+      {
+        heading: 'The charts',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Chart</th><th>What Trades Off Against What</th><th>Where To Find It</th></tr></thead><tbody>
+<tr><td>H₀ vs. Hₐ Overlap (α, β, Power)</td><td>The rejection region (α), the miss region (β), and power &mdash; as shaded overlap between the null and alternative sampling distributions &mdash; while dragging μ₀, μA, σ, n, or α live.</td><td><a href="#power-with-graph">Power with Graph</a></td></tr>
+<tr><td>Power vs. Effect Size &amp; Alpha</td><td>Power as a continuous function of effect size, plotted as three separate curves for benchmark α levels (.01/.05/.10) at a fixed n &mdash; how much power costs you at a stricter significance threshold.</td><td><a href="#power-vs-es-alpha">Power vs Effect Size &amp; Alpha</a></td></tr>
+<tr><td>PPV &amp; NPV vs. Prevalence</td><td>Positive and negative predictive value, as disease prevalence changes &mdash; the same test with fixed Se/Sp means something very different in a screening population than in a referral clinic.</td><td><a href="#ppv-npv-vs-prevalence">PPV/NPV vs Prevalence</a></td></tr>
+<tr><td>Type I vs. Type II Error vs. Decision Threshold</td><td>The false-positive rate (α) and the false-negative rate (1&minus;power), as the test's decision threshold shifts &mdash; tightening one always loosens the other for a fixed effect size and sample size.</td><td><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr>
+<tr><td>Sensitivity &amp; Specificity vs. Cutoff</td><td>Sensitivity and specificity, as the diagnostic cutoff moves across the range of a continuous test result &mdash; with the Youden's-J-optimal cutoff marked as a standard (not universally correct) balance point.</td><td><a href="#roc-auc">ROC Curve &amp; AUC</a></td></tr>
+<tr><td>Family-Wise Error Rate vs. Number of Comparisons</td><td>How quickly the uncorrected chance of at least one false positive rises with the number of pairwise comparisons &mdash; and how the Holm-Šídák correction holds it back down near the nominal α regardless.</td><td><a href="#holm-sidak-test">Holm-Šídák Test</a></td></tr>
+</tbody></table></div>`,
+      },
+    ],
+    related: [
+      { id: 'power-with-graph', why: 'Live-draggable H₀/Hₐ overlap chart shading α, β, and power described here.' },
+      { id: 'power-vs-es-alpha', why: 'Power-vs-effect-size curves at three benchmark alpha levels, described here.' },
+      { id: 'ppv-npv-vs-prevalence', why: 'Interactive slider showing how PPV/NPV shift with prevalence, holding Se/Sp fixed.' },
+      { id: 'type1-type2-errors', why: 'A decision matrix showing both error types and both correct decisions side by side, with α and power as adjustable sliders.' },
+      { id: 'roc-auc', why: 'Full ROC curve and AUC, plus the Sensitivity/Specificity-vs-cutoff chart described here.' },
+      { id: 'holm-sidak-test', why: 'Computes the step-down Holm-Šídák correction and shows the family-wise error rate chart described here.' },
+      { id: 'appraisal-p-values', why: 'Covers the multiplicity worked example that the family-wise error rate chart builds on.' },
     ],
   },
 ];
