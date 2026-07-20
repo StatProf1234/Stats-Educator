@@ -1703,7 +1703,7 @@ const CALCULATORS = [
   },
 
   /* ── 19. 1-SAMPLE T-TEST ────────────────────────────────────────────────
-     Tests a sample mean against a hypothesised population mean, σ
+     Tests a sample mean against a hypothesized population mean, σ
      unknown (estimated by the sample SD).                              */
   {
     id:          'one-sample-t-test',
@@ -1850,7 +1850,7 @@ const CALCULATORS = [
   },
 
   /* ── 21. 1-SAMPLE Z-TEST ────────────────────────────────────────────────
-     Tests a sample mean against a hypothesised population mean, with
+     Tests a sample mean against a hypothesized population mean, with
      known population SD (σ).                                          */
   {
     id:          'one-sample-z-test',
@@ -1914,14 +1914,14 @@ const CALCULATORS = [
   },
 
   /* ── 22. Z-TEST PROPORTIONS (1-SAMPLE) ─────────────────────────────────
-     Tests an observed sample proportion against a hypothesised value,
+     Tests an observed sample proportion against a hypothesized value,
      using the null proportion for the test SE (standard convention).   */
   {
     id:          'z-test-prop-1samp',
     name:        'z-Test Proportions (1-Sample)',
     hint:        'z = (p−p₀) / √(p₀(1−p₀)/n)',
     category:    'T-Tests & Z-Tests',
-    description: 'Tests whether an observed proportion differs from a hypothesised value.',
+    description: 'Tests whether an observed proportion differs from a hypothesized value.',
 
     formulas: [
       {
@@ -2089,7 +2089,7 @@ const CALCULATORS = [
     name:        'Sample Size — 1-Sample Mean',
     hint:        'n = ((z_α/2+z_power)·σ/δ)²',
     category:    'Power & Sample Size',
-    description: 'Determines the sample size needed to detect a specified difference from a hypothesised mean, given σ, alpha, and target power.',
+    description: 'Determines the sample size needed to detect a specified difference from a hypothesized mean, given σ, alpha, and target power.',
 
     formulas: [
       {
@@ -2197,14 +2197,14 @@ const CALCULATORS = [
   },
 
   /* ── 26. SAMPLE SIZE — 1-SAMPLE PROPORTION ─────────────────────────────
-     Required n to distinguish a hypothesised proportion p₀ from an
+     Required n to distinguish a hypothesized proportion p₀ from an
      alternative p₁, at significance α and target power.                */
   {
     id:          'sample-size-1prop',
     name:        'Sample Size — 1-Sample Proportion',
     hint:        'n = (z_α/2√(p₀q₀)+z_power√(p₁q₁))² / (p₁−p₀)²',
     category:    'Power & Sample Size',
-    description: 'Determines the sample size needed to detect a difference between a hypothesised proportion and an alternative, given alpha and target power.',
+    description: 'Determines the sample size needed to detect a difference between a hypothesized proportion and an alternative, given alpha and target power.',
 
     formulas: [
       {
@@ -3205,7 +3205,7 @@ const CALCULATORS = [
 
   /* ── 35. BINOMIAL HYPOTHESIS TEST ──────────────────────────────────────
      Exact two-sided binomial test of an observed count x (out of n)
-     against a hypothesised proportion p₀, using R's binom.test
+     against a hypothesized proportion p₀, using R's binom.test
      method: sum the probability of every outcome as-or-more-extreme
      than the observed one (pmf(k) ≤ pmf(x), within floating tolerance). */
   {
@@ -11994,7 +11994,7 @@ function sdBellCurveSVG(mean, sd, data) {
   const xMax = mean + 3.7 * sd;
   const toX  = x => PL + ((x - xMin) / (xMax - xMin)) * (W - PL - PR);
 
-  // Normal PDF, normalised so peak = 1
+  // Normal PDF, normalized so peak = 1
   const rawPhi = x => Math.exp(-0.5 * ((x - mean) / sd) ** 2);
   const toY    = y => PT + plotH - y * plotH;
 
@@ -13791,7 +13791,7 @@ const CALCULATOR_INDEX = [
   { id: 'se-mean-diff',         name: 'Standard Error of a Mean Difference', category: 'T-Tests & Z-Tests',       description: 'Computes the standard error of the difference between two independent sample means, using pooled and Welch (unequal-variance) methods.', status: 'available' },
   { id: 'one-sample-z-test',    name: '1-Sample z-Test',                 category: 'T-Tests & Z-Tests',           description: 'Tests a sample mean against a population mean when σ is known.',                             status: 'available' },
   { id: 'two-sample-z-test',    name: 'Two-Sample z-Test (Means)',       category: 'T-Tests & Z-Tests',           description: 'Tests whether two independent population means differ, when both population standard deviations are known.', status: 'available' },
-  { id: 'z-test-prop-1samp',    name: 'z-Test Proportions (1-Sample)',   category: 'T-Tests & Z-Tests',           description: 'Tests whether an observed proportion differs from a hypothesised value.',                     status: 'available' },
+  { id: 'z-test-prop-1samp',    name: 'z-Test Proportions (1-Sample)',   category: 'T-Tests & Z-Tests',           description: 'Tests whether an observed proportion differs from a hypothesized value.',                     status: 'available' },
   { id: 'z-test-prop-2samp',    name: 'z-Test Proportions (2-Sample)',   category: 'T-Tests & Z-Tests',           description: 'Tests whether two independent proportions are equal.',                                        status: 'available' },
   { id: 'binomial-hyp-test',    name: 'Binomial Hypothesis Test',        category: 'T-Tests & Z-Tests',           description: 'Exact binomial test for a proportion against a null hypothesis, with graph.',                 status: 'available' },
   { id: 'single-sample-ci',     name: 'Confidence Interval for a Mean', category: 'T-Tests & Z-Tests',             description: 'Computes a t-based confidence interval for a single sample mean, at any confidence level.',   status: 'available' },
@@ -13854,9 +13854,9 @@ const CALCULATOR_INDEX = [
   { id: 'power-with-graph',     name: 'Power with Graph',                category: 'Power & Sample Size',         description: 'Visualises the overlap of H₀ and Hₐ distributions, shading alpha, beta, and power — drag μ₀, μA, σ, n, or α to explore live.', status: 'available' },
   { id: 'power-vs-es-alpha',    name: 'Power vs Effect Size & Alpha',    category: 'Power & Sample Size',         description: 'Plots power as a function of effect size and significance level for a given sample size.',     status: 'available' },
   { id: 'posthoc-power',        name: 'Post-Hoc Power Calculation',      category: 'Power & Sample Size',         description: 'Estimates achieved power for a completed study given its observed effect size and n.',          status: 'available' },
-  { id: 'sample-size-1mean',    name: 'Sample Size — 1-Sample Mean',     category: 'Power & Sample Size',         description: 'Determines the sample size needed to detect a specified difference from a hypothesised mean, given σ, alpha, and target power.', status: 'available' },
+  { id: 'sample-size-1mean',    name: 'Sample Size — 1-Sample Mean',     category: 'Power & Sample Size',         description: 'Determines the sample size needed to detect a specified difference from a hypothesized mean, given σ, alpha, and target power.', status: 'available' },
   { id: 'sample-size-2mean',    name: 'Sample Size — Difference of Two Means', category: 'Power & Sample Size',   description: 'Determines the per-group sample size needed to detect a specified difference between two independent means, given a common σ, alpha, and target power.', status: 'available' },
-  { id: 'sample-size-1prop',    name: 'Sample Size — 1-Sample Proportion', category: 'Power & Sample Size',       description: 'Determines the sample size needed to detect a difference between a hypothesised proportion and an alternative, given alpha and target power.', status: 'available' },
+  { id: 'sample-size-1prop',    name: 'Sample Size — 1-Sample Proportion', category: 'Power & Sample Size',       description: 'Determines the sample size needed to detect a difference between a hypothesized proportion and an alternative, given alpha and target power.', status: 'available' },
   { id: 'sample-size-2prop',    name: 'Sample Size — Difference of Two Proportions', category: 'Power & Sample Size', description: 'Determines the per-group sample size needed to detect a difference between two independent proportions, given alpha and target power.', status: 'available' },
   { id: 'sample-size-anova-f',  name: "Sample Size — ANOVA (Cohen's f)", category: 'Power & Sample Size', description: "Determines the per-cell sample size needed to detect a specified Cohen's f effect size for a fixed-effects ANOVA main effect or interaction, covering both one-way and factorial designs.", status: 'available' },
   { id: 'sample-size-survey',   name: 'Sample Size for a Survey',        category: 'Power & Sample Size',         description: 'Determines how many respondents are needed to estimate a population proportion within a target margin of error, with optional finite-population correction and response-rate adjustment.', status: 'available' },
@@ -15499,7 +15499,7 @@ const NOTATION = {
     { symbol: 'z_{\\alpha/2}', meaning: 'Two-tailed critical z-value corresponding to the Significance Level (α, two-tailed).' },
     { symbol: 'z_{power}', meaning: 'Critical z-value corresponding to the Target Power (1−β).' },
     { symbol: '\\sigma', meaning: 'Population SD (σ) of the value being measured.' },
-    { symbol: '\\delta', meaning: 'Minimum Detectable Difference (δ) from the hypothesised mean that the study should be able to detect.' },
+    { symbol: '\\delta', meaning: 'Minimum Detectable Difference (δ) from the hypothesized mean that the study should be able to detect.' },
   ],
   'sample-size-2mean': [
     { symbol: 'n_{\\text{per group}}', meaning: 'Required Sample Size (per group) — subjects needed in each of the two groups.' },
