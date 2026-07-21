@@ -1374,7 +1374,10 @@ function esc(s) {
     // x̄, ȳ, etc. (letter + combining macron, U+0304) render unreliably
     // in many web fonts — see .over-bar in style.css for why — so
     // replace the combining mark with a real CSS overline instead.
-    .replace(/([A-Za-z])̄/g, '<span class="over-bar">$1</span>');
+    .replace(/([A-Za-z])̄/g, '<span class="over-bar">$1</span>')
+    // p̂, x̂, etc. (letter + combining circumflex, U+0302) have the same
+    // problem — see .over-hat in style.css.
+    .replace(/([A-Za-z])̂/g, '<span class="over-hat">$1</span>');
 }
 
 // Plain-text escape for use INSIDE an HTML attribute value (e.g.

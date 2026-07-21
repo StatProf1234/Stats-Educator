@@ -3897,6 +3897,179 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 36d. CENTRAL LIMIT THEOREM SIMULATOR ──────────────────────────────
+     Draws K samples of size n from a chosen non-normal population and
+     plots the growing histogram of their sample means underneath the
+     population's own shape — showing that the sampling distribution
+     of the mean turns approximately normal (centered at μ, spread
+     σ/√n) regardless of the population's own shape. The complement to
+     the Law of Large Numbers simulator, which shows a single running
+     estimate converging rather than a distribution's shape emerging. */
+  {
+    id:          'clt-simulator',
+    name:        'Central Limit Theorem Simulator',
+    hint:        'Any population shape → normal sampling dist.',
+    category:    'Probability & Distributions',
+    description: "Draws repeated samples from a chosen non-normal population and plots the growing distribution of their sample means, showing it turn approximately normal as sample size grows — regardless of the population's own shape.",
+    inputLayout: 'explorer',
+
+    formulas: [
+      { label: 'Mean of the Sampling Distribution', latex: 'E[\\bar{x}] = \\mu' },
+      { label: 'Standard Error of the Mean (spread of the sampling distribution)', latex: 'SE = \\dfrac{\\sigma}{\\sqrt{n}}' },
+    ],
+
+    inputs: [
+      { id: 'shape', type: 'select', label: 'Population Shape', default: 'exponential', options: [
+        { value: 'exponential', label: 'Skewed (exponential-like)' },
+        { value: 'uniform',     label: 'Uniform (flat)' },
+        { value: 'bimodal',     label: 'Bimodal (two humps)' },
+        { value: 'normal',      label: 'Already normal (for comparison)' },
+      ] },
+      { id: 'n', type: 'slider', label: 'Sample Size (n)', default: 2, min: 1, max: 50, step: 1,
+        format: v => String(Math.round(v)) },
+      { id: 'K', type: 'slider', label: 'Samples Drawn (K)', default: 1000, min: 100, max: 3000, step: 50,
+        format: v => Math.round(v).toLocaleString('en-US') },
+      { id: 'redraw', type: 'button', label: '🔄 Redraw Samples' },
+    ],
+
+    example({ shape, n, K }) {
+      n = Math.round(n); K = Math.round(K);
+      if (!isFinite(n) || n < 1 || !isFinite(K) || K < 1)
+        return 'Choose a population shape, sample size, and number of samples to see a worked medical example here.';
+      const cfg = CLT_SHAPES[shape] || CLT_SHAPES.exponential;
+      const se = cfg.sd / Math.sqrt(n);
+      return `A biomarker in some population is ${cfg.label.toLowerCase()}, not normally distributed at all — but averaging n = ${n} patients at a time and repeating that ${K.toLocaleString('en-US')} times produces a distribution of those averages that already looks close to normal, centered at the true mean (${cfg.mean.toFixed(1)}) with a spread of about ${se.toFixed(2)}. This is why t-tests and other methods built on a normal sampling distribution can still be valid even when the raw biomarker itself is skewed, as long as the sample size isn't tiny.`;
+    },
+
+    calculate({ shape, n, K }) {
+      n = Math.round(n); K = Math.round(K);
+      if (!isFinite(n) || n < 1) return [err('Sample Size must be at least 1')];
+      if (!isFinite(K) || K < 1) return [err('Samples Drawn must be at least 1')];
+
+      const cfg = CLT_SHAPES[shape] || CLT_SHAPES.exponential;
+      const draw = cltPopulationDraw(shape);
+
+      const popSample = Array.from({ length: 4000 }, draw);
+      const meansSample = [];
+      for (let k = 0; k < K; k++) {
+        let sum = 0;
+        for (let i = 0; i < n; i++) sum += draw();
+        meansSample.push(sum / n);
+      }
+
+      const obsMean = meansSample.reduce((s, v) => s + v, 0) / meansSample.length;
+      const obsSD = Math.sqrt(meansSample.reduce((s, v) => s + (v - obsMean) * (v - obsMean), 0) / (meansSample.length - 1));
+      const theoreticalSE = cfg.sd / Math.sqrt(n);
+      const f = (v, dp = 2) => v.toFixed(dp);
+
+      return {
+        title: 'Central Limit Theorem Simulator',
+        subtitle: 'Whatever shape the population has, the distribution of sample means turns normal as n grows',
+        chartSvg: cltSVG(popSample, meansSample, cfg, n, K),
+        legend: [
+          { color: '#8985AE', label: 'Population (one value at a time)' },
+          { color: '#4E6EDB', label: 'Sample means (n at a time, K samples)' },
+          { color: '#E07B2C', label: 'Normal curve, same mean & SE' },
+        ],
+        stats: [
+          { label: 'Population μ / σ',        value: `${f(cfg.mean, 1)} / ${f(cfg.sd, 1)}` },
+          { label: 'Sample Size (n)',          value: n },
+          { label: 'Theoretical SE (σ/√n)',    value: f(theoreticalSE) },
+          { label: 'Observed SD of Means',     value: f(obsSD) },
+        ],
+        footnote: `The population above is ${cfg.label.toLowerCase()} — not remotely bell-shaped when n=1 (each "sample mean" is just one raw value). But average ${n} values at a time, repeat that ${K.toLocaleString('en-US')} times, and the bottom histogram already looks close to the normal curve overlaid on it — centered at the same population mean (${f(cfg.mean, 1)}), with a spread (SE = ${f(theoreticalSE)}) that shrinks as n grows. This is the Central Limit Theorem: it holds regardless of the population's own shape.`,
+      };
+    }
+  },
+
+  /* ── 36e. REGRESSION TO THE MEAN SIMULATOR ─────────────────────────────
+     Simulates two independent noisy measurements of the same stable
+     "true" trait, selects the most extreme scorers on the first
+     measurement, and shows their second measurement drifting back
+     toward the population mean purely from measurement noise — the
+     same mechanism that can make an uncontrolled before/after study
+     look like a real effect when none exists (see the "regression to
+     the mean" pitfall guide in Learn).                                */
+  {
+    id:          'regression-to-mean-simulator',
+    name:        'Regression to the Mean Simulator',
+    hint:        'Extreme scorers drift back toward μ on retest',
+    category:    'Probability & Distributions',
+    description: 'Simulates two independent measurements of the same trait and shows how a group selected for extreme first-measurement scores drifts back toward the population mean on remeasurement, even though nothing about them actually changed.',
+    inputLayout: 'explorer',
+
+    formulas: [
+      { label: "Each Person's Two Measurements", latex: '\\text{Test}_1 = T + e_1, \\quad \\text{Test}_2 = T + e_2' },
+      { label: 'Expected Regression to the Mean', latex: 'E[\\text{Test}_2 \\mid \\text{Test}_1] - \\mu = r\\,(\\text{Test}_1 - \\mu)' },
+    ],
+
+    inputs: [
+      { id: 'direction', type: 'select', label: 'Select Extreme Group by Test 1', default: 'top', options: [
+        { value: 'top',    label: 'Top scorers (highest Test 1)' },
+        { value: 'bottom', label: 'Bottom scorers (lowest Test 1)' },
+      ] },
+      { id: 'r',   type: 'slider', label: 'Test-Retest Reliability (r)', default: 0.6, min: 0.3, max: 0.95, step: 0.01,
+        format: v => v.toFixed(2) },
+      { id: 'pct', type: 'slider', label: '% Selected as "Extreme"', default: 10, min: 5, max: 50, step: 1,
+        format: v => Math.round(v) + '%' },
+      { id: 'redraw', type: 'button', label: '🔄 Redraw Sample' },
+    ],
+
+    example({ direction, r, pct }) {
+      if (!isFinite(r) || r <= 0 || r >= 1 || !isFinite(pct) || pct <= 0)
+        return 'Set a reliability and selection percentage to see a worked medical example here.';
+      const groupWord = direction === 'top' ? 'highest' : 'lowest';
+      return `A clinic screens patients on a noisy lab value and flags the ${Math.round(pct)}% with the ${groupWord} initial reading for retesting a week later — even with no treatment in between, their retest average will drift back toward the population mean, more so the lower the test's reliability (r = ${r.toFixed(2)}). Mistaking that drift for a treatment effect is exactly why an uncontrolled before/after design can manufacture an "improvement" that a randomized comparison group would show never existed.`;
+    },
+
+    calculate({ direction, r, pct }) {
+      if (!isFinite(r) || r <= 0 || r >= 1)   return [err('Test-Retest Reliability must be between 0 and 1 (exclusive)')];
+      if (!isFinite(pct) || pct <= 0 || pct >= 100) return [err('Selected Percentage must be between 0 and 100 (exclusive)')];
+
+      const MU = 100, SIGMA_TRUE = 15, N = 400;
+      const sigmaNoise = SIGMA_TRUE * Math.sqrt(1 / r - 1);
+
+      const subjects = [];
+      for (let i = 0; i < N; i++) {
+        const T = MU + SIGMA_TRUE * randNormal();
+        const test1 = T + sigmaNoise * randNormal();
+        const test2 = T + sigmaNoise * randNormal();
+        subjects.push({ test1, test2 });
+      }
+      const sorted = subjects.slice().sort((a, b) => direction === 'top' ? b.test1 - a.test1 : a.test1 - b.test1);
+      const count = Math.max(5, Math.round(N * pct / 100));
+      const selectedSet = new Set(sorted.slice(0, count));
+      subjects.forEach(s => { s.selected = selectedSet.has(s); });
+      const avgT1 = sorted.slice(0, count).reduce((s, x) => s + x.test1, 0) / count;
+      const avgT2 = sorted.slice(0, count).reduce((s, x) => s + x.test2, 0) / count;
+
+      const t1Gap = avgT1 - MU;
+      const t2Gap = avgT2 - MU;
+      const regressedPct = t1Gap !== 0 ? (1 - t2Gap / t1Gap) * 100 : 0;
+      const f = (v, dp = 1) => v.toFixed(dp);
+      const groupLabel = direction === 'top' ? 'highest' : 'lowest';
+
+      return {
+        title: 'Regression to the Mean Simulator',
+        subtitle: 'Select the most extreme scorers on Test 1 — watch their Test 2 average drift back toward the population',
+        chartSvg: regressionToMeanSVG(subjects, avgT1, avgT2),
+        legend: [
+          { color: '#B7BBCB', label: 'Everyone else' },
+          { color: '#E07B2C', label: 'Selected extreme group' },
+          { color: '#4E6EDB', label: 'Group averages (Test 1 vs Test 2)' },
+        ],
+        stats: [
+          { label: 'Reliability (r)',   value: f(r, 2) },
+          { label: 'Group Size',        value: `${count} / ${N}` },
+          { label: 'Avg Test 1',        value: f(avgT1) },
+          { label: 'Avg Test 2',        value: f(avgT2) },
+          { label: 'Drift Toward μ',    value: `${f(regressedPct, 0)}%` },
+        ],
+        footnote: `This ${count}-person group was selected purely for having the ${groupLabel} Test 1 scores — nothing about them actually changed before Test 2. Yet their average moved from ${f(avgT1)} on Test 1 to ${f(avgT2)} on Test 2, about ${f(Math.abs(regressedPct), 0)}% of the way back toward the population mean (${MU}). At reliability r = ${f(r, 2)}, that drift is exactly what chance predicts — the same reason "regression to the mean" can look like a real effect in a before/after study with no control group, especially one that enrolled people specifically because their first measurement was extreme.`,
+      };
+    }
+  },
+
   /* ── 37. CONFIDENCE INTERVAL FOR A MEAN ────────────────────────────────
      t-based CI for a single sample mean (σ unknown, estimated by the
      sample SD): x̄ ± t_{α/2,df}·SE, at any confidence level.          */
@@ -12386,6 +12559,42 @@ function randNormal() {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
+// Bins a value array into equal-width buckets over [min, max] — shared
+// by the CLT Simulator's population and sample-means histograms.
+function histogramCounts(values, min, max, bins) {
+  const counts = new Array(bins).fill(0);
+  const w = (max - min) / bins;
+  values.forEach(v => {
+    const idx = Math.min(bins - 1, Math.max(0, Math.floor((v - min) / w)));
+    counts[idx]++;
+  });
+  return { counts, w, min, max };
+}
+
+function normalPdf(x, mean, sd) {
+  return Math.exp(-0.5 * Math.pow((x - mean) / sd, 2)) / (sd * Math.sqrt(2 * Math.PI));
+}
+
+// Population "shapes" for the Central Limit Theorem Simulator — each
+// is deliberately far from normal (or, for 'normal', a control case)
+// so the sample-means histogram turning bell-shaped as n grows is
+// visibly not a property of the population itself.
+const CLT_SHAPES = {
+  exponential: { mean: 10, sd: 10, domain: [0, 55], label: 'Skewed (exponential-like)' },
+  uniform:     { mean: 10, sd: Math.sqrt((20 * 20) / 12), domain: [0, 20], label: 'Uniform (flat)' },
+  bimodal:     { mean: 10, sd: Math.sqrt(0.5 * (1.5 * 1.5 + 25) + 0.5 * (1.5 * 1.5 + 25)), domain: [-2, 22], label: 'Bimodal (two humps)' },
+  normal:      { mean: 10, sd: 4, domain: [-6, 26], label: 'Already normal (for comparison)' },
+};
+
+function cltPopulationDraw(shapeKey) {
+  switch (shapeKey) {
+    case 'uniform':  return () => Math.random() * 20;
+    case 'bimodal':  return () => (Math.random() < 0.5 ? 5 : 15) + 1.5 * randNormal();
+    case 'normal':   return () => 10 + 4 * randNormal();
+    default:         return () => -Math.log(1 - Math.random()) * 10; // exponential
+  }
+}
+
 // Log-spaced integer checkpoints from 1 to N (deduped, ascending) at
 // which to record the running proportion — plotting every one of up
 // to 1,000,000 individual tosses would be neither renderable nor
@@ -12505,6 +12714,113 @@ function ciCoverageSVG(trials, xMin, xMax, muTrue) {
   ${rows}
   ${gridX}
   <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 2}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">sample mean (measurement scale)</text>
+</svg>`;
+}
+
+// Two stacked panels: the raw population (fixed domain per shape,
+// however non-normal) on top, and the growing histogram of K sample
+// means of size n underneath, with a normal curve overlaid using the
+// sample-means' own observed mean/SD — the Central Limit Theorem made
+// visible as the bottom panel's shape, not just asserted in prose.
+function cltSVG(popSample, meansSample, cfg, n, K) {
+  const W = 640;
+  const P1H = 74, GAP = 34, P2H = 168;
+  const PL = 46, PR = 16;
+  const H = P1H + GAP + P2H + 30;
+  const plotW = W - PL - PR;
+
+  const popHist = histogramCounts(popSample, cfg.domain[0], cfg.domain[1], 40);
+  const popMaxCount = Math.max(...popHist.counts);
+  const p1Top = 14, p1Bottom = p1Top + P1H;
+  const toX1 = v => PL + ((v - cfg.domain[0]) / (cfg.domain[1] - cfg.domain[0])) * plotW;
+  const popBars = popHist.counts.map((c, i) => {
+    const x0 = toX1(popHist.min + i * popHist.w), x1 = toX1(popHist.min + (i + 1) * popHist.w);
+    const barH = popMaxCount ? (c / popMaxCount) * P1H : 0;
+    return `<rect x="${x0.toFixed(1)}" y="${(p1Bottom - barH).toFixed(1)}" width="${Math.max(0.5, x1 - x0 - 0.5).toFixed(1)}" height="${barH.toFixed(1)}" fill="#8985AE" opacity=".65"/>`;
+  }).join('');
+
+  const mMin = Math.min(...meansSample), mMax = Math.max(...meansSample);
+  const mPad = Math.max((mMax - mMin) * 0.08, 0.3);
+  const domain2 = [mMin - mPad, mMax + mPad];
+  const p2Top = p1Bottom + GAP, p2Bottom = p2Top + P2H;
+  const toX2 = v => PL + ((v - domain2[0]) / (domain2[1] - domain2[0])) * plotW;
+  const meansHist = histogramCounts(meansSample, domain2[0], domain2[1], 36);
+  const meansMaxCount = Math.max(...meansHist.counts);
+  const meanBars = meansHist.counts.map((c, i) => {
+    const x0 = toX2(meansHist.min + i * meansHist.w), x1 = toX2(meansHist.min + (i + 1) * meansHist.w);
+    const barH = meansMaxCount ? (c / meansMaxCount) * P2H : 0;
+    return `<rect x="${x0.toFixed(1)}" y="${(p2Bottom - barH).toFixed(1)}" width="${Math.max(0.5, x1 - x0 - 0.5).toFixed(1)}" height="${barH.toFixed(1)}" fill="#4E6EDB" opacity=".78"/>`;
+  }).join('');
+
+  const obsMean = meansSample.reduce((s, v) => s + v, 0) / meansSample.length;
+  const obsSD = Math.sqrt(meansSample.reduce((s, v) => s + (v - obsMean) * (v - obsMean), 0) / (meansSample.length - 1));
+  const peakDensity = normalPdf(obsMean, obsMean, obsSD);
+  const curvePts = Array.from({ length: 101 }, (_, i) => {
+    const x = domain2[0] + (i / 100) * (domain2[1] - domain2[0]);
+    const y = p2Bottom - (normalPdf(x, obsMean, obsSD) / peakDensity) * P2H;
+    return `${toX2(x).toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const muX1 = toX1(cfg.mean).toFixed(1);
+  const muX2 = toX2(cfg.mean).toFixed(1);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Population shape versus the distribution of ${K} sample means of size n=${n}">
+  <text x="${PL}" y="8" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">POPULATION (one draw at a time)</text>
+  ${popBars}
+  <line x1="${muX1}" y1="${p1Top}" x2="${muX1}" y2="${p1Bottom}" stroke="#7B8099" stroke-width="1" stroke-dasharray="2,2"/>
+  <line x1="${PL}" y1="${p1Bottom}" x2="${W - PR}" y2="${p1Bottom}" stroke="#DDE3F0" stroke-width="1"/>
+  <text x="${PL}" y="${p2Top - 10}" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">DISTRIBUTION OF SAMPLE MEANS (n=${n}, K=${K})</text>
+  ${meanBars}
+  <polyline points="${curvePts}" fill="none" stroke="#E07B2C" stroke-width="1.8"/>
+  <line x1="${muX2}" y1="${p2Top}" x2="${muX2}" y2="${p2Bottom}" stroke="#7B8099" stroke-width="1" stroke-dasharray="2,2"/>
+  <line x1="${PL}" y1="${p2Bottom}" x2="${W - PR}" y2="${p2Bottom}" stroke="#DDE3F0" stroke-width="1"/>
+</svg>`;
+}
+
+// Test1-vs-Test2 scatter with the selected extreme group highlighted
+// and dashed reference lines at that group's own Test1/Test2 averages
+// — the diagonal shows where "no change" would fall, and the gap
+// between the two dashed lines is regression to the mean made visible
+// rather than only computed as a number.
+function regressionToMeanSVG(subjects, avgT1, avgT2) {
+  const W = 640, H = 380;
+  const PL = 50, PR = 16, PT = 16, PB = 40;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+
+  const allVals = subjects.flatMap(s => [s.test1, s.test2]);
+  const vMin = Math.min(...allVals), vMax = Math.max(...allVals);
+  const pad = (vMax - vMin) * 0.06;
+  const domain = [vMin - pad, vMax + pad];
+
+  const toX = v => PL + ((v - domain[0]) / (domain[1] - domain[0])) * plotW;
+  const toY = v => (PT + plotH) - ((v - domain[0]) / (domain[1] - domain[0])) * plotH;
+
+  const diag = `M${toX(domain[0]).toFixed(1)},${toY(domain[0]).toFixed(1)} L${toX(domain[1]).toFixed(1)},${toY(domain[1]).toFixed(1)}`;
+
+  const dots = subjects.map(s => {
+    const color = s.selected ? '#E07B2C' : '#B7BBCB';
+    const r = s.selected ? 2.6 : 2;
+    const op = s.selected ? 0.9 : 0.55;
+    return `<circle cx="${toX(s.test1).toFixed(1)}" cy="${toY(s.test2).toFixed(1)}" r="${r}" fill="${color}" opacity="${op}"/>`;
+  }).join('');
+
+  const gridVals = Array.from({ length: 6 }, (_, g) => domain[0] + g * (domain[1] - domain[0]) / 5);
+  const gridX = gridVals.map(v => `<text x="${toX(v).toFixed(1)}" y="${H - PB + 16}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${v.toFixed(0)}</text>`).join('');
+  const gridY = gridVals.map(v => `<text x="${PL - 8}" y="${(toY(v) + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${v.toFixed(0)}</text>`).join('');
+
+  const f = (v, dp = 1) => v.toFixed(dp);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Test 1 vs Test 2 scatter with selected extreme group highlighted, average Test1=${f(avgT1)}, average Test2=${f(avgT2)}">
+  <path d="${diag}" stroke="#DDE3F0" stroke-width="1.4" fill="none"/>
+  ${dots}
+  <line x1="${toX(avgT1).toFixed(1)}" y1="${PT}" x2="${toX(avgT1).toFixed(1)}" y2="${PT + plotH}" stroke="#4E6EDB" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <line x1="${PL}" y1="${toY(avgT2).toFixed(1)}" x2="${W - PR}" y2="${toY(avgT2).toFixed(1)}" stroke="#4E6EDB" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <text x="${(toX(avgT1) + 5).toFixed(1)}" y="${PT + 10}" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="700" fill="#4E6EDB">avg Test1=${f(avgT1)}</text>
+  <text x="${W - PR - 4}" y="${(toY(avgT2) - 5).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="700" fill="#4E6EDB">avg Test2=${f(avgT2)}</text>
+  ${gridX}
+  ${gridY}
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 2}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Test 1 (baseline)</text>
+  <text x="12" y="${(PT + plotH / 2).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099" transform="rotate(-90 12 ${(PT + plotH / 2).toFixed(1)})">Test 2 (retest)</text>
 </svg>`;
 }
 
@@ -14898,6 +15214,8 @@ const CALCULATOR_INDEX = [
   { id: 'inverse-probability',  name: 'Inverse Probability',             category: 'Probability & Distributions', description: 'Finds the smallest count k such that the binomial cumulative probability P(X ≤ k) meets or exceeds a target probability, given n and p (the BINOM.INV equivalent).',  status: 'available' },
   { id: 'law-of-large-numbers', name: 'Law of Large Numbers — Coin-Flip Simulator', category: 'Probability & Distributions', description: 'Simulates repeated coin flips and plots the running proportion of heads against the number of tosses, showing convergence to the true probability as the sample size grows.', status: 'available' },
   { id: 'ci-coverage-simulator', name: 'Confidence Interval Coverage Simulator', category: 'Probability & Distributions', description: 'Draws many independent samples and their confidence intervals from a population with a known true mean, showing what fraction of those intervals actually capture it.', status: 'available' },
+  { id: 'clt-simulator', name: 'Central Limit Theorem Simulator', category: 'Probability & Distributions', description: "Draws repeated samples from a chosen non-normal population and plots the growing distribution of their sample means, showing it turn approximately normal as sample size grows.", status: 'available' },
+  { id: 'regression-to-mean-simulator', name: 'Regression to the Mean Simulator', category: 'Probability & Distributions', description: 'Simulates two independent measurements of the same trait and shows how a group selected for extreme first-measurement scores drifts back toward the population mean on remeasurement.', status: 'available' },
   { id: 'critical-value-t',     name: 'Critical Value & p-Value (t)',    category: 'Probability & Distributions', description: 'Returns the critical t-value, two-tailed p-value, and implied standard error for a given t statistic and degrees of freedom.', status: 'available' },
   { id: 'critical-value-z',     name: 'Critical Value & p-Value (z)',    category: 'Probability & Distributions', description: 'Returns the critical z-value, two-tailed p-value, and implied standard error for a given z statistic.', status: 'available' },
 
@@ -15819,6 +16137,8 @@ const SEARCH_KEYWORDS = {
   'inverse-probability':  ['reverse lookup', 'binom inv', 'smallest count for a target probability', 'inverse binomial'],
   'law-of-large-numbers': ['law of large numbers', 'coin flip simulator', 'coin toss simulation', 'sample size illustration', 'stopping a trial early', 'random walk simulation', 'unfair coin', 'monte carlo coin flip'],
   'ci-coverage-simulator': ['confidence interval coverage', 'ci coverage simulation', 'what does 95% confidence mean', 'repeated sampling simulation', 'monte carlo confidence interval', 'coverage probability'],
+  'clt-simulator': ['central limit theorem', 'clt simulation', 'sampling distribution of the mean', 'why is the sampling distribution normal', 'non-normal population simulation', 'skewed population sampling'],
+  'regression-to-mean-simulator': ['regression to the mean', 'regression to mean simulation', 'before after study pitfall', 'extreme scores retest', 'test-retest reliability simulation', 'why did the worst performers improve'],
   'critical-value-t':     ['t statistic to p-value', 'given a t value find p', 'critical t value'],
   'critical-value-z':     ['z statistic to p-value', 'given a z value find p', 'critical z value'],
 
@@ -16091,6 +16411,19 @@ const NOTATION = {
     { symbol: 'K', meaning: 'Number of independent samples (and CIs) drawn — the number of rows in the chart.' },
     { symbol: '\\bar{x}_k, s_k', meaning: "Sample mean and sample SD of trial k, used to build that trial's own CI." },
     { symbol: 't_{\\alpha/2,\\,n-1}', meaning: 'Critical t-value at the chosen confidence level, with n−1 degrees of freedom.' },
+  ],
+  'clt-simulator': [
+    { symbol: '\\mu, \\sigma', meaning: 'True mean and SD of the population you chose — fixed regardless of n or K.' },
+    { symbol: 'n', meaning: 'Sample size averaged together to get one sample mean — the "batch size" of each draw.' },
+    { symbol: 'K', meaning: 'Number of independent sample means collected — how many bars fill in the bottom histogram.' },
+    { symbol: '\\bar{x}', meaning: "A single sample's mean — one data point in the bottom histogram." },
+    { symbol: 'SE', meaning: "Standard error — the sampling distribution's own SD, which shrinks as n grows." },
+  ],
+  'regression-to-mean-simulator': [
+    { symbol: 'T', meaning: "Each person's stable \"true\" value — doesn't change between Test 1 and Test 2." },
+    { symbol: 'e_1, e_2', meaning: 'Independent random measurement noise added at Test 1 and Test 2 — the reason repeat measurements aren\'t identical.' },
+    { symbol: 'r', meaning: 'Test-retest reliability — the correlation between Test 1 and Test 2. Lower r means more noise relative to true differences.' },
+    { symbol: '\\mu', meaning: "The population's true average — what any extreme group's second measurement drifts back toward." },
   ],
   'critical-value-t': [
     { symbol: 'p', meaning: 'The two-tailed p-value — the probability of a t statistic at least as extreme as the one entered.' },

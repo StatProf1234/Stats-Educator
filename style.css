@@ -2137,6 +2137,25 @@ body {
   text-decoration: overline;
 }
 
+/* p̂-style "hat" notation (letter + combining circumflex, U+0302) has
+   the same unreliable-rendering problem as x̄'s combining macron above
+   — in some fonts/contexts (e.g. the monospace sidebar hint text) the
+   mark renders as its own glyph to the left of the letter instead of
+   centered above it. Same fix as .over-bar: draw the mark with CSS
+   instead of trusting the font to compose the combining character. */
+.over-hat {
+  position: relative;
+}
+.over-hat::after {
+  content: '^';
+  position: absolute;
+  top: -.62em;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: .75em;
+  line-height: 1;
+}
+
 .result-value {
   font-family: var(--font-mono);
   font-size: 15px;
