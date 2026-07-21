@@ -10664,6 +10664,7 @@ const CALCULATORS = [
       // of comparisons this tool can't actually reach.
       const fwerMax = 15;
       const uncorrectedFwer = 1 - Math.pow(1 - alpha, pairs.length);
+      rows.push({ label: 'Uncorrected Family-Wise Error Rate', value: `${f(uncorrectedFwer * 100, 1)}%`, ci: null, isRatio: false, isText: true, highlight: true });
       rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(alpha, pairs.length, fwerMax) });
       rows.push({
         label: 'Why the Correction Matters', isText: true, ci: null, isRatio: false,
@@ -12097,29 +12098,31 @@ function holmSidakAdjust(pValues) {
 }
 
 // Family-wise error rate (uncorrected) vs. number of comparisons —
-// FWER(k) = 1-(1-alpha)^k climbs quickly even at modest k, which is
+// FWER(m) = 1-(1-alpha)^m climbs quickly even at a modest m, which is
 // the entire reason a step-down correction like Holm-Šídák exists.
 // Marks this analysis's own actual number of pairwise comparisons (m)
 // on that rising curve, alongside the flat line at the nominal alpha
 // that Holm-Šídák holds the *true* family-wise rate at regardless of
 // m — same visual language as the site's other trade-off charts
 // (distinct marker shapes, legend in the margin, value callouts
-// anchored to their own marker).
+// anchored to their own marker). Uses m throughout (not k) to match
+// this calculator's own notation, where k is reserved for the number
+// of groups (see the "Groups (k) / Comparisons (m)" result row).
 function familywiseErrorSVG(alpha, m, mMax) {
   const W = 560, H = 200;
   const PL = 36, PR = 14, PT = 28, PB = 28;
   const plotW = W - PL - PR, plotH = H - PT - PB;
   const baseline = PT + plotH;
 
-  const toX = k => PL + ((k - 1) / (mMax - 1)) * plotW;
+  const toX = mVal => PL + ((mVal - 1) / (mMax - 1)) * plotW;
   const toY = v => baseline - v * plotH;
 
-  const fwerAt = k => 1 - Math.pow(1 - alpha, k);
+  const fwerAt = mVal => 1 - Math.pow(1 - alpha, mVal);
 
   const steps = 100;
   const fwerPts = Array.from({ length: steps + 1 }, (_, i) => {
-    const k = 1 + (i / steps) * (mMax - 1);
-    return `${toX(k).toFixed(1)},${toY(fwerAt(k)).toFixed(1)}`;
+    const mVal = 1 + (i / steps) * (mMax - 1);
+    return `${toX(mVal).toFixed(1)},${toY(fwerAt(mVal)).toFixed(1)}`;
   }).join(' ');
 
   const gridY = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(v => {
@@ -12128,8 +12131,8 @@ function familywiseErrorSVG(alpha, m, mMax) {
       <text x="${PL - 6}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${v.toFixed(1)}</text>`;
   }).join('');
 
-  const kTicks = Array.from({ length: 6 }, (_, i) => Math.round(1 + (i / 5) * (mMax - 1)));
-  const gridX = kTicks.map(k => `<text x="${toX(k).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${k}</text>`).join('');
+  const mTicks = Array.from({ length: 6 }, (_, i) => Math.round(1 + (i / 5) * (mMax - 1)));
+  const gridX = mTicks.map(mVal => `<text x="${toX(mVal).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${mVal}</text>`).join('');
 
   // Sits at y < PT, strictly above the plot rectangle — see the same
   // fix in ppvNpvPrevalenceCurveSVG for why this matters.
@@ -12165,7 +12168,7 @@ function familywiseErrorSVG(alpha, m, mMax) {
   <line x1="${PL}" y1="${toY(alpha).toFixed(1)}" x2="${W - PR}" y2="${toY(alpha).toFixed(1)}" stroke="#E07B2C" stroke-width="2.2"/>
   ${legend}
   ${gridX}
-  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 1}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">number of comparisons (k)</text>
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 1}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">number of comparisons (m)</text>
   ${diamondMarker(mx, myFwer, '#4E6EDB')}
   ${circleMarker(mx, myAlpha, '#E07B2C')}
   ${callouts}
