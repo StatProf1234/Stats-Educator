@@ -3927,27 +3927,30 @@ const CALCULATORS = [
       ] },
       { id: 'n', type: 'slider', label: 'Sample Size (n)', default: 2, min: 1, max: 50, step: 1,
         format: v => String(Math.round(v)) },
-      { id: 'K', type: 'slider', label: 'Samples Drawn (K)', default: 1000, min: 100, max: 3000, step: 50,
+      { id: 'K', type: 'slider', label: 'Samples Drawn (K)', default: 1000, min: 100, max: 20000, step: 100,
         format: v => Math.round(v).toLocaleString('en-US') },
-      { id: 'redraw', type: 'button', label: '🔄 Redraw Samples' },
+      { id: 'sigmaScale', type: 'slider', label: 'Population SD (σ scale)', default: 1, min: 0.25, max: 3, step: 0.05,
+        format: v => v.toFixed(2) + '×' },
+      { id: 'redraw', type: 'button', label: '🔄 Redraw Samples', fullRow: true },
     ],
 
-    example({ shape, n, K }) {
+    example({ shape, n, K, sigmaScale }) {
       n = Math.round(n); K = Math.round(K);
-      if (!isFinite(n) || n < 1 || !isFinite(K) || K < 1)
+      if (!isFinite(n) || n < 1 || !isFinite(K) || K < 1 || !isFinite(sigmaScale) || sigmaScale <= 0)
         return 'Choose a population shape, sample size, and number of samples to see a worked medical example here.';
-      const cfg = CLT_SHAPES[shape] || CLT_SHAPES.exponential;
+      const cfg = cltShapeConfig(shape, sigmaScale);
       const se = cfg.sd / Math.sqrt(n);
       return `A biomarker in some population is ${cfg.label.toLowerCase()}, not normally distributed at all — but averaging n = ${n} patients at a time and repeating that ${K.toLocaleString('en-US')} times produces a distribution of those averages that already looks close to normal, centered at the true mean (${cfg.mean.toFixed(1)}) with a spread of about ${se.toFixed(2)}. This is why t-tests and other methods built on a normal sampling distribution can still be valid even when the raw biomarker itself is skewed, as long as the sample size isn't tiny.`;
     },
 
-    calculate({ shape, n, K }) {
+    calculate({ shape, n, K, sigmaScale }) {
       n = Math.round(n); K = Math.round(K);
       if (!isFinite(n) || n < 1) return [err('Sample Size must be at least 1')];
       if (!isFinite(K) || K < 1) return [err('Samples Drawn must be at least 1')];
+      if (!isFinite(sigmaScale) || sigmaScale <= 0) return [err('Population SD scale must be greater than 0')];
 
-      const cfg = CLT_SHAPES[shape] || CLT_SHAPES.exponential;
-      const draw = cltPopulationDraw(shape);
+      const cfg = cltShapeConfig(shape, sigmaScale);
+      const draw = cfg.draw;
 
       const popSample = Array.from({ length: 4000 }, draw);
       const meansSample = [];
@@ -3960,6 +3963,7 @@ const CALCULATORS = [
       const obsMean = meansSample.reduce((s, v) => s + v, 0) / meansSample.length;
       const obsSD = Math.sqrt(meansSample.reduce((s, v) => s + (v - obsMean) * (v - obsMean), 0) / (meansSample.length - 1));
       const theoreticalSE = cfg.sd / Math.sqrt(n);
+      const bins = cltAutoBinCount(K);
       const f = (v, dp = 2) => v.toFixed(dp);
 
       return {
@@ -3969,6 +3973,7 @@ const CALCULATORS = [
         legend: [
           { color: '#8985AE', label: 'Population (one value at a time)' },
           { color: '#4E6EDB', label: 'Sample means (n at a time, K samples)' },
+          { color: '#2E8E5A', label: 'Actual shape of the sample means (smoothed)' },
           { color: '#E07B2C', label: 'Normal curve, same mean & SE' },
         ],
         stats: [
@@ -3977,7 +3982,7 @@ const CALCULATORS = [
           { label: 'Theoretical SE (σ/√n)',    value: f(theoreticalSE) },
           { label: 'Observed SD of Means',     value: f(obsSD) },
         ],
-        footnote: `The population above is ${cfg.label.toLowerCase()} — not remotely bell-shaped when n=1 (each "sample mean" is just one raw value). But average ${n} values at a time, repeat that ${K.toLocaleString('en-US')} times, and the bottom histogram already looks close to the normal curve overlaid on it — centered at the same population mean (${f(cfg.mean, 1)}), with a spread (SE = ${f(theoreticalSE)}) that shrinks as n grows. This is the Central Limit Theorem: it holds regardless of the population's own shape.`,
+        footnote: `The population above is ${cfg.label.toLowerCase()} (σ scaled ${f(sigmaScale)}×, so population SD = ${f(cfg.sd, 1)}) — not remotely bell-shaped when n=1 (each "sample mean" is just one raw value). But average ${n} values at a time, repeat that ${K.toLocaleString('en-US')} times, and the bottom histogram (now drawn with ${bins} bins — more samples means finer, smoother bins automatically) already looks close to both curves overlaid on it: the dashed amber curve is a normal curve fit to the observed mean/SE, while the solid green curve is the sample means' own actual smoothed shape. At small n the green curve can still show a trace of the population's original skew; increase n and watch it settle onto the dashed amber curve — that convergence in shape, not just spread, is the Central Limit Theorem. Push K high enough and the blue histogram itself starts to look like a continuous curve, even before the two overlaid curves are considered.`,
       };
     }
   },
@@ -12576,24 +12581,62 @@ function normalPdf(x, mean, sd) {
   return Math.exp(-0.5 * Math.pow((x - mean) / sd, 2)) / (sd * Math.sqrt(2 * Math.PI));
 }
 
-// Population "shapes" for the Central Limit Theorem Simulator — each
-// is deliberately far from normal (or, for 'normal', a control case)
-// so the sample-means histogram turning bell-shaped as n grows is
-// visibly not a property of the population itself.
-const CLT_SHAPES = {
-  exponential: { mean: 10, sd: 10, domain: [0, 55], label: 'Skewed (exponential-like)' },
-  uniform:     { mean: 10, sd: Math.sqrt((20 * 20) / 12), domain: [0, 20], label: 'Uniform (flat)' },
-  bimodal:     { mean: 10, sd: Math.sqrt(0.5 * (1.5 * 1.5 + 25) + 0.5 * (1.5 * 1.5 + 25)), domain: [-2, 22], label: 'Bimodal (two humps)' },
-  normal:      { mean: 10, sd: 4, domain: [-6, 26], label: 'Already normal (for comparison)' },
+// Population "shapes" for the Central Limit Theorem Simulator, at
+// their base spread (sigma scale = 1×) — each is deliberately far from
+// normal (or, for 'normal', a control case) so the sample-means
+// histogram turning bell-shaped as n grows is visibly not a property
+// of the population itself.
+const CLT_SHAPE_BASE = {
+  exponential: { mean: 10, sd: 10, domain: [0, 55], label: 'Skewed (exponential-like)',
+    base: () => -Math.log(1 - Math.random()) * 10 },
+  uniform:     { mean: 10, sd: Math.sqrt((20 * 20) / 12), domain: [0, 20], label: 'Uniform (flat)',
+    base: () => Math.random() * 20 },
+  bimodal:     { mean: 10, sd: Math.sqrt(0.5 * (1.5 * 1.5 + 25) + 0.5 * (1.5 * 1.5 + 25)), domain: [-2, 22], label: 'Bimodal (two humps)',
+    base: () => (Math.random() < 0.5 ? 5 : 15) + 1.5 * randNormal() },
+  normal:      { mean: 10, sd: 4, domain: [-6, 26], label: 'Already normal (for comparison)',
+    base: () => 10 + 4 * randNormal() },
 };
 
-function cltPopulationDraw(shapeKey) {
-  switch (shapeKey) {
-    case 'uniform':  return () => Math.random() * 20;
-    case 'bimodal':  return () => (Math.random() < 0.5 ? 5 : 15) + 1.5 * randNormal();
-    case 'normal':   return () => 10 + 4 * randNormal();
-    default:         return () => -Math.log(1 - Math.random()) * 10; // exponential
-  }
+// Recenters and rescales a base shape around its own mean by a
+// sigma-scale factor, so the "Population SD (σ)" slider changes
+// spread without moving the population mean.
+function cltShapeConfig(shapeKey, sigmaScale) {
+  const b = CLT_SHAPE_BASE[shapeKey] || CLT_SHAPE_BASE.exponential;
+  const mean = b.mean;
+  const draw = () => mean + (b.base() - mean) * sigmaScale;
+  const domain = [mean - (mean - b.domain[0]) * sigmaScale, mean + (b.domain[1] - mean) * sigmaScale];
+  return { draw, mean, sd: b.sd * sigmaScale, domain, label: b.label };
+}
+
+// More samples drawn -> automatically narrower/more bins, so the
+// histogram itself gets progressively smoother as K grows, rather
+// than exposing "bin width" as its own control (bin count and K are
+// coupled: narrow bins with too few samples just look noisy, not
+// smooth). Clamped so it never gets absurdly fine (sparse, jagged) or
+// absurdly coarse (blocky) regardless of K — with a high enough K,
+// this is what lets the histogram itself start to look continuous.
+function cltAutoBinCount(K) {
+  return Math.max(12, Math.min(180, Math.round(Math.sqrt(K))));
+}
+
+// Gaussian kernel density estimate of the sample means' own actual
+// shape — distinct from the fitted normal curve, which uses the
+// observed mean/SD but assumes normality. At small n with a skewed
+// population this can visibly depart from the normal curve; as n
+// grows the two converge, which is the Central Limit Theorem
+// happening to the *shape*, not just the spread. Bandwidth via
+// Silverman's rule of thumb.
+function gaussianKDE(data, evalXs, sd) {
+  const n = data.length;
+  const bandwidth = 1.06 * sd * Math.pow(n, -0.2);
+  return evalXs.map(x => {
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const u = (x - data[i]) / bandwidth;
+      sum += Math.exp(-0.5 * u * u);
+    }
+    return sum / (n * bandwidth * Math.sqrt(2 * Math.PI));
+  });
 }
 
 // Log-spaced integer checkpoints from 1 to N (deduped, ascending) at
@@ -12720,9 +12763,12 @@ function ciCoverageSVG(trials, xMin, xMax, muTrue) {
 
 // Two stacked panels: the raw population (fixed domain per shape,
 // however non-normal) on top, and the growing histogram of K sample
-// means of size n underneath, with a normal curve overlaid using the
-// sample-means' own observed mean/SD — the Central Limit Theorem made
-// visible as the bottom panel's shape, not just asserted in prose.
+// means of size n underneath, with two overlaid curves — a normal
+// curve fit to the observed mean/SD, and a Gaussian KDE of the sample
+// means' own actual shape — the Central Limit Theorem made visible in
+// both the histogram's growing smoothness (bin count auto-scales with
+// K) and the two curves converging as n grows, not just asserted in
+// prose.
 function cltSVG(popSample, meansSample, cfg, n, K) {
   const W = 640;
   const P1H = 74, GAP = 34, P2H = 168;
@@ -12745,7 +12791,8 @@ function cltSVG(popSample, meansSample, cfg, n, K) {
   const domain2 = [mMin - mPad, mMax + mPad];
   const p2Top = p1Bottom + GAP, p2Bottom = p2Top + P2H;
   const toX2 = v => PL + ((v - domain2[0]) / (domain2[1] - domain2[0])) * plotW;
-  const meansHist = histogramCounts(meansSample, domain2[0], domain2[1], 36);
+  const meansBins = cltAutoBinCount(meansSample.length);
+  const meansHist = histogramCounts(meansSample, domain2[0], domain2[1], meansBins);
   const meansMaxCount = Math.max(...meansHist.counts);
   const meanBars = meansHist.counts.map((c, i) => {
     const x0 = toX2(meansHist.min + i * meansHist.w), x1 = toX2(meansHist.min + (i + 1) * meansHist.w);
@@ -12756,9 +12803,19 @@ function cltSVG(popSample, meansSample, cfg, n, K) {
   const obsMean = meansSample.reduce((s, v) => s + v, 0) / meansSample.length;
   const obsSD = Math.sqrt(meansSample.reduce((s, v) => s + (v - obsMean) * (v - obsMean), 0) / (meansSample.length - 1));
   const peakDensity = normalPdf(obsMean, obsMean, obsSD);
-  const curvePts = Array.from({ length: 101 }, (_, i) => {
-    const x = domain2[0] + (i / 100) * (domain2[1] - domain2[0]);
+  const evalXs = Array.from({ length: 101 }, (_, i) => domain2[0] + (i / 100) * (domain2[1] - domain2[0]));
+  const curvePts = evalXs.map(x => {
     const y = p2Bottom - (normalPdf(x, obsMean, obsSD) / peakDensity) * P2H;
+    return `${toX2(x).toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  // Actual (KDE) shape of the sample means — normalized to its own
+  // peak, same as the normal curve above, so the two are compared on
+  // shape rather than absolute density.
+  const kdeVals = gaussianKDE(meansSample, evalXs, obsSD);
+  const kdePeak = Math.max(...kdeVals);
+  const kdePts = evalXs.map((x, i) => {
+    const y = p2Bottom - (kdeVals[i] / kdePeak) * P2H;
     return `${toX2(x).toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
 
@@ -12770,9 +12827,10 @@ function cltSVG(popSample, meansSample, cfg, n, K) {
   ${popBars}
   <line x1="${muX1}" y1="${p1Top}" x2="${muX1}" y2="${p1Bottom}" stroke="#7B8099" stroke-width="1" stroke-dasharray="2,2"/>
   <line x1="${PL}" y1="${p1Bottom}" x2="${W - PR}" y2="${p1Bottom}" stroke="#DDE3F0" stroke-width="1"/>
-  <text x="${PL}" y="${p2Top - 10}" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">DISTRIBUTION OF SAMPLE MEANS (n=${n}, K=${K})</text>
+  <text x="${PL}" y="${p2Top - 10}" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">DISTRIBUTION OF SAMPLE MEANS (n=${n}, K=${K}, ${meansBins} bins)</text>
   ${meanBars}
-  <polyline points="${curvePts}" fill="none" stroke="#E07B2C" stroke-width="1.8"/>
+  <polyline points="${kdePts}" fill="none" stroke="#2E8E5A" stroke-width="1.8"/>
+  <polyline points="${curvePts}" fill="none" stroke="#E07B2C" stroke-width="1.8" stroke-dasharray="5,3"/>
   <line x1="${muX2}" y1="${p2Top}" x2="${muX2}" y2="${p2Bottom}" stroke="#7B8099" stroke-width="1" stroke-dasharray="2,2"/>
   <line x1="${PL}" y1="${p2Bottom}" x2="${W - PR}" y2="${p2Bottom}" stroke="#DDE3F0" stroke-width="1"/>
 </svg>`;
@@ -16415,9 +16473,9 @@ const NOTATION = {
     { symbol: 't_{\\alpha/2,\\,n-1}', meaning: 'Critical t-value at the chosen confidence level, with n−1 degrees of freedom.' },
   ],
   'clt-simulator': [
-    { symbol: '\\mu, \\sigma', meaning: 'True mean and SD of the population you chose — fixed regardless of n or K.' },
+    { symbol: '\\mu, \\sigma', meaning: 'True mean and SD of the population you chose — μ stays fixed, σ is scaled by the Population SD slider, both independent of n or K.' },
     { symbol: 'n', meaning: 'Sample size averaged together to get one sample mean — the "batch size" of each draw.' },
-    { symbol: 'K', meaning: 'Number of independent sample means collected — how many bars fill in the bottom histogram.' },
+    { symbol: 'K', meaning: 'Number of independent sample means collected — more K means more, narrower bins in the bottom histogram.' },
     { symbol: '\\bar{x}', meaning: "A single sample's mean — one data point in the bottom histogram." },
     { symbol: 'SE', meaning: "Standard error — the sampling distribution's own SD, which shrinks as n grows." },
   ],
