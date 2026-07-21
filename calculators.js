@@ -4008,7 +4008,7 @@ const CALCULATORS = [
         { value: 'top',    label: 'Top scorers (highest Test 1)' },
         { value: 'bottom', label: 'Bottom scorers (lowest Test 1)' },
       ] },
-      { id: 'r',   type: 'slider', label: 'Test-Retest Reliability (r)', default: 0.6, min: 0.3, max: 0.95, step: 0.01,
+      { id: 'r',   type: 'slider', label: 'Test-to-Test Correlation (r)', default: 0.6, min: 0.3, max: 0.95, step: 0.01,
         format: v => v.toFixed(2) },
       { id: 'pct', type: 'slider', label: '% Selected as "Extreme"', default: 10, min: 5, max: 50, step: 1,
         format: v => Math.round(v) + '%' },
@@ -4017,13 +4017,13 @@ const CALCULATORS = [
 
     example({ direction, r, pct }) {
       if (!isFinite(r) || r <= 0 || r >= 1 || !isFinite(pct) || pct <= 0)
-        return 'Set a reliability and selection percentage to see a worked medical example here.';
+        return 'Set a test-to-test correlation and selection percentage to see a worked medical example here.';
       const groupWord = direction === 'top' ? 'highest' : 'lowest';
-      return `A clinic screens patients on a noisy lab value and flags the ${Math.round(pct)}% with the ${groupWord} initial reading for retesting a week later — even with no treatment in between, their retest average will drift back toward the population mean, more so the lower the test's reliability (r = ${r.toFixed(2)}). Mistaking that drift for a treatment effect is exactly why an uncontrolled before/after design can manufacture an "improvement" that a randomized comparison group would show never existed.`;
+      return `A clinic screens patients on a noisy lab value and flags the ${Math.round(pct)}% with the ${groupWord} initial reading for retesting a week later — even with no treatment in between, their retest average will drift back toward the population mean, more so the lower the test-to-test correlation (r = ${r.toFixed(2)}). Mistaking that drift for a treatment effect is exactly why an uncontrolled before/after design can manufacture an "improvement" that a randomized comparison group would show never existed.`;
     },
 
     calculate({ direction, r, pct }) {
-      if (!isFinite(r) || r <= 0 || r >= 1)   return [err('Test-Retest Reliability must be between 0 and 1 (exclusive)')];
+      if (!isFinite(r) || r <= 0 || r >= 1)   return [err('Test-to-Test Correlation must be between 0 and 1 (exclusive)')];
       if (!isFinite(pct) || pct <= 0 || pct >= 100) return [err('Selected Percentage must be between 0 and 100 (exclusive)')];
 
       const MU = 100, SIGMA_TRUE = 15, N = 400;
@@ -4059,13 +4059,13 @@ const CALCULATORS = [
           { color: '#4E6EDB', label: 'Group averages (Test 1 vs Test 2)' },
         ],
         stats: [
-          { label: 'Reliability (r)',   value: f(r, 2) },
+          { label: 'Correlation (r)',   value: f(r, 2) },
           { label: 'Group Size',        value: `${count} / ${N}` },
           { label: 'Avg Test 1',        value: f(avgT1) },
           { label: 'Avg Test 2',        value: f(avgT2) },
           { label: 'Drift Toward μ',    value: `${f(regressedPct, 0)}%` },
         ],
-        footnote: `This ${count}-person group was selected purely for having the ${groupLabel} Test 1 scores — nothing about them actually changed before Test 2. Yet their average moved from ${f(avgT1)} on Test 1 to ${f(avgT2)} on Test 2, about ${f(Math.abs(regressedPct), 0)}% of the way back toward the population mean (${MU}). At reliability r = ${f(r, 2)}, that drift is exactly what chance predicts — the same reason "regression to the mean" can look like a real effect in a before/after study with no control group, especially one that enrolled people specifically because their first measurement was extreme.`,
+        footnote: `This ${count}-person group was selected purely for having the ${groupLabel} Test 1 scores — nothing about them actually changed before Test 2. Yet their average moved from ${f(avgT1)} on Test 1 to ${f(avgT2)} on Test 2, about ${f(Math.abs(regressedPct), 0)}% of the way back toward the population mean (${MU}). At a test-to-test correlation of r = ${f(r, 2)}, that drift is exactly what chance predicts — the same reason "regression to the mean" can look like a real effect in a before/after study with no control group, especially one that enrolled people specifically because their first measurement was extreme.`,
       };
     }
   },
@@ -16422,7 +16422,7 @@ const NOTATION = {
   'regression-to-mean-simulator': [
     { symbol: 'T', meaning: "Each person's stable \"true\" value — doesn't change between Test 1 and Test 2." },
     { symbol: 'e_1, e_2', meaning: 'Independent random measurement noise added at Test 1 and Test 2 — the reason repeat measurements aren\'t identical.' },
-    { symbol: 'r', meaning: 'Test-retest reliability — the correlation between Test 1 and Test 2. Lower r means more noise relative to true differences.' },
+    { symbol: 'r', meaning: 'Test-to-test correlation between Test 1 and Test 2. Lower r means more noise relative to true differences.' },
     { symbol: '\\mu', meaning: "The population's true average — what any extreme group's second measurement drifts back toward." },
   ],
   'critical-value-t': [
