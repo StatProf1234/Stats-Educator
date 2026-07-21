@@ -790,17 +790,19 @@ function renderExplorerCalculator(calc) {
     // An action trigger (e.g. "re-flip" on the coin-flip simulator) —
     // clicking it just re-runs calculate() with the same slider values,
     // which is enough to show a fresh result whenever calculate() draws
-    // its own randomness.
+    // its own randomness. fullRow opts it onto its own centered row
+    // instead of squeezed into a shared row with sliders — useful when
+    // a sibling slider needs the extra width (see `wide` below).
     if (inp.type === 'button') {
       return `
-        <div class="explorer-control">
+        <div class="explorer-control${inp.fullRow ? ' explorer-control-select' : ''}">
           <label class="explorer-control-label">&nbsp;</label>
           <button type="button" class="reflip-btn" id="inp-${inp.id}" data-id="${inp.id}">${esc(inp.label)}</button>
         </div>`;
     }
     const display = inp.format ? inp.format(inp.default) : String(inp.default);
     return `
-      <div class="explorer-control">
+      <div class="explorer-control${inp.wide ? ' explorer-control-wide' : ''}">
         <label class="explorer-control-label" for="inp-${inp.id}">${esc(upperAscii(inp.label))}</label>
         <input class="input-slider explorer-slider" type="range" id="inp-${inp.id}" data-id="${inp.id}"
                min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">

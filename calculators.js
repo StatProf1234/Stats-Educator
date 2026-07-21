@@ -4001,6 +4001,7 @@ const CALCULATORS = [
     formulas: [
       { label: "Each Person's Two Measurements", latex: '\\text{Test}_1 = T + e_1, \\quad \\text{Test}_2 = T + e_2' },
       { label: 'Expected Regression to the Mean', latex: 'E[\\text{Test}_2 \\mid \\text{Test}_1] - \\mu = r\\,(\\text{Test}_1 - \\mu)' },
+      { label: "Observed Drift Toward μ (this simulation's selected group)", latex: '\\text{Drift} = \\left(1-\\dfrac{\\overline{\\text{Test}_2}-\\mu}{\\overline{\\text{Test}_1}-\\mu}\\right)\\times 100\\%' },
     ],
 
     inputs: [
@@ -4008,11 +4009,11 @@ const CALCULATORS = [
         { value: 'top',    label: 'Top scorers (highest Test 1)' },
         { value: 'bottom', label: 'Bottom scorers (lowest Test 1)' },
       ] },
-      { id: 'r',   type: 'slider', label: 'Test-to-Test Correlation (r)', default: 0.6, min: 0.3, max: 0.95, step: 0.01,
+      { id: 'r',   type: 'slider', label: 'Test-to-Test Correlation (r)', default: 0.6, min: 0.3, max: 0.95, step: 0.01, wide: true,
         format: v => v.toFixed(2) },
       { id: 'pct', type: 'slider', label: '% Selected as "Extreme"', default: 10, min: 5, max: 50, step: 1,
         format: v => Math.round(v) + '%' },
-      { id: 'redraw', type: 'button', label: '🔄 Redraw Sample' },
+      { id: 'redraw', type: 'button', label: '🔄 Redraw Sample', fullRow: true },
     ],
 
     example({ direction, r, pct }) {
@@ -16424,6 +16425,8 @@ const NOTATION = {
     { symbol: 'e_1, e_2', meaning: 'Independent random measurement noise added at Test 1 and Test 2 — the reason repeat measurements aren\'t identical.' },
     { symbol: 'r', meaning: 'Test-to-test correlation between Test 1 and Test 2. Lower r means more noise relative to true differences.' },
     { symbol: '\\mu', meaning: "The population's true average — what any extreme group's second measurement drifts back toward." },
+    { symbol: '\\overline{\\text{Test}_1}, \\overline{\\text{Test}_2}', meaning: "The selected group's own average Test 1 and average Test 2 scores." },
+    { symbol: '\\text{Drift}', meaning: "How far the selected group's average moved back toward μ from Test 1 to Test 2, as a percentage of its original gap from μ." },
   ],
   'critical-value-t': [
     { symbol: 'p', meaning: 'The two-tailed p-value — the probability of a t statistic at least as extreme as the one entered.' },

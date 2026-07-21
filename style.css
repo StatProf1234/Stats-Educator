@@ -1457,13 +1457,32 @@ body {
   align-items: center;
   gap: 8px;
   text-align: center;
+  /* Without this, a grid item's default auto min-width falls back to
+     its content's min-content size — so a nowrap button label (e.g.
+     "🔄 Redraw Sample") can force its own column wider than the
+     minmax(170px, 1fr) track it's supposed to share evenly with its
+     neighbors, squeezing a longer slider label in the next column
+     into an extra line of wrap. */
+  min-width: 0;
 }
 
+/* Full-width, centered row — always used for select controls, and
+   opted into by a button control via inp.fullRow (see
+   renderExplorerCalculator in app.js) when a sibling slider needs the
+   width that button would otherwise take up in a shared row. */
 .explorer-control-select {
   grid-column: 1 / -1;
   max-width: 440px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* Opt-in via inp.wide on a slider control — doubles its share of the
+   row (at the cost of a sibling control, which should move to its own
+   row via fullRow) for a label too long to fit in one of three equal
+   columns, e.g. "Test-to-Test Correlation (r)". */
+.explorer-control-wide {
+  grid-column: span 2;
 }
 
 /* min-height + bottom-aligned text reserves the same vertical space
