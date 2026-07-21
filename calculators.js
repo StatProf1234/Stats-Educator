@@ -12155,10 +12155,16 @@ function familywiseErrorSVG(alpha, m, mMax) {
     <circle cx="${x}" cy="${y}" r="7" fill="#fff"/>
     <circle cx="${x}" cy="${y}" r="5" fill="${color}" stroke="#1A1A2E" stroke-width="1"/>`;
 
+  // Center-anchored text at mx would run off the canvas whenever the
+  // marker sits near either edge (e.g. m = mMax, the common case of
+  // "as many comparisons as this calculator allows") — switch to an
+  // edge-safe anchor instead of clipping the text.
+  const calloutAnchor = mx > PL + plotW * 0.85 ? 'end' : mx < PL + plotW * 0.15 ? 'start' : 'middle';
+
   const pct = v => (v * 100).toFixed(1) + '%';
   const callouts = `
-    <text x="${mx}" y="${(myFwer - 11).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#4E6EDB">FWER ${pct(fwerVal)}</text>
-    <text x="${mx}" y="${(myAlpha + 18).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#E07B2C">α ${pct(alpha)}</text>`;
+    <text x="${mx}" y="${(myFwer - 11).toFixed(1)}" text-anchor="${calloutAnchor}" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#4E6EDB">FWER ${pct(fwerVal)}</text>
+    <text x="${mx}" y="${(myAlpha + 18).toFixed(1)}" text-anchor="${calloutAnchor}" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#E07B2C">α ${pct(alpha)}</text>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Uncorrected family-wise error rate vs. number of comparisons, currently ${pct(fwerVal)} at ${mClamped} comparisons, versus ${pct(alpha)} held by Holm-Sidak">
   ${gridY}
