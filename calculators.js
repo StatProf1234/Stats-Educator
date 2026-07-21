@@ -3711,6 +3711,192 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 36b. LAW OF LARGE NUMBERS — COIN-FLIP SIMULATOR ───────────────────
+     Simulates up to 1,000,000 coin flips live in the browser and plots
+     the running proportion of heads against the number of tosses so
+     far, on a log-scaled toss axis — the standard way to show LLN
+     convergence, since it keeps the early "wobble" and the eventual
+     "settle" both visible on the same chart instead of squishing the
+     wobble into the first pixel of a linear axis. Every slider drag
+     (or the re-flip button) runs a brand-new random simulation, so the
+     same N/p can visibly land in a different place each time.        */
+  {
+    id:          'law-of-large-numbers',
+    name:        'Law of Large Numbers — Coin-Flip Simulator',
+    hint:        'Running p̂(n) vs. tosses, log scale',
+    category:    'Probability & Distributions',
+    description: 'Simulates repeated coin flips and plots the running proportion of heads against the number of tosses, showing convergence to the true probability as the sample size grows — and how unstable that proportion can be with too few tosses.',
+    inputLayout: 'explorer',
+
+    formulas: [
+      {
+        label: 'Running Proportion After n Tosses',
+        latex: '\\hat{p}_n = \\dfrac{\\text{heads observed in first } n \\text{ tosses}}{n}'
+      },
+      {
+        label: 'Expected 95% Range at n (narrows as n grows)',
+        latex: 'p \\,\\pm\\, 1.96\\sqrt{\\dfrac{p(1-p)}{n}}'
+      }
+    ],
+
+    inputs: [
+      { id: 'nExp', type: 'slider', label: 'Number of Tosses (N)', default: 4, min: 1, max: 6, step: 0.01,
+        format: v => tossCountFromExp(v).toLocaleString('en-US') },
+      { id: 'p', type: 'slider', label: 'Probability of Heads (p)', default: 0.5, min: 0.01, max: 0.99, step: 0.01,
+        format: v => v.toFixed(2) },
+      { id: 'reflip', type: 'button', label: '🔄 New Random Sequence' },
+    ],
+
+    example({ nExp, p }) {
+      const N = tossCountFromExp(nExp);
+      if (!isFinite(p) || p <= 0 || p >= 1) return 'Set a probability of heads to see a worked medical example here.';
+      const earlyN = Math.min(25, N);
+      const f = v => +(v * 100).toFixed(1);
+      return `A drug trial's interim look after just ${earlyN} patients can show a response rate far from the drug's true effect (here p = ${p.toFixed(2)}) purely by chance — exactly like a run of ${earlyN} coin tosses can land well off ${f(p)}%. Only by continuing to the planned sample size of ${N.toLocaleString('en-US')} does the observed rate reliably settle near the truth — the same reason clinical trials pre-specify a sample size and interim-analysis rules rather than stopping whenever an early look looks favorable.`;
+    },
+
+    calculate({ nExp, p }) {
+      const N = tossCountFromExp(nExp);
+      if (!isFinite(p) || p <= 0 || p >= 1) return [err('Probability of Heads must be between 0 and 1 (exclusive)')];
+
+      const checkpoints = buildLogCheckpoints(N);
+      const series = [];
+      let heads = 0, ci = 0;
+      for (let n = 1; n <= N; n++) {
+        if (Math.random() < p) heads++;
+        if (ci < checkpoints.length && checkpoints[ci] === n) { series.push({ n, phat: heads / n }); ci++; }
+      }
+      const last = series[series.length - 1];
+      const deviation = last.phat - p;
+      const earlyN = Math.min(25, N);
+      const showEarly = N >= 100;
+      const earlyPt = series.find(pt => pt.n >= earlyN) || series[0];
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const pct = (v, dp = 1) => (v * 100).toFixed(dp) + '%';
+
+      return {
+        title: 'Law of Large Numbers — Coin-Flip Simulator',
+        subtitle: 'Watch the running proportion of heads settle toward p as the number of tosses grows',
+        chartSvg: lawOfLargeNumbersSVG(N, p, series, earlyN, showEarly),
+        legend: [
+          { color: '#4E6EDB',              label: 'Running proportion of heads (p̂)' },
+          { color: '#E07B2C',              label: 'True p' },
+          { color: 'rgba(78,110,219,.22)', label: '95% expected range at n' },
+        ],
+        stats: [
+          { label: 'Tosses (N)',           value: N.toLocaleString('en-US') },
+          { label: 'Target p',             value: f(p, 2) },
+          { label: 'Heads Observed',       value: heads.toLocaleString('en-US') },
+          { label: 'Final p̂',              value: pct(last.phat, 2) },
+          { label: 'Deviation from p',     value: (deviation >= 0 ? '+' : '') + pct(deviation, 2) },
+        ],
+        footnote: `Two lessons in one chart: the blue line is random — every re-flip traces a different path — but as n grows it's increasingly constrained to the narrowing shaded band, and by n = ${N.toLocaleString('en-US')} it has settled to ${pct(last.phat, 2)}, close to the true p = ${f(p, 2)} (the Law of Large Numbers). But if this run had stopped at just n = ${earlyN.toLocaleString('en-US')} tosses, it would have shown ${pct(earlyPt.phat, 1)} — a swing that stopping a study too early, or using an inadequate sample size, can easily mistake for a real effect.`,
+      };
+    }
+  },
+
+  /* ── 36c. CONFIDENCE INTERVAL COVERAGE SIMULATOR ───────────────────────
+     Draws K independent samples of size n from a fixed known
+     population (μ=100, σ=15) and builds a t-based CI for each one,
+     live in the browser, then shows what fraction actually capture μ
+     — the frequentist "coverage" property that "95% confidence"
+     actually refers to, as distinct from "95% probability the true
+     value is in THIS interval" (the exact distinction drawn in prose
+     in the Confidence vs. Credible vs. Prediction Interval guide).   */
+  {
+    id:          'ci-coverage-simulator',
+    name:        'Confidence Interval Coverage Simulator',
+    hint:        '% of simulated CIs that capture true μ',
+    category:    'Probability & Distributions',
+    description: 'Draws many independent samples and their confidence intervals from a population with a known true mean, showing what fraction of those intervals actually capture it.',
+    inputLayout: 'explorer',
+
+    formulas: [
+      {
+        label: 'CI for Sample k (t-based, population SD unknown)',
+        latex: '\\bar{x}_k \\,\\pm\\, t_{\\alpha/2,\\,n-1}\\cdot \\dfrac{s_k}{\\sqrt{n}}'
+      },
+      {
+        label: 'Achieved Coverage (should track the confidence level as K grows)',
+        latex: '\\text{coverage} = \\dfrac{\\text{number of intervals containing } \\mu}{K}'
+      }
+    ],
+
+    inputs: [
+      { id: 'n',    type: 'slider', label: 'Sample Size (n)', default: 15, min: 3, max: 100, step: 1,
+        format: v => String(Math.round(v)) },
+      { id: 'K',    type: 'slider', label: 'Samples Drawn (K)', default: 60, min: 20, max: 150, step: 1,
+        format: v => String(Math.round(v)) },
+      { id: 'conf', type: 'slider', label: 'Confidence Level', default: 0.95, min: 0.80, max: 0.999, step: 0.001,
+        format: v => (v * 100).toFixed(1) + '%' },
+      { id: 'redraw', type: 'button', label: '🔄 Redraw Samples' },
+    ],
+
+    example({ n, K, conf }) {
+      n = Math.round(n); K = Math.round(K);
+      if (!isFinite(n) || n < 3 || !isFinite(K) || K < 1 || !isFinite(conf) || conf <= 0 || conf >= 1 ||
+          typeof jStat === 'undefined' || !jStat.studentt)
+        return 'Set a sample size, number of samples, and confidence level to see a worked medical example here.';
+      const f = v => (v * 100).toFixed(1);
+      return `Imagine repeating a clinical lab-value study ${K} times, each time enrolling a fresh sample of n = ${n} patients and computing a ${f(conf)}% CI for the mean — even though the true population mean never changes, roughly ${f(conf)}% of those ${K} intervals will happen to capture it and the rest, by chance alone, will miss. That's the actual guarantee behind "${f(conf)}% confidence": a property of the procedure across repeated studies, not a probability statement about any single study's own interval.`;
+    },
+
+    calculate({ n, K, conf }) {
+      n = Math.round(n); K = Math.round(K);
+      if (!isFinite(n) || n < 3)              return [err('Sample Size must be at least 3')];
+      if (!isFinite(K) || K < 1)               return [err('Samples Drawn must be at least 1')];
+      if (!isFinite(conf) || conf <= 0 || conf >= 1) return [err('Confidence Level must be between 0 and 1 (exclusive)')];
+      if (typeof jStat === 'undefined' || !jStat.studentt)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const MU = 100, SIGMA = 15;
+      const tCrit = jStat.studentt.inv(1 - (1 - conf) / 2, n - 1);
+
+      const trials = [];
+      let captured = 0;
+      for (let k = 0; k < K; k++) {
+        const xs = [];
+        let sum = 0;
+        for (let i = 0; i < n; i++) { const x = MU + SIGMA * randNormal(); xs.push(x); sum += x; }
+        const mean = sum / n;
+        const variance = xs.reduce((s, x) => s + (x - mean) * (x - mean), 0) / (n - 1);
+        const se = Math.sqrt(variance / n);
+        const lo = mean - tCrit * se, hi = mean + tCrit * se;
+        const hit = lo <= MU && MU <= hi;
+        if (hit) captured++;
+        trials.push({ mean, lo, hi, hit });
+      }
+
+      const allLo = Math.min(...trials.map(t => t.lo));
+      const allHi = Math.max(...trials.map(t => t.hi));
+      const pad = (allHi - allLo) * 0.08;
+      const xMin = Math.min(allLo - pad, MU - 10);
+      const xMax = Math.max(allHi + pad, MU + 10);
+
+      const coverage = captured / K;
+      const f = (v, dp = 1) => (v * 100).toFixed(dp) + '%';
+
+      return {
+        title: 'Confidence Interval Coverage Simulator',
+        subtitle: 'Draws many samples and their CIs — watch how many actually capture the true mean',
+        chartSvg: ciCoverageSVG(trials, xMin, xMax, MU),
+        legend: [
+          { color: '#4E6EDB', label: 'CI captures true μ' },
+          { color: '#C0392B', label: 'CI misses true μ' },
+          { color: '#E07B2C', label: `True μ = ${MU}` },
+        ],
+        stats: [
+          { label: 'Sample Size (n)',       value: n },
+          { label: 'Nominal Confidence',    value: f(conf) },
+          { label: 'Captured',              value: `${captured} / ${K}` },
+          { label: 'Achieved Coverage',     value: f(coverage) },
+        ],
+        footnote: `Each of these ${K} intervals came from an independent sample of n = ${n} — the true mean (${MU}) never moves, only the sample does. ${f(coverage)} of them happened to capture it this time, close to the nominal ${f(conf)}. That is what "${f(conf)} confidence" actually means: not that any single interval has a ${f(conf)} chance of containing the truth, but that this exact procedure, repeated many times, captures the truth about that often — some intervals always miss, and you can never tell from one interval alone whether it is one of them.`,
+      };
+    }
+  },
+
   /* ── 37. CONFIDENCE INTERVAL FOR A MEAN ────────────────────────────────
      t-based CI for a single sample mean (σ unknown, estimated by the
      sample SD): x̄ ± t_{α/2,df}·SE, at any confidence level.          */
@@ -12181,6 +12367,147 @@ function familywiseErrorSVG(alpha, m, mMax) {
 </svg>`;
 }
 
+// Converts a 1-6 log-slider position into an integer toss count from
+// 10 to 1,000,000 — used by the Law of Large Numbers coin-flip
+// simulator's "Number of Tosses" slider so the same control can span
+// five orders of magnitude usefully (a linear 10..1,000,000 slider
+// would waste ~99% of its travel below 100,000).
+function tossCountFromExp(v) {
+  return Math.max(10, Math.round(Math.pow(10, v)));
+}
+
+// Standard normal random variate via Box-Muller — used by simulation
+// calculators (e.g. the CI Coverage Simulator) that need to draw
+// realistic continuous samples rather than binary coin-flip outcomes.
+function randNormal() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// Log-spaced integer checkpoints from 1 to N (deduped, ascending) at
+// which to record the running proportion — plotting every one of up
+// to 1,000,000 individual tosses would be neither renderable nor
+// readable, and LLN convergence is conventionally shown on a
+// log-scaled toss axis anyway (see lawOfLargeNumbersSVG below).
+function buildLogCheckpoints(N) {
+  const pts = [1];
+  const steps = 260;
+  for (let i = 1; i <= steps; i++) {
+    const v = Math.round(Math.pow(10, Math.log10(N) * (i / steps)));
+    if (v > pts[pts.length - 1]) pts.push(v);
+  }
+  if (pts[pts.length - 1] !== N) pts.push(N);
+  return pts;
+}
+
+// Running proportion of heads vs. toss count (log x-axis), with a
+// shaded 95% expected-range funnel (p ± 1.96·SE(n)) that narrows as n
+// grows, a dashed reference line at the true p, and an optional
+// "stopped here?" marker at a small, fixed toss count to make the
+// early-stopping danger concrete rather than only described in prose.
+// The endpoint marker always sits exactly at the right edge (n = N is
+// always the domain's own max on a log axis), so its callout is
+// always right-anchored — no need for the edge-proximity check used
+// elsewhere, since this chart's marker is never anywhere else.
+function lawOfLargeNumbersSVG(N, p, series, earlyN, showEarly) {
+  const W = 640, H = 260;
+  const PL = 46, PR = 16, PT = 30, PB = 34;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+  const baseline = PT + plotH;
+  const logN = Math.log10(N);
+
+  const toX = n => PL + (Math.log10(n) / logN) * plotW;
+  const toY = v => baseline - v * plotH;
+
+  const gridY = [0, 0.25, 0.5, 0.75, 1].map(v => {
+    const y = toY(v).toFixed(1);
+    return `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#EEF1F7" stroke-width="1"/>
+      <text x="${PL - 8}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${v.toFixed(2)}</text>`;
+  }).join('');
+
+  const xTickVals = [1, 10, 100, 1000, 10000, 100000, 1000000].filter(v => v <= N);
+  if (xTickVals[xTickVals.length - 1] !== N) xTickVals.push(N);
+  const compact = v => v >= 1000000 ? (v / 1000000) + 'M' : v >= 1000 ? (v / 1000) + 'K' : String(v);
+  const gridX = xTickVals.map(v => `<text x="${toX(v).toFixed(1)}" y="${H - PB + 16}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${compact(v)}</text>`).join('');
+
+  const upperPts = series.map(pt => {
+    const se = Math.sqrt(p * (1 - p) / pt.n);
+    return `${toX(pt.n).toFixed(1)},${toY(Math.min(1, p + 1.96 * se)).toFixed(1)}`;
+  });
+  const lowerPts = series.slice().reverse().map(pt => {
+    const se = Math.sqrt(p * (1 - p) / pt.n);
+    return `${toX(pt.n).toFixed(1)},${toY(Math.max(0, p - 1.96 * se)).toFixed(1)}`;
+  });
+  const funnelPath = `M${upperPts.concat(lowerPts).join(' L')} Z`;
+
+  const linePts = series.map(pt => `${toX(pt.n).toFixed(1)},${toY(pt.phat).toFixed(1)}`).join(' ');
+
+  const last = series[series.length - 1];
+  const mx = toX(last.n).toFixed(1);
+  const my = toY(last.phat).toFixed(1);
+
+  const earlyIdx = series.findIndex(pt => pt.n >= earlyN);
+  const earlyPt = series[earlyIdx >= 0 ? earlyIdx : 0];
+
+  const pct = (v, dp = 1) => (v * 100).toFixed(dp) + '%';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Running proportion of heads after ${N.toLocaleString('en-US')} tosses at p=${p.toFixed(2)}, ending at ${pct(last.phat, 1)}">
+  ${gridY}
+  <path d="${funnelPath}" fill="rgba(78,110,219,.13)" stroke="none"/>
+  <line x1="${PL}" y1="${toY(p).toFixed(1)}" x2="${W - PR}" y2="${toY(p).toFixed(1)}" stroke="#E07B2C" stroke-width="2" stroke-dasharray="6,4"/>
+  ${showEarly ? `
+  <line x1="${toX(earlyN).toFixed(1)}" y1="${PT}" x2="${toX(earlyN).toFixed(1)}" y2="${baseline}" stroke="#7B8099" stroke-width="1" stroke-dasharray="2,3" opacity=".55"/>
+  <text x="${toX(earlyN).toFixed(1)}" y="${PT - 4}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">stopped at n=${earlyN}?</text>
+  <circle cx="${toX(earlyPt.n).toFixed(1)}" cy="${toY(earlyPt.phat).toFixed(1)}" r="3.5" fill="#fff" stroke="#7B8099" stroke-width="1.3"/>` : ''}
+  <polyline points="${linePts}" fill="none" stroke="#4E6EDB" stroke-width="2.4"/>
+  ${gridX}
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 2}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">number of tosses (n, log scale)</text>
+  <polygon points="${mx},${(+my - 7).toFixed(1)} ${(+mx + 7).toFixed(1)},${my} ${mx},${(+my + 7).toFixed(1)} ${(+mx - 7).toFixed(1)},${my}" fill="#fff" stroke="#fff" stroke-width="4"/>
+  <polygon points="${mx},${(+my - 5).toFixed(1)} ${(+mx + 5).toFixed(1)},${my} ${mx},${(+my + 5).toFixed(1)} ${(+mx - 5).toFixed(1)},${my}" fill="#4E6EDB" stroke="#1A1A2E" stroke-width="1"/>
+  <text x="${mx}" y="${(+my - 13).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="700" fill="#4E6EDB">p&#770; = ${pct(last.phat, 2)}</text>
+</svg>`;
+}
+
+// One horizontal CI per trial, stacked top to bottom (forest-plot
+// style), colored by whether it captures the true mean, with a dashed
+// reference line at that true mean. Height scales directly with the
+// number of trials (no internal scroll container) — capping the
+// visible height and scrolling inside it just pushes the x-axis
+// labels below the fold once trials*rowH exceeds that cap, which is
+// exactly what happened in the design mockup past ~75 trials.
+function ciCoverageSVG(trials, xMin, xMax, muTrue) {
+  const rowH = 5, PL = 46, PR = 16, PT = 14, PB = 32;
+  const plotH = trials.length * rowH;
+  const W = 640, H = PT + plotH + PB;
+  const plotW = W - PL - PR;
+
+  const toX = v => PL + ((v - xMin) / (xMax - xMin)) * plotW;
+  const toY = i => PT + (i + 0.5) * rowH;
+  const muX = toX(muTrue).toFixed(1);
+
+  const span = xMax - xMin;
+  const gridX = Array.from({ length: 7 }, (_, g) => {
+    const v = xMin + g * (span / 6);
+    return `<text x="${toX(v).toFixed(1)}" y="${H - PB + 16}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${v.toFixed(0)}</text>`;
+  }).join('');
+
+  const rows = trials.map((t, i) => {
+    const y = toY(i).toFixed(1);
+    const color = t.hit ? '#4E6EDB' : '#C0392B';
+    return `<line x1="${toX(t.lo).toFixed(1)}" y1="${y}" x2="${toX(t.hi).toFixed(1)}" y2="${y}" stroke="${color}" stroke-width="1.6" opacity="${t.hit ? 0.75 : 0.95}"/>` +
+      `<circle cx="${toX(t.mean).toFixed(1)}" cy="${y}" r="1.4" fill="${color}"/>`;
+  }).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="${trials.length} confidence intervals, colored by whether each captures the true mean of ${muTrue}">
+  <line x1="${muX}" y1="${PT}" x2="${muX}" y2="${PT + plotH}" stroke="#E07B2C" stroke-width="1.6" stroke-dasharray="4,3"/>
+  ${rows}
+  ${gridX}
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 2}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">sample mean (measurement scale)</text>
+</svg>`;
+}
+
 // Shapiro-Wilk test of normality — Royston's (1995) algorithm AS R94,
 // the same approximation used internally by R's shapiro.test() and
 // SciPy. Computes W from the correlation between the ordered sample
@@ -14569,6 +14896,8 @@ const CALCULATOR_INDEX = [
   { id: 'binomial-probability', name: 'Binomial Probability Calculator', category: 'Probability & Distributions', description: 'Computes exact and cumulative binomial probabilities for given n, k, and p.',                 status: 'available' },
   { id: 'poisson-negbinom',     name: 'Poisson & Negative Binomial',     category: 'Probability & Distributions', description: 'Calculates Poisson and negative binomial probabilities and cumulative distributions.',         status: 'available' },
   { id: 'inverse-probability',  name: 'Inverse Probability',             category: 'Probability & Distributions', description: 'Finds the smallest count k such that the binomial cumulative probability P(X ≤ k) meets or exceeds a target probability, given n and p (the BINOM.INV equivalent).',  status: 'available' },
+  { id: 'law-of-large-numbers', name: 'Law of Large Numbers — Coin-Flip Simulator', category: 'Probability & Distributions', description: 'Simulates repeated coin flips and plots the running proportion of heads against the number of tosses, showing convergence to the true probability as the sample size grows.', status: 'available' },
+  { id: 'ci-coverage-simulator', name: 'Confidence Interval Coverage Simulator', category: 'Probability & Distributions', description: 'Draws many independent samples and their confidence intervals from a population with a known true mean, showing what fraction of those intervals actually capture it.', status: 'available' },
   { id: 'critical-value-t',     name: 'Critical Value & p-Value (t)',    category: 'Probability & Distributions', description: 'Returns the critical t-value, two-tailed p-value, and implied standard error for a given t statistic and degrees of freedom.', status: 'available' },
   { id: 'critical-value-z',     name: 'Critical Value & p-Value (z)',    category: 'Probability & Distributions', description: 'Returns the critical z-value, two-tailed p-value, and implied standard error for a given z statistic.', status: 'available' },
 
@@ -15488,6 +15817,8 @@ const SEARCH_KEYWORDS = {
   'binomial-probability': ['binomial distribution', 'probability of successes', 'coin flip probability', 'exact binomial probability'],
   'poisson-negbinom':     ['poisson distribution', 'rare events', 'count data', 'overdispersion', 'negative binomial'],
   'inverse-probability':  ['reverse lookup', 'binom inv', 'smallest count for a target probability', 'inverse binomial'],
+  'law-of-large-numbers': ['law of large numbers', 'coin flip simulator', 'coin toss simulation', 'sample size illustration', 'stopping a trial early', 'random walk simulation', 'unfair coin', 'monte carlo coin flip'],
+  'ci-coverage-simulator': ['confidence interval coverage', 'ci coverage simulation', 'what does 95% confidence mean', 'repeated sampling simulation', 'monte carlo confidence interval', 'coverage probability'],
   'critical-value-t':     ['t statistic to p-value', 'given a t value find p', 'critical t value'],
   'critical-value-z':     ['z statistic to p-value', 'given a z value find p', 'critical z value'],
 
@@ -15747,6 +16078,19 @@ const NOTATION = {
     { symbol: 'P(X \\le k)', meaning: 'The cumulative probability of observing k or fewer successes.' },
     { symbol: 'k^{*}', meaning: 'The smallest success count whose cumulative probability meets or exceeds the target — the calculator’s main result.' },
     { symbol: 'q', meaning: 'The target cumulative probability entered, which k* must meet or exceed.' },
+  ],
+  'law-of-large-numbers': [
+    { symbol: 'p', meaning: 'True probability of heads, set by the slider — the value the simulation should converge to.' },
+    { symbol: 'n', meaning: 'Number of tosses completed so far, out of N total — the x-axis of the chart.' },
+    { symbol: '\\hat{p}_n', meaning: 'Running proportion of heads after n tosses — this is what actually gets plotted.' },
+    { symbol: 'N', meaning: 'Total number of tosses simulated, set by the slider (up to 1,000,000).' },
+  ],
+  'ci-coverage-simulator': [
+    { symbol: '\\mu', meaning: 'True population mean (fixed at 100 for this demo) — the value each interval is trying to capture.' },
+    { symbol: 'n', meaning: 'Sample size drawn for each of the K trials, set by the slider.' },
+    { symbol: 'K', meaning: 'Number of independent samples (and CIs) drawn — the number of rows in the chart.' },
+    { symbol: '\\bar{x}_k, s_k', meaning: "Sample mean and sample SD of trial k, used to build that trial's own CI." },
+    { symbol: 't_{\\alpha/2,\\,n-1}', meaning: 'Critical t-value at the chosen confidence level, with n−1 degrees of freedom.' },
   ],
   'critical-value-t': [
     { symbol: 'p', meaning: 'The two-tailed p-value — the probability of a t statistic at least as extreme as the one entered.' },

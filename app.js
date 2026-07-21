@@ -787,6 +787,17 @@ function renderExplorerCalculator(calc) {
           <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
         </div>`;
     }
+    // An action trigger (e.g. "re-flip" on the coin-flip simulator) —
+    // clicking it just re-runs calculate() with the same slider values,
+    // which is enough to show a fresh result whenever calculate() draws
+    // its own randomness.
+    if (inp.type === 'button') {
+      return `
+        <div class="explorer-control">
+          <label class="explorer-control-label">&nbsp;</label>
+          <button type="button" class="reflip-btn" id="inp-${inp.id}" data-id="${inp.id}">${esc(inp.label)}</button>
+        </div>`;
+    }
     const display = inp.format ? inp.format(inp.default) : String(inp.default);
     return `
       <div class="explorer-control">
@@ -896,7 +907,8 @@ function renderExplorerCalculator(calc) {
   calc.inputs.forEach(inp => {
     const el = document.getElementById('inp-' + inp.id);
     if (!el) return;
-    el.addEventListener(inp.type === 'select' ? 'change' : 'input', () => {
+    const evt = inp.type === 'select' ? 'change' : inp.type === 'button' ? 'click' : 'input';
+    el.addEventListener(evt, () => {
       if (inp.type === 'slider') {
         const label = document.getElementById('val-' + inp.id);
         if (label) label.textContent = inp.format ? inp.format(parseFloat(el.value)) : el.value;
@@ -1145,6 +1157,7 @@ function refreshTotals() {
 function readInputs(calc) {
   const vals = {};
   for (const inp of calc.inputs) {
+    if (inp.type === 'button') continue; // an action trigger, not a value — e.g. explorer "re-flip" buttons
     const el = document.getElementById('inp-' + inp.id);
     if (!el) { vals[inp.id] = inp.default; continue; }
     vals[inp.id] = (inp.type === 'textarea' || inp.type === 'select' || inp.type === 'text') ? el.value : parseFloat(el.value);
