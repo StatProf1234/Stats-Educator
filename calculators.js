@@ -16105,6 +16105,7 @@ const LEARN_WIZARD_TREE = {
     { id: 'reference-glossary-abbreviations', why: 'Grouped by topic, with links to the fuller guide or calculator where one exists.' },
     { id: 'reference-appraisal-worksheets', why: 'Six fill-in-the-blank worksheets, one per clinical question type.' },
     { id: 'reference-visual-tradeoff-tools', why: 'An index of every interactive chart on this site that shows a quantity trading off against another as you move a parameter.' },
+    { id: 'reference-live-simulators', why: 'An index of every calculator that runs a live random simulation in your browser — coin flips, repeated samples, repeated confidence intervals.' },
   ]},
 
 };
@@ -19400,6 +19401,38 @@ const GUIDES = [
       { id: 'roc-auc', why: 'Full ROC curve and AUC, plus the Sensitivity/Specificity-vs-cutoff chart described here.' },
       { id: 'holm-sidak-test', why: 'Computes the step-down Holm-Šídák correction and shows the family-wise error rate chart described here.' },
       { id: 'appraisal-p-values', why: 'Covers the multiplicity worked example that the family-wise error rate chart builds on.' },
+      { id: 'reference-live-simulators', why: 'The complementary "live randomness" chart family — deterministic curves here, repeated random trials there.' },
+    ],
+  },
+
+  {
+    id: 'reference-live-simulators',
+    category: 'Quick Reference',
+    title: 'Live Simulators on This Site',
+    blurb: 'An index of every calculator on this site that runs a live random simulation in your browser — repeated coin flips, repeated samples, repeated confidence intervals — rather than computing a single result from numbers you enter.',
+    dek: `Every calculator below draws fresh random data &mdash; coin flips, samples from a population, repeated confidence intervals &mdash; live in your browser, then shows you what actually happened, rather than only asserting a statistical property in prose. Each one has a way to re-randomize (drag a slider, or a dedicated "redraw" button) without changing the underlying setup, so you can see how much a single run can vary from the next, and how that variation itself shrinks or stabilizes as you change one parameter (sample size, number of trials, reliability).`,
+    sections: [
+      {
+        heading: 'What these simulators have in common',
+        html: `<p>Every calculator below draws fresh random data &mdash; coin flips, samples from a population, repeated confidence intervals &mdash; live in your browser, then shows you what actually happened, rather than only asserting a statistical property in prose. Each one has a way to re-randomize (drag a slider, or a dedicated "redraw" button) without changing the underlying setup, so you can see how much a single run can vary from the next, and how that variation itself shrinks or stabilizes as you change one parameter (sample size, number of trials, reliability).</p><p>This is a different genre from the <a href="#learn/reference-visual-tradeoff-tools">Visual Trade-off Tools</a> guide: those charts plot an exact mathematical relationship (e.g. sensitivity vs. specificity as a threshold moves), so the same inputs always produce the same chart. These simulators plot the outcome of actual randomness, so the same inputs produce a <em>different</em> chart every time you re-run them &mdash; which is itself the point being taught.</p>`,
+      },
+      {
+        heading: 'The simulators',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Simulator</th><th>What It Demonstrates</th><th>Where To Find It</th></tr></thead><tbody>
+<tr><td>Law of Large Numbers</td><td>The running proportion of heads in a coin-flip sequence settles toward the true probability as the number of tosses grows &mdash; and how wildly it can swing with too few tosses, illustrating the danger of stopping a trial early or using an inadequate sample size.</td><td><a href="#law-of-large-numbers">Law of Large Numbers — Coin-Flip Simulator</a></td></tr>
+<tr><td>CI Coverage</td><td>Draws many independent samples and their 95% CIs from a population with a known true mean &mdash; showing that "95% confidence" describes how often the procedure captures the truth across repeated samples, not the probability that any one interval does.</td><td><a href="#ci-coverage-simulator">Confidence Interval Coverage Simulator</a></td></tr>
+<tr><td>Central Limit Theorem</td><td>Averages repeated samples from a skewed, uniform, or bimodal population and shows the distribution of those averages turn approximately normal as sample size grows &mdash; regardless of the population's own shape.</td><td><a href="#clt-simulator">Central Limit Theorem Simulator</a></td></tr>
+<tr><td>Regression to the Mean</td><td>Selects the most extreme scorers on a noisy first measurement and shows their second measurement drift back toward the population average, purely from measurement noise &mdash; no real change required.</td><td><a href="#regression-to-mean-simulator">Regression to the Mean Simulator</a></td></tr>
+</tbody></table></div>`,
+      },
+    ],
+    related: [
+      { id: 'law-of-large-numbers', why: 'Live-simulated running proportion of heads described here.' },
+      { id: 'ci-coverage-simulator', why: 'Live-simulated CI coverage described here.' },
+      { id: 'clt-simulator', why: 'Live-simulated sampling distribution described here.' },
+      { id: 'regression-to-mean-simulator', why: 'Live-simulated regression to the mean described here.' },
+      { id: 'reference-visual-tradeoff-tools', why: 'The complementary "exact relationship" chart family — deterministic curves instead of live randomness.' },
+      { id: 'appraisal-regression-to-mean', why: "The prose version of the pitfall the regression-to-the-mean simulator demonstrates live." },
     ],
   },
 ];
