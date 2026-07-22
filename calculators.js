@@ -1,6 +1,61 @@
 // calculators.js — Phase 1: Risk, Odds & Effect Measures
 // Formulas translated from R scripts.
 
+// Shared "Effect Measure" picker for the generic additive/ratio
+// meta-analysis calculators (Meta-Analysis, HKSJ, Network) — replaces
+// a bare "Additive vs Ratio" scale selector with the actual measure
+// being pooled, so the forest plot's estimate column reads "RD [95%
+// CI]"/"SMD [95% CI]"/etc. instead of a vague "Estimate", and ties
+// each measure to whether it needs exponentiating back from a log
+// scale (RR/OR/HR) or not (MD/SMD/RD). Only RD gets a hard `bound` —
+// it's a difference of two proportions, so |RD| > 1 is a genuine
+// impossibility (a mistyped percentage, usually), not just unusual.
+// MD/SMD and the ratio measures have no such mathematical ceiling —
+// SMD of 8 is implausible in practice but not actually invalid, and
+// MD's valid range depends entirely on the outcome's own units, which
+// this calculator has no way to know — so they get no bound to check.
+// Declared here, ahead of CALCULATORS, because EFFECT_MEASURE_OPTIONS
+// is referenced directly as an `inputs` array value below — a `const`
+// declared after CALCULATORS would still be in its temporal dead zone
+// when that array literal is evaluated.
+const EFFECT_MEASURE_OPTIONS = [
+  { value: 'md',             label: 'Mean Difference (MD)' },
+  { value: 'smd',            label: 'Standardized Mean Difference (SMD)' },
+  { value: 'rd',             label: 'Risk Difference (RD)' },
+  { value: 'rr',             label: 'Risk Ratio (RR) — enter log(RR)' },
+  { value: 'or',             label: 'Odds Ratio (OR) — enter log(OR)' },
+  { value: 'hr',             label: 'Hazard Ratio (HR) — enter log(HR)' },
+  { value: 'other-additive', label: 'Other (additive scale)' },
+  { value: 'other-ratio',    label: 'Other (ratio scale — enter log values)' },
+];
+const EFFECT_MEASURE_INFO = {
+  md:               { label: 'MD',       isRatio: false },
+  smd:              { label: 'SMD',      isRatio: false },
+  rd:               { label: 'RD',       isRatio: false, bound: 1 },
+  rr:               { label: 'RR',       isRatio: true },
+  or:               { label: 'OR',       isRatio: true },
+  hr:               { label: 'HR',       isRatio: true },
+  'other-additive': { label: 'Estimate', isRatio: false },
+  'other-ratio':    { label: 'Estimate', isRatio: true },
+};
+function effectMeasureInfo(value) {
+  return EFFECT_MEASURE_INFO[value] || EFFECT_MEASURE_INFO.md;
+}
+// Enforces the RD ceiling above against every study's entered effect
+// (not the CI bounds — those can validly poke past ±1 for a study
+// near the boundary under the normal approximation, so only the
+// point estimate itself, which must be a real proportion difference,
+// gets hard-checked). Returns an error row array, or null if fine.
+// `describe` lets network-meta-analysis identify the offending row by
+// its two treatment names instead of a `.label` field, since its
+// comparisons carry treatment numbers rather than a study label.
+function checkEffectMeasureBound(studies, measureInfo, describe = s => s.label) {
+  if (measureInfo.bound == null) return null;
+  const offender = studies.find(s => Math.abs(s.effect) > measureInfo.bound);
+  if (!offender) return null;
+  return [err(`${measureInfo.label} must be between -${measureInfo.bound} and ${measureInfo.bound} (it's a difference of two proportions) — check ${esc(describe(offender))} for a data-entry error, such as entering a percentage instead of a proportion.`)];
+}
+
 const CALCULATORS = [
 
   /* ── 1. MEASURES OF ASSOCIATION ─────────────────────────────────────
@@ -6822,10 +6877,9 @@ const CALCULATORS = [
       { prefix: 'se',     label: 'SE' },
     ],
     inputs: [
-      { id: 'scale', type: 'select', label: 'Effect Scale', default: 'additive', options: [
-        { value: 'additive', label: 'Additive (mean diff., risk diff., etc.)' },
-        { value: 'ratio',    label: 'Ratio (RR/OR — enter log values)' },
-      ] },
+      { id: 'measure', type: 'select', label: 'Effect Measure', default: 'md',
+        note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as the effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
+        options: EFFECT_MEASURE_OPTIONS },
       { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.45 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.12 },
@@ -6850,7 +6904,7 @@ const CALCULATORS = [
       const { studies, error } = gatherEffectStudies(values);
       if (error || studies.length < 2 || studies.some(s => s.se <= 0) || typeof jStat === 'undefined' || !jStat.chisquare)
         return 'Enter an effect estimate and SE for at least 2 studies to see a worked medical example here.';
-      const isRatio = values.scale === 'ratio';
+      const { isRatio } = effectMeasureInfo(values.measure);
       const transform = v => isRatio ? Math.exp(v) : v;
       const k = studies.length;
       const w = studies.map(s => 1 / s.se ** 2);
@@ -6876,7 +6930,11 @@ const CALCULATORS = [
       if (typeof jStat === 'undefined' || !jStat.chisquare)
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
-      const isRatio = values.scale === 'ratio';
+      const measureInfo = effectMeasureInfo(values.measure);
+      const boundError = checkEffectMeasureBound(studies, measureInfo);
+      if (boundError) return boundError;
+
+      const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
       const scaleTag  = isRatio ? ' (log scale)' : '';
 
@@ -6905,8 +6963,8 @@ const CALCULATORS = [
       const f = (v, dp = 4) => +(v.toFixed(dp));
       const heterogeneity = I2 < 25 ? 'low' : I2 < 75 ? 'moderate' : 'high';
 
-      const feLabel = isRatio ? 'Fixed-Effect Pooled RR/OR' : 'Fixed-Effect Pooled Estimate';
-      const reLabel = isRatio ? 'Random-Effects Pooled RR/OR' : 'Random-Effects Pooled Estimate';
+      const feLabel = `Fixed-Effect Pooled ${measureLabel}`;
+      const reLabel = `Random-Effects Pooled ${measureLabel}`;
 
       const rows = [
         { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
@@ -6931,7 +6989,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot', isSVG: true,
-        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio, { Q, df, pQ, I2, tau2 }, pi, transform)
+        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio, { Q, df, pQ, I2, tau2 }, pi, transform, measureLabel)
       });
 
       rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
@@ -9749,10 +9807,9 @@ const CALCULATORS = [
       { prefix: 'se',     label: 'SE' },
     ],
     inputs: [
-      { id: 'scale', type: 'select', label: 'Effect Scale', default: 'ratio', options: [
-        { value: 'additive', label: 'Additive (mean diff., risk diff., etc.)' },
-        { value: 'ratio',    label: 'Ratio (RR/OR — enter log values)' },
-      ] },
+      { id: 'measure', type: 'select', label: 'Effect Measure', default: 'rr',
+        note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as each comparison\'s effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
+        options: EFFECT_MEASURE_OPTIONS },
       { id: 'direction', type: 'select', label: 'For This Outcome, Which Direction Is Better?', default: 'higher', options: [
         { value: 'higher', label: 'Higher values are better (e.g., cure rate, response rate)' },
         { value: 'lower',  label: 'Lower values are better (e.g., mortality, relapse, adverse events)' },
@@ -9814,7 +9871,7 @@ const CALCULATORS = [
       const fit = fitNetworkMetaAnalysis(comparisons, referenceTreatment);
       if (fit.error) return 'Enter comparisons that connect every treatment to the reference to see a worked medical example here.';
 
-      const isRatio = values.scale === 'ratio';
+      const isRatio = effectMeasureInfo(values.measure).isRatio;
       const transform = v => isRatio ? Math.exp(v) : v;
       const f = v => +v.toFixed(2);
       const scores = networkPScores(fit, values.direction === 'higher');
@@ -9851,7 +9908,12 @@ const CALCULATORS = [
       if (fit.error)
         return [err('Cannot fit the network — these comparisons do not provide enough independent information to connect every treatment to the reference (check for redundant or contradictory links)')];
 
-      const isRatio = values.scale === 'ratio';
+      const measureInfo = effectMeasureInfo(values.measure);
+      const boundError = checkEffectMeasureBound(comparisons, measureInfo,
+        c => `${treatmentLabel(values, c.t1)} vs ${treatmentLabel(values, c.t2)}`);
+      if (boundError) return boundError;
+
+      const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
       const Z = 1.96;
       const f = (v, dp = 4) => +(v.toFixed(dp));
@@ -9907,7 +9969,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot vs Reference', isSVG: true,
-        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment), transform)
+        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment), transform, measureLabel)
       });
 
       rows.push({ label: 'League Table — All Pairwise Comparisons', isSVG: true, svg: networkLeagueTableSVG(fit, isRatio, nameFor) });
@@ -10205,7 +10267,7 @@ const CALCULATORS = [
             raw,
             toPct(muFixed), [toPct(muFixed - Z * seMuFixed), toPct(muFixed + Z * seMuFixed)],
             toPct(mu), [toPct(mu - Z * seMu), toPct(mu + Z * seMu)],
-            tau2
+            tau2, 'Proportion'
           )
         });
 
@@ -10275,7 +10337,7 @@ const CALCULATORS = [
       rows.push({
         label: 'Forest Plot (%)', isSVG: true,
         svg: proportionForestPlotSVG(studies, v => proportionInverse(v, method), w, pooledFE,
-          [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], tau2)
+          [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], tau2, 'Proportion')
       });
 
       const correctedLabels = studies.filter(s => s.corrected).map(s => s.label);
@@ -10532,10 +10594,9 @@ const CALCULATORS = [
       { prefix: 'se',     label: 'SE' },
     ],
     inputs: [
-      { id: 'scale', type: 'select', label: 'Effect Scale', default: 'additive', options: [
-        { value: 'additive', label: 'Additive (mean diff., risk diff., etc.)' },
-        { value: 'ratio',    label: 'Ratio (RR/OR — enter log values)' },
-      ] },
+      { id: 'measure', type: 'select', label: 'Effect Measure', default: 'md',
+        note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as the effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
+        options: EFFECT_MEASURE_OPTIONS },
       { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.40 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.15 },
@@ -10600,7 +10661,11 @@ const CALCULATORS = [
       if (typeof jStat === 'undefined' || !jStat.chisquare || !jStat.studentt)
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
-      const isRatio = values.scale === 'ratio';
+      const measureInfo = effectMeasureInfo(values.measure);
+      const boundError = checkEffectMeasureBound(studies, measureInfo);
+      if (boundError) return boundError;
+
+      const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
 
       const k = studies.length;
@@ -10631,7 +10696,7 @@ const CALCULATORS = [
 
       rows.push(
         { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
-        { label: 'Pooled Estimate (shared by both methods below)', value: f(transform(pooledRE)), ci: null, isRatio },
+        { label: `Pooled ${measureLabel} (shared by both methods below)`, value: f(transform(pooledRE)), ci: null, isRatio },
         { label: "Cochran's Q", value: f(Q), ci: null, isRatio: false },
         { label: 'p-value (heterogeneity test)', value: formatPValue(pQ), ci: null, isRatio: false },
         { label: 'I² (% variance due to heterogeneity)', value: f(I2, 1), ci: null, isRatio: false },
@@ -10684,7 +10749,7 @@ const CALCULATORS = [
         }
 
         rows.push({ label: 'Forest Plot — Standard vs HKSJ', isSVG: true,
-          svg: hksjForestPlotSVG(studies, w, pooledRE, ciNormal, ciHKSJ, isRatio, transform, { Q, df, pQ, I2, tau2 }, pi) });
+          svg: hksjForestPlotSVG(studies, w, pooledRE, ciNormal, ciHKSJ, isRatio, transform, { Q, df, pQ, I2, tau2 }, pi, measureLabel) });
 
         const widthNormal = transform(ciNormal[1]) - transform(ciNormal[0]);
         const widthHKSJ = transform(ciHKSJ[1]) - transform(ciHKSJ[0]);
@@ -10849,7 +10914,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot', isSVG: true,
-        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], false, { Q, df, pQ, I2, tau2 }, pi, transform)
+        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], false, { Q, df, pQ, I2, tau2 }, pi, transform, 'r')
       });
 
       rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
@@ -14381,15 +14446,20 @@ function predictionIntervalWhiskerSVG(toX, PL, y, piLo, piHi, transform) {
 // positional change is needed, only the null-line's label). The
 // heterogeneity caption sits below the baseline, in an enlarged
 // bottom margin (PB) reserved just for it.
-// Right-side "SMD [95% CI]" + "Weight" text columns, shared by every
-// per-study forest plot on the site — the plot's squares/lines already
-// convey this visually (position, marker size), but published forest
-// plots always print the exact numbers too, so the chart is readable
-// without cross-referencing the results table above it. Column x's
-// are relative to the canvas's own right edge, so callers just widen
-// PR and pass the same two x positions everywhere.
+// Right-side "<measure> [95% CI]" + "Weight" text columns, shared by
+// every per-study forest plot on the site — the plot's squares/lines
+// already convey this visually (position, marker size), but published
+// forest plots always print the exact numbers too, so the chart is
+// readable without cross-referencing the results table above it.
+// Column x's are relative to the canvas's own right edge, so callers
+// just widen PR and pass the same two x positions everywhere. The
+// header naming the measure itself (RR/OR, SMD, r, ...) is drawn by
+// each calling forest-plot function via its own `measureLabel` param,
+// not by this helper.
 function forestSideColumns(x1, x2, y, effect, ciLo, ciHi, weightPct, transform, opts = {}) {
-  const fmt = v => (+transform(v).toFixed(2)).toString();
+  const decimals = opts.decimals ?? 2;
+  const suffix = opts.suffix || '';
+  const fmt = v => (+transform(v).toFixed(decimals)).toString() + suffix;
   const color = opts.color || '#4A4E6B';
   const weightText = weightPct == null ? '' :
     `<text x="${x2}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${weightPct.toFixed(1)}%</text>`;
@@ -14398,13 +14468,14 @@ function forestSideColumns(x1, x2, y, effect, ciLo, ciHi, weightPct, transform, 
       ${weightText}`;
 }
 
-function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform) {
+function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform, measureLabel) {
+  const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = studies.length;
   const rowH = 24;
   const W = 700;
   const PL = 108, PR = 158, PT = 20, PB = 40;
   const plotW = W - PL - PR;
-  const colX1 = W - PR + 8, colX2 = W - 6;
+  const colX1 = W - PR + 8, colX2 = W - 16;
   const hasPI = Array.isArray(pi);
   const diamondGap = 21;
   const dividerY = PT + k * rowH;
@@ -14452,10 +14523,10 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   const reDiamond = diamond(ciRE[0], ciRE[1], pooledRE, yRE, 'Random-Effects', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates, with SMD, 95% CI, and weight columns">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates, with ${measureText}, 95% CI, and weight columns">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
-  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Estimate [95% CI]</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
   <text x="${colX2}" y="${(PT - 6).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   ${rows}
   <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
@@ -14474,12 +14545,13 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
 // the wider Hartung-Knapp-Sidik-Jonkman (t-based) CI — so the extra
 // width HKSJ adds is visually obvious at a glance, anchored to the
 // identical point both methods share.
-function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi) {
+function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi, measureLabel) {
+  const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = studies.length;
   const rowH = 24;
   const W = 700;
   const PL = 108, PR = 158, PT = 20, PB = 40;
-  const colX1 = W - PR + 8, colX2 = W - 6;
+  const colX1 = W - PR + 8, colX2 = W - 16;
   // Same gap used between the divider line and the pooled-estimate
   // rows as the other forest plots' diamonds (proportionForestPlotSVG,
   // glmmForestPlotSVG), so every forest plot on the site reads
@@ -14531,10 +14603,10 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   const hksjDiamond = diamond(ciHKSJ[0], ciHKSJ[1], pooledRE, yHKSJ, 'HKSJ (t)', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate, with SMD, 95% CI, and weight columns">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate, with ${measureText}, 95% CI, and weight columns">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
-  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Estimate [95% CI]</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
   <text x="${colX2}" y="${(PT - 6).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   ${rows}
   <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
@@ -14557,11 +14629,13 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
 // value back to a proportion in [0,1]; applying it to each CI bound
 // separately (not just the point estimate) is what gives the
 // back-transformed interval its correct, often-asymmetric shape.
-function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, pooledRE, ciRE, tau2) {
+function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, pooledRE, ciRE, tau2, measureLabel) {
+  const measureText = measureLabel || 'Proportion';
   const k = studies.length;
   const rowH = 24;
-  const W = 560;
-  const PL = 108, PR = 20, PT = 28, PB = 40;
+  const W = 700;
+  const PL = 108, PR = 158, PT = 28, PB = 40;
+  const colX1 = W - PR + 8, colX2 = W - 16;
   // Same gap used between the divider line and the pooled-estimate
   // rows as glmmForestPlotSVG, so both forest plots in this
   // calculator read consistently regardless of which method is
@@ -14591,6 +14665,7 @@ function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, 
   const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
   const zeroX = toX(0).toFixed(1);
 
+  const sumW = weightsFE.reduce((s, w) => s + w, 0);
   const maxW = Math.max(...weightsFE);
   const sizeFor = w => 4 + 6 * (w / maxW);
 
@@ -14603,7 +14678,7 @@ function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, 
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
       <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
       <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
-      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${pt.toFixed(1)}%</text>`;
+      ${forestSideColumns(colX1, colX2, y, pt, ciLo, ciHi, (weightsFE[i] / sumW) * 100, v => v, { decimals: 1, suffix: '%' })}`;
   }).join('');
 
   const diamond = (ciLo, ciHi, pt, y, label, color) => {
@@ -14612,7 +14687,7 @@ function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, 
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
       <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
-      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${pt.toFixed(1)}%</text>`;
+      ${forestSideColumns(colX1, colX2, y, pt, ciLo, ciHi, null, v => v, { decimals: 1, suffix: '%', color })}`;
   };
 
   const yFE = dividerY + diamondGap + rowH / 2;
@@ -14620,9 +14695,11 @@ function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, 
   const feDiamond = diamond(feLo, feHi, fePt, yFE, 'Fixed-Effect', '#4E6EDB');
   const reDiamond = diamond(reLo, reHi, rePt, yRE, 'Random-Effects', '#E07B2C');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual study proportions and pooled fixed/random-effects estimates, as percentages">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual study proportions and pooled fixed/random-effects estimates, as percentages, with ${measureText}, 95% CI, and weight columns">
   <line x1="${zeroX}" y1="${(PT - 4).toFixed(1)}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0%</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
+  <text x="${colX2}" y="${(PT - 6).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   ${rows}
   <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
   ${feDiamond}
@@ -14641,15 +14718,17 @@ function proportionForestPlotSVG(studies, transform, weightsFE, pooledFE, ciFE, 
 // one for the random-effects GLMM (tau^2 estimated by ML) — so the
 // plot mirrors the two pooled estimates now shown in the output
 // table above it.
-function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, tau2) {
+function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, tau2, measureLabel) {
+  const measureText = measureLabel || 'Proportion';
   const k = studies.length;
   const rowH = 24;
-  const W = 560;
+  const W = 700;
   // PL is wider than the site's other forest plots (108) because
   // "Fixed-Effect GLMM" / "Random-Effects GLMM" are much longer
   // than a typical "Study N" label — at the old width they'd overflow
   // past the SVG's left edge and get clipped.
-  const PL = 140, PR = 20, PT = 20, PB = 40;
+  const PL = 140, PR = 158, PT = 20, PB = 40;
+  const colX1 = W - PR + 8, colX2 = W - 16;
   // Extra clearance between the divider line and the pooled-estimate
   // rows, so each diamond's % value label (drawn just above the
   // diamond) doesn't crowd the line right above it, without pushing
@@ -14684,11 +14763,13 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, 
     const { pt, lo: ciLo, hi: ciHi } = studyPts[i];
     const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(pt).toFixed(1);
     const sz = sizeFor(s.n);
+    const eventsText = `<text x="${colX2}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${s.x}/${s.n}</text>`;
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
       <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
       <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
-      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${pt.toFixed(1)}%</text>`;
+      ${forestSideColumns(colX1, colX2, y, pt, ciLo, ciHi, null, v => v, { decimals: 1, suffix: '%' })}
+      ${eventsText}`;
   }).join('');
 
   const diamond = (ciLo, ciHi, pt, y, label, color) => {
@@ -14697,7 +14778,7 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, 
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
       <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
-      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${pt.toFixed(1)}%</text>`;
+      ${forestSideColumns(colX1, colX2, y, pt, ciLo, ciHi, null, v => v, { decimals: 1, suffix: '%', color })}`;
   };
 
   const yFE = dividerY + diamondGap + rowH / 2;
@@ -14705,9 +14786,11 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, 
   const feDiamond = diamond(ciPctFE[0], ciPctFE[1], pooledPctFE, yFE, 'Fixed-Effect GLMM', '#4E6EDB');
   const reDiamond = diamond(ciPctRE[0], ciPctRE[1], pooledPctRE, yRE, 'Random-Effects GLMM', '#E07B2C');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each study's raw proportion (Wilson score interval) and the pooled fixed-effect and random-effects GLMM estimates">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each study's raw proportion (Wilson score interval) and the pooled fixed-effect and random-effects GLMM estimates, with ${measureText}, 95% CI, and events/total columns">
   <line x1="${zeroX}" y1="${(PT - 4).toFixed(1)}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0%</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
+  <text x="${colX2}" y="${(PT - 6).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Events/Total</text>
   ${rows}
   <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
   ${feDiamond}
@@ -14725,7 +14808,8 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, 
 // unlike the per-study forest plots above — each row is already a
 // synthesized treatment-vs-reference estimate, not raw per-study
 // data, so a "% weight" wouldn't have the same meaning.
-function networkForestSVG(items, isRatio, referenceLabel, transform) {
+function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabel) {
+  const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = items.length;
   const rowH = 24;
   const W = 660;
@@ -14756,11 +14840,11 @@ function networkForestSVG(items, isRatio, referenceLabel, transform) {
       ${forestSideColumns(colX1, W - 6, y, s.effect, ciLo, ciHi, null, transform)}`;
   }).join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment, with point estimate and 95% CI columns">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment, with ${measureText} and 95% CI columns">
   <text x="${PL}" y="14" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Reference: ${esc(referenceLabel)}</text>
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
-  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Estimate [95% CI]</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
   ${rows}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
 </svg>`;
@@ -18134,36 +18218,41 @@ const GUIDES = [
     title: 'How to Read a Forest Plot',
     blurb: 'What the squares, lines, and diamonds mean — plus fixed vs. random effects, weights, and prediction intervals.',
     dek: `Every forest plot in this app &mdash; Meta-Analysis, HKSJ, GLMM/Proportions, and Network &mdash; draws from the same visual vocabulary. Learn it once here and you can read all of them.`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates">
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates, plus estimate/CI and weight columns">
   <line x1="260.9" y1="16" x2="260.9" y2="197" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="260.9" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">null = 0</text>
+  <text x="550" y="14" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">SMD [95% CI]</text>
+  <text x="684" y="14" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   <text x="90" y="36" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 1</text>
   <line x1="215.2" y1="33" x2="377.5" y2="33" stroke="#4E6EDB" stroke-width="1.5"/>
   <rect x="293.8" y="30.5" width="5.1" height="5.1" fill="#4E6EDB"/>
-  <text x="296.3" y="26.5" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.30</text>
+  <text x="550" y="36" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#4A4E6B">0.30 [-0.39, 0.99]</text>
+  <text x="684" y="36" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">10.5%</text>
   <text x="90" y="62" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 2</text>
   <line x1="279.5" y1="59" x2="372.3" y2="59" stroke="#4E6EDB" stroke-width="1.5"/>
   <rect x="322.2" y="55.3" width="7.4" height="7.4" fill="#4E6EDB"/>
-  <text x="325.9" y="51.3" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.55</text>
+  <text x="550" y="62" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#4A4E6B">0.55 [0.16, 0.94]</text>
+  <text x="684" y="62" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">32.2%</text>
   <text x="90" y="88" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 3</text>
   <line x1="320.7" y1="85" x2="390.2" y2="85" stroke="#4E6EDB" stroke-width="1.5"/>
   <rect x="350.5" y="80" width="10" height="10" fill="#4E6EDB"/>
-  <text x="355.5" y="76" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0.80</text>
-  <line x1="100" y1="98" x2="540" y2="98" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="550" y="88" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#4A4E6B">0.80 [0.51, 1.09]</text>
+  <text x="684" y="88" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">57.3%</text>
+  <line x1="100" y1="98" x2="680" y2="98" stroke="#7B8099" stroke-width="1.5"/>
   <text x="90" y="135" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#4E6EDB">Fixed-Effect</text>
   <polygon points="313.4,132 339.7,126 366.0,132 339.7,138" fill="#4E6EDB"/>
-  <text x="339.7" y="122" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#4E6EDB">0.67</text>
+  <text x="550" y="135" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="600" fill="#4E6EDB">0.67 [0.45, 0.89]</text>
   <text x="90" y="161" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#E07B2C">Random-Effects</text>
   <polygon points="291.7,158 333.6,152 375.5,158 333.6,164" fill="#E07B2C"/>
-  <text x="333.6" y="148" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="#E07B2C">0.62</text>
+  <text x="550" y="161" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="600" fill="#E07B2C">0.62 [0.26, 0.97]</text>
   <text x="90" y="187" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">95% PI</text>
   <line x1="219.5" y1="184" x2="444.2" y2="184" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/>
   <line x1="219.5" y1="179" x2="219.5" y2="189" stroke="#7B8099" stroke-width="1.5"/>
   <line x1="444.2" y1="179" x2="444.2" y2="189" stroke="#7B8099" stroke-width="1.5"/>
   <text x="331.9" y="176" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[-0.35, 1.55]</text>
-  <line x1="100" y1="197" x2="540" y2="197" stroke="#CDD2E0" stroke-width="1.5"/>
+  <line x1="100" y1="197" x2="680" y2="197" stroke="#CDD2E0" stroke-width="1.5"/>
 </svg>`,
-    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval.`,
+    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval — with estimate/CI and weight printed alongside each row, matching the calculators' own forest plots. The estimate column's header names whatever's actually being pooled (SMD here; RR/OR, r, etc. elsewhere).`,
     legendColumns: [
       [
         { colLabel: 'Reading a study row', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Horizontal line: that study's own 95% confidence interval.` },
@@ -18183,7 +18272,7 @@ const GUIDES = [
       },
       {
         heading: 'Reading the weights: why the squares differ in size',
-        html: `<p>A study's weight in the pooled estimate is driven by its <strong>precision</strong> &mdash; roughly, the inverse of its variance. A large, tightly-measured study (small standard error) gets a big square and pulls the pooled diamond toward it; a small, noisy study gets a tiny square and barely moves it, even if its own point estimate looks dramatic. Reading square sizes tells you at a glance which studies are actually driving the pooled conclusion.</p>`,
+        html: `<p>A study's weight in the pooled estimate is driven by its <strong>precision</strong> &mdash; roughly, the inverse of its variance. A large, tightly-measured study (small standard error) gets a big square and pulls the pooled diamond toward it; a small, noisy study gets a tiny square and barely moves it, even if its own point estimate looks dramatic. Square size gives you the at-a-glance version; the estimate/CI and "Weight" columns printed to the right of each row give you the exact numbers, so you don't have to eyeball pixel widths to know which studies are actually driving the pooled conclusion. That left column's header always names the actual quantity being pooled &mdash; "SMD [95% CI]", "RR/OR [95% CI]", "r [95% CI]", "Proportion [95% CI]", and so on &mdash; rather than a generic "Estimate", so you know at a glance what scale the numbers are on. The GLMM proportion forest plot prints "Events/Total" instead of a weight percentage in that right column, since its one-stage binomial model doesn't produce a per-study inverse-variance weight the way the two-stage methods do.</p>`,
       },
       {
         heading: 'Fixed-Effect vs. Random-Effects: two diamonds, two assumptions',
