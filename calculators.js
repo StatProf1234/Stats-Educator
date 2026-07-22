@@ -16065,6 +16065,7 @@ const LEARN_WIZARD_TREE = {
       { label: 'A scatter plot of differences plotted against averages', next: 'res_blandaltman' },
       { label: 'A plot with a shaded equivalence or non-inferiority zone', next: 'res_equiv' },
       { label: 'A step-down curve tracking survival over time', next: 'res_km' },
+      { label: 'A scatter plot of labeled studies from a meta-analysis, showing each one\'s heterogeneity contribution vs. its influence on the pooled result', next: 'res_baujat' },
     ]
   },
   res_forest:      { results: [ { id: 'reading-forest-plots', why: "The standard chart for a single study's effect estimate or a meta-analysis's pooled result." } ] },
@@ -16073,6 +16074,7 @@ const LEARN_WIZARD_TREE = {
   res_blandaltman: { results: [ { id: 'reading-bland-altman-plots', why: 'For agreement between two measurement methods, not correlation between them.' } ] },
   res_equiv:       { results: [ { id: 'reading-equivalence-plots', why: 'Reading whether a confidence interval actually falls inside the zone that counts as "equivalent."' } ] },
   res_km:          { results: [ { id: 'reading-kaplan-meier-cox', why: 'Step curves, censoring tick marks, and what a Cox hazard ratio adds on top.' } ] },
+  res_baujat:      { results: [ { id: 'reading-baujat-plots', why: 'Spotting which studies in a meta-analysis are both discordant and consequential, not just discordant.' } ] },
 
   // ── APPRAISING STUDIES BY DESIGN ──────────────────────────────────
   appraiseKind: {
@@ -17968,6 +17970,65 @@ const GUIDES = [
     ],
     related: [
       { id: 'bland-altman', why: 'Computes the bias and limits of agreement, and draws the plot shown above.' },
+    ],
+  },
+
+  {
+    id: 'reading-baujat-plots',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Baujat Plot',
+    blurb: 'Spotting which studies in a meta-analysis are both discordant and consequential — not just one or the other.',
+    dek: `A meta-analysis can have real heterogeneity without any single study driving the pooled conclusion, or a single study can quietly swing the pooled estimate without ever looking like an outlier. A Baujat plot (Baujat et al., 2002) puts both questions on one chart at once.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 230" style="width:100%;height:auto;display:block;" role="img" aria-label="Example Baujat plot with seven labeled studies">
+  <line x1="44" y1="16" x2="44" y2="186" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="44" y1="186" x2="544" y2="186" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="44" y="200" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">0</text>
+  <text x="294" y="216" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#4A4E6B">Contribution to heterogeneity (Q)</text>
+  <text x="12" y="101" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="#4A4E6B" transform="rotate(-90 12 101)">Influence on pooled estimate</text>
+  <circle cx="100" cy="168" r="3.5" fill="#4E6EDB" opacity=".8"/>
+  <text x="106" y="166" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4A4E6B">1</text>
+  <circle cx="150" cy="155" r="3.5" fill="#4E6EDB" opacity=".8"/>
+  <text x="156" y="153" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4A4E6B">2</text>
+  <circle cx="210" cy="172" r="3.5" fill="#4E6EDB" opacity=".8"/>
+  <text x="216" y="170" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4A4E6B">3</text>
+  <circle cx="180" cy="178" r="3.5" fill="#4E6EDB" opacity=".8"/>
+  <text x="186" y="176" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4A4E6B">7</text>
+  <circle cx="115" cy="55" r="3.5" fill="#4E6EDB" opacity=".8"/>
+  <text x="121" y="53" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4A4E6B">5</text>
+  <circle cx="430" cy="138" r="3.5" fill="#4E6EDB" opacity=".8"/>
+  <text x="436" y="136" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4A4E6B">6</text>
+  <circle cx="470" cy="42" r="5" fill="#E07B2C"/>
+  <text x="478" y="40" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="600" fill="#E07B2C">4</text>
+</svg>`,
+    figureCaption: `A hypothetical meta-analysis of seven trials of an antihypertensive drug. Study 4 sits far to the upper right — it both contributes disproportionately to the overall heterogeneity and shifts the pooled estimate the most when left out. Study 5, upper left, barely adds to heterogeneity but is still surprisingly influential on its own.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Each point &mdash; one study, labeled by study number, plotted as (its share of the overall heterogeneity statistic Q, how much the pooled estimate shifts when it's left out).` },
+      { swatchClass: 'is-square', swatchStyle: 'background:#E07B2C;border-radius:50%;', text: `Amber point &mdash; flagged: unusually high on <em>both</em> axes at once, the combination that matters most.` },
+    ],
+    sections: [
+      {
+        heading: "What's plotted on each axis",
+        html: `<p>The x-axis is each study's individual contribution to the overall heterogeneity statistic (Cochran's Q) &mdash; how much that one study's effect estimate, weighted by its precision, adds to the total disagreement among studies. The y-axis is that study's <strong>influence</strong> on the pooled estimate: typically a standardized measure of how far the pooled effect moves when the meta-analysis is re-run with that one study removed (a leave-one-out shift). A study can score high on one axis and low on the other, which is exactly why plotting them together, rather than looking at heterogeneity or influence alone, is useful.</p>`,
+      },
+      {
+        heading: 'Reading the four corners',
+        html: `<p><strong>Upper right</strong> (like Study 4 above): high heterogeneity contribution <em>and</em> high influence &mdash; the studies most worth scrutinizing, since they're simultaneously making the pooled estimate look inconsistent and actually swinging its value.</p>
+          <p><strong>Upper left</strong> (Study 5): low heterogeneity contribution but high influence &mdash; often a small, very precisely measured study whose narrow confidence interval gives it outsized weight. It doesn't look like a heterogeneity outlier, but removing it would still meaningfully move the pooled number.</p>
+          <p><strong>Lower right</strong> (Study 6): high heterogeneity contribution but low influence &mdash; a study whose effect estimate looks discordant from the others and adds noise to Q, but one that carries too little weight to actually pull the pooled estimate around much.</p>
+          <p><strong>Lower left</strong> (Studies 1, 2, 3, 7): unremarkable on both counts &mdash; contributing little to heterogeneity and barely moving the pooled estimate if excluded.</p>`,
+      },
+      {
+        heading: 'What a flagged study means (and does not mean)',
+        html: `<p>Landing in the upper right is a prompt to look closer, not a license to delete the study. Reasonable next steps: reread its methods for a real clinical or methodological reason it might differ (population, dose, follow-up length, risk of bias); run a leave-one-out sensitivity analysis to see whether the pooled estimate or its statistical significance actually changes once that study is excluded; and report both the full and sensitivity-analysis results transparently rather than quietly dropping the study. Excluding an outlier from a meta-analysis just because it's an outlier, with no other justification, substitutes a data-driven decision for a scientific one.</p>`,
+      },
+      {
+        heading: 'How this differs from a forest plot or funnel plot',
+        html: `<p>A forest plot shows each study's own effect estimate and its weight, but not how much removing any single study would move the pooled result. A funnel plot addresses a different question entirely &mdash; possible small-study effects or publication bias, plotted against precision, not heterogeneity or leave-one-out influence. The Baujat plot answers a third, distinct question: which studies are both discordant <em>and</em> consequential.</p>`,
+      },
+    ],
+    related: [
+      { id: 'meta-analysis', why: 'If a Baujat plot flags a study, rerun this calculator with that study excluded as a leave-one-out sensitivity check to see whether the pooled estimate or its significance actually changes.' },
+      { id: 'reading-forest-plots', why: "Companion chart-reading guide — covers the Q, τ², I² heterogeneity captions that a Baujat plot's x-axis is built from." },
     ],
   },
 
