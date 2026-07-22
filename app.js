@@ -435,6 +435,12 @@ const WIZARD_STOPWORDS = new Set([
   'so','if','not','no','do','does','did','has','have','had','will','would',
   'can','could','should','about','between','across','per','via','using','use',
   'used','who','what','when','where','how','which','i','we','you','your',
+  // 'out' is a substring of 'outcome' (and 'without', 'throughout', ...),
+  // which are all over this site's calculator/guide text — as its own
+  // filterWord it was outscoring genuinely relevant terms in ordinary
+  // queries like "...on this emerging topic, find gaps" purely because
+  // "out" happened to appear inside some calculator's "outcome".
+  'out',
 ]);
 
 // Scores a wizard "results" leaf against a free-text description by
@@ -467,7 +473,13 @@ function scoreWizardLeaf(leaf, filter, filterWords, resolveItem, scoreItem) {
 // and `scoreItem` are threaded through from the same cfg the rest of
 // renderWizardGeneric uses, so this works for both the calculator
 // finder and the Learn guide finder without duplicating it per tree.
-function matchWizardDescription(tree, query, resolveItem, scoreItem) {
+// `extraStopwords` (optional) adds tree-specific noise words on top of
+// WIZARD_STOPWORDS — e.g. the design wizard drops "test"/"tests" since
+// a query like "how good is this diagnostic test" would otherwise
+// match every calculator whose NAME merely contains "test" (t-test,
+// z-test, Egger's test, ...), a collision the calculator finder
+// doesn't have (there, "test" is a genuinely useful query word).
+function matchWizardDescription(tree, query, resolveItem, scoreItem, extraStopwords) {
   const filter = query.trim().toLowerCase();
   if (!filter) return [];
   // Free-text prose comes with commas/periods attached to words ("two
@@ -476,7 +488,7 @@ function matchWizardDescription(tree, query, resolveItem, scoreItem) {
   // this pulls out word-like runs instead (keeping internal hyphens/
   // apostrophes, so "case-control" and "don't" stay single tokens).
   const filterWords = (filter.match(/[a-z0-9]+(?:['-][a-z0-9]+)*/g) || [])
-    .filter(w => w.length > 1 && !WIZARD_STOPWORDS.has(w));
+    .filter(w => w.length > 1 && !WIZARD_STOPWORDS.has(w) && !(extraStopwords && extraStopwords.has(w)));
   const paths = getWizardPaths(tree);
   return Object.keys(tree)
     .filter(key => tree[key].results && paths[key])
@@ -543,7 +555,7 @@ function initWizardSmartStart(cfg) {
   if (!input || !btn) return;
 
   const run = () => {
-    const matches = matchWizardDescription(cfg.tree, input.value, cfg.resolveItem, cfg.scoreItem);
+    const matches = matchWizardDescription(cfg.tree, input.value, cfg.resolveItem, cfg.scoreItem, cfg.smartStartExtraStopwords);
     renderWizardSmartResults(matches, cfg);
   };
   btn.addEventListener('click', run);
@@ -632,10 +644,10 @@ function renderWizardGeneric(path, cfg) {
       <div class="wizard-smart-start-row">
         <div class="wizard-smart-input-wrap">
           <input type="text" id="wizard-smart-input" class="input-el wizard-smart-input" autocomplete="off"
-                 placeholder="e.g., comparing an oral health score between two treatment groups, adjusting for a baseline measurement">
+                 placeholder="${escAttr(cfg.smartStartPlaceholder)}">
           <button type="button" id="wizard-smart-clear" class="wizard-smart-clear" aria-label="Clear text" hidden>&times;</button>
         </div>
-        <button type="button" id="wizard-smart-submit" class="wizard-smart-submit-btn">Find my calculator</button>
+        <button type="button" id="wizard-smart-submit" class="wizard-smart-submit-btn">${esc(cfg.smartStartButtonLabel)}</button>
       </div>
       <div class="wizard-smart-hint">This is a shortcut into the same questions below, not a separate judgment call — check the "why" on whatever it suggests before trusting it.</div>
       <div id="wizard-smart-results"></div>
@@ -699,6 +711,8 @@ function renderWizard(path) {
     itemName: calc => calc.name,
     itemHint: calc => calc.hint,
     scoreItem: searchScore,
+    smartStartPlaceholder: 'e.g., comparing an oral health score between two treatment groups, adjusting for a baseline measurement',
+    smartStartButtonLabel: 'Find my calculator',
   });
 }
 
@@ -714,14 +728,26 @@ function renderLearnWizard(path) {
   });
 }
 
+// Same idea as searchScore()/searchScoreGuide(), but dispatching per
+// item on the fly — needed because the design wizard's smart-start
+// box (unlike the calculator finder's) scores a mix of calculators
+// and guides in the same pass, and each collection's weighted fields
+// only make sense against its own shape (calc.hint/description vs.
+// guide.blurb/dek). Relies on the _kind tag renderDesignWizard's own
+// resolveItem attaches below.
+function scoreDesignWizardItem(item, filter, filterWords) {
+  return item._kind === 'calc' ? searchScore(item, filter, filterWords) : searchScoreGuide(item, filter, filterWords);
+}
+
 // The study-design wizard's leaves mix both calculators and Learn
 // guides in the same results list (typically the design's own
 // "Appraising X Studies" guide as the primary result, plus a
 // companion calculator or two for once data exists), unlike the
 // other two trees which are each single-collection. resolveItem
 // checks CALCULATORS first, then GUIDES, tagging whichever it found
-// with _kind so itemHref/itemName/itemHint can dispatch correctly —
-// renderWizardGeneric itself needed no changes for this.
+// with _kind so itemHref/itemName/itemHint (and scoreDesignWizardItem
+// above) can all dispatch correctly — renderWizardGeneric itself
+// needed no changes for any of this.
 function renderDesignWizard(path) {
   renderWizardGeneric(path, {
     tree: DESIGN_WIZARD_TREE,
@@ -737,6 +763,13 @@ function renderDesignWizard(path) {
     itemHref: item => item._kind === 'calc' ? `#${item.id}` : `#learn/${item.id}`,
     itemName: item => item._kind === 'calc' ? item.name : item.title,
     itemHint: item => item._kind === 'calc' ? item.hint : item.blurb,
+    scoreItem: scoreDesignWizardItem,
+    smartStartPlaceholder: "e.g., I want to compare oral health outcomes after two different interventions, but haven't started the study yet",
+    smartStartButtonLabel: 'Find my design',
+    // "test"/"tests" would otherwise match every calculator whose name
+    // merely contains "test" (t-test, z-test, Egger's test, ...) for
+    // any query mentioning a diagnostic test — see matchWizardDescription.
+    smartStartExtraStopwords: new Set(['test', 'tests', 'testing']),
   });
 }
 
