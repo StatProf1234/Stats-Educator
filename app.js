@@ -103,6 +103,10 @@ function route() {
     renderLearnWizard(hash === 'learnwizard' ? [] : hash.slice('learnwizard/'.length).split('/'));
     return;
   }
+  if (hash === 'designwizard' || hash.startsWith('designwizard/')) {
+    renderDesignWizard(hash === 'designwizard' ? [] : hash.slice('designwizard/'.length).split('/'));
+    return;
+  }
   if (hash === 'learn' || hash.startsWith('learn/')) {
     if (hash === 'learn') { renderLearnHub(); return; }
     const guide = GUIDES.find(g => g.id === hash.slice('learn/'.length));
@@ -686,6 +690,32 @@ function renderLearnWizard(path) {
     itemHref: guide => `#learn/${guide.id}`,
     itemName: guide => guide.title,
     itemHint: guide => guide.blurb,
+  });
+}
+
+// The study-design wizard's leaves mix both calculators and Learn
+// guides in the same results list (typically the design's own
+// "Appraising X Studies" guide as the primary result, plus a
+// companion calculator or two for once data exists), unlike the
+// other two trees which are each single-collection. resolveItem
+// checks CALCULATORS first, then GUIDES, tagging whichever it found
+// with _kind so itemHref/itemName/itemHint can dispatch correctly —
+// renderWizardGeneric itself needed no changes for this.
+function renderDesignWizard(path) {
+  renderWizardGeneric(path, {
+    tree: DESIGN_WIZARD_TREE,
+    homeHash: 'designwizard',
+    eyebrow: 'Study Design Finder',
+    resolveItem: id => {
+      const calc = CALCULATORS.find(c => c.id === id);
+      if (calc) return { ...calc, _kind: 'calc' };
+      const guide = GUIDES.find(g => g.id === id);
+      if (guide) return { ...guide, _kind: 'guide' };
+      return null;
+    },
+    itemHref: item => item._kind === 'calc' ? `#${item.id}` : `#learn/${item.id}`,
+    itemName: item => item._kind === 'calc' ? item.name : item.title,
+    itemHint: item => item._kind === 'calc' ? item.hint : item.blurb,
   });
 }
 

@@ -16694,6 +16694,146 @@ const LEARN_WIZARD_TREE = {
 
 };
 
+/* ── STUDY DESIGN WIZARD ──────────────────────────────────────────────────
+   A third decision tree, same {question, options}/{results} shape as
+   WIZARD_TREE and LEARN_WIZARD_TREE, but answering a question neither
+   of those two are built for: not "which calculator fits data I
+   already have" or "which guide explains a design I already used", but
+   "which design should I use for a research question I haven't
+   started yet." Every leaf's primary result is one of the existing
+   'Appraising Studies by Design' guides (no new guide content needed —
+   the decision logic below is just those guides' own "what this
+   design can/cannot tell you" sections, worked backward into a
+   question), plus 1-2 companion calculators for once data exists.
+   Rendered by the same renderWizardGeneric() as the other two trees,
+   with a resolveItem that checks both CALCULATORS and GUIDES (see
+   renderDesignWizard() in app.js) since results here mix both. */
+const DESIGN_WIZARD_TREE = {
+
+  start: {
+    question: "What's the main goal of your research?",
+    options: [
+      { label: 'Test whether an intervention or exposure changes an outcome (a causal question)', next: 'causalGoal' },
+      { label: 'Estimate how common a condition or exposure is right now, or look for an association at a single point in time', next: 'prevalenceResult' },
+      { label: 'Predict what will happen to patients who already have a condition (prognosis)', next: 'prognosisResult' },
+      { label: 'Evaluate how well a test, measurement, or model correctly identifies a condition', next: 'diagGoalDesign' },
+      { label: 'Summarize or pool existing research on a question', next: 'reviewGoal' },
+      { label: 'Turn existing evidence into an actionable clinical recommendation', next: 'guidelineResult' },
+      { label: 'Check whether a full-scale study would even be logistically workable before committing to it', next: 'pilotResult' },
+    ]
+  },
+
+  causalGoal: {
+    question: 'Can you ethically and practically assign who receives the exposure or intervention — ideally at random?',
+    options: [
+      { label: 'Yes', next: 'rctResult' },
+      { label: 'No — I can only observe who happens to be exposed', next: 'observationalGoal' },
+    ]
+  },
+  rctResult: {
+    results: [
+      { id: 'appraisal-appraising-rcts', why: 'You can assign the exposure yourself, ideally at random — the strongest design for a causal claim, since randomization tends to balance both known and unknown confounders between groups.' },
+      { id: 'unpaired-t-test', why: "The standard way to compare two randomized arms' outcome means once your data is in." },
+      { id: 'ancova', why: "If you also recorded a baseline/pre-treatment measurement, adjusting for it — rather than just comparing raw follow-up scores — is usually the more powerful, less bias-prone analysis for a trial like this." },
+    ]
+  },
+
+  observationalGoal: {
+    question: 'Is the outcome rare, or slow enough to develop that following people forward would need a huge sample or many years?',
+    options: [
+      { label: 'Yes — better to start from the outcome and look backward for exposure', next: 'caseControlResult' },
+      { label: 'No — I can reasonably follow people forward from exposure to outcome', next: 'cohortResult' },
+    ]
+  },
+  cohortResult: {
+    results: [
+      { id: 'appraisal-appraising-cohort', why: "Since you can't assign exposure, and the outcome isn't rare enough to need to work backward, following exposed and unexposed groups forward lets you establish temporality directly and estimate incidence rather than only an odds ratio." },
+      { id: 'incidence-rate', why: 'Computes the incidence rate and rate ratio between your exposed and unexposed groups once follow-up is complete.' },
+      { id: 'measures-of-association', why: 'Expresses the exposed-vs-unexposed comparison as risk difference, risk ratio, or odds ratio with 95% CIs.' },
+    ]
+  },
+  caseControlResult: {
+    results: [
+      { id: 'appraisal-appraising-case-control', why: 'Because the outcome is rare or slow to develop, starting from people who already have it and looking backward for exposure is far more efficient than waiting years for enough cases to accrue in a forward-looking cohort.' },
+      { id: 'nested-case-control', why: 'If your cases and controls are sampled from within an existing cohort rather than from scratch, this gives a matched odds ratio that directly estimates the incidence rate ratio.' },
+      { id: 'measures-of-association', why: 'Computes the odds ratio — the only risk measure a case-control design can estimate directly — with its 95% CI.' },
+    ]
+  },
+
+  prevalenceResult: {
+    results: [
+      { id: 'appraisal-appraising-cross-sectional', why: 'A single-time-point snapshot is exactly what this design is built for — it can tell you how common something is, or whether two things are associated right now, but not which one came first.' },
+      { id: 'confidence-interval-proportion', why: 'A confidence interval for how common the condition or exposure is in your sample.' },
+      { id: 'chi-square-2x2', why: 'Tests whether two categorical variables measured at that same time point are associated.' },
+    ]
+  },
+
+  diagGoalDesign: {
+    question: 'Is the tool being evaluated a conventional test or measurement, or a machine-learning/AI model?',
+    options: [
+      { label: 'A conventional test or measurement', next: 'diagAccuracyResult' },
+      { label: 'A machine-learning/AI model', next: 'aiStudyResult' },
+    ]
+  },
+  diagAccuracyResult: {
+    results: [
+      { id: 'appraisal-appraising-diagnostic-studies', why: 'Evaluating a test against a reference standard is exactly this design\'s purpose — most of its appraisal risk comes from how patients were selected and whether everyone got the same reference standard, worth planning for up front rather than fixing after the fact.' },
+      { id: 'diagnostic-accuracy', why: 'Computes sensitivity, specificity, PPV, NPV, and likelihood ratios from your 2×2 table of test result vs. reference standard.' },
+      { id: 'roc-auc', why: "If your test produces a continuous or ordinal result rather than a single cutoff, this finds discrimination (AUC) across every possible threshold." },
+    ]
+  },
+  aiStudyResult: {
+    results: [
+      { id: 'appraisal-appraising-ai-studies', why: 'Same underlying question as a conventional diagnostic accuracy study, but training and validating a model adds its own failure modes — data leakage, internal-vs-external validation — worth designing around from the start.' },
+      { id: 'roc-auc', why: "Computes AUC and finds the optimal threshold for your model's continuous prediction scores." },
+    ]
+  },
+
+  reviewGoal: {
+    question: 'Is your question focused enough to pool a specific effect estimate across existing studies, or are you mapping a broader or still-emerging body of literature?',
+    options: [
+      { label: 'Focused — I want a pooled effect estimate', next: 'systematicReviewResult' },
+      { label: 'Broad/emerging — I want to map what exists and find the gaps', next: 'scopingReviewResult' },
+    ]
+  },
+  systematicReviewResult: {
+    results: [
+      { id: 'appraisal-appraising-systematic-reviews', why: 'A focused, poolable question across existing studies is exactly what a systematic review and meta-analysis is built to answer — worth registering your protocol (e.g. on PROSPERO) before you start screening.' },
+      { id: 'meta-analysis', why: 'Pools the effect estimates you extract from each included study into a fixed- and random-effects summary, with heterogeneity statistics.' },
+      { id: 'eggers-test', why: 'Once pooled, checks whether the funnel plot is asymmetric — a possible sign of small-study effects or publication bias among your included studies.' },
+    ]
+  },
+  scopingReviewResult: {
+    results: [
+      { id: 'appraisal-appraising-scoping-reviews', why: "Since you're mapping what exists rather than pooling a specific effect, this design skips formal risk-of-bias grading and instead charts the extent, range, and gaps in the literature — a common precursor to a future systematic review once the question narrows." },
+      { id: 'appraisal-appraising-systematic-reviews', why: 'If your question later narrows enough to pool a specific effect estimate, this is the design (and guide) to switch to.' },
+    ]
+  },
+
+  prognosisResult: {
+    results: [
+      { id: 'appraisal-appraising-prognostic-studies', why: "You're asking what happens next to patients who already have the condition, not testing an exposure or treatment — the key design choice is assembling an inception cohort at a consistent point in the disease course, not comparing groups." },
+      { id: 'kaplan-meier', why: "Estimates the survival curve and median time-to-event directly from your cohort's follow-up data." },
+      { id: 'log-rank-test', why: 'If comparing prognosis between two subgroups (e.g. by risk stratum), tests whether their survival curves differ.' },
+    ]
+  },
+
+  guidelineResult: {
+    results: [
+      { id: 'appraisal-appraising-guidelines', why: 'Synthesizing existing evidence into a recommendation is a layer above any single study — the design questions are about whether the full range of patients and options were considered and whether recommendation strength was graded transparently, not about collecting new primary data.' },
+      { id: 'appraisal-grade', why: 'The GRADE framework this kind of recommendation should be built on, rating certainty of evidence separately from strength of recommendation.' },
+    ]
+  },
+
+  pilotResult: {
+    results: [
+      { id: 'appraisal-pilot-studies', why: 'Before committing to a full-scale study, this design answers a narrower, purely operational question — can enough people be recruited and retained, is the intervention deliverable as planned — not whether the intervention works.' },
+      { id: 'sample-size-2mean', why: "Once your pilot estimates a plausible effect size and variability, use this to calculate the sample size for the definitive trial that follows." },
+    ]
+  },
+
+};
+
 /* ── SEARCH KEYWORDS ──────────────────────────────────────────────────────
    A synonym/intent layer for the sidebar search, keyed by calculator id.
    These are common ways someone might describe their situation ("before
