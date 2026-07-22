@@ -6941,6 +6941,136 @@ const CALCULATORS = [
     }
   },
 
+  /* ── EGGER'S TEST ─────────────────────────────────────────────────────
+     Regression test of funnel-plot asymmetry (Egger, Davey Smith,
+     Schneider & Minder, 1997): each study's standardized effect
+     (effect/SE) is regressed on its precision (1/SE); a non-zero
+     intercept signals asymmetry — a possible small-study effect or
+     publication bias. Algebraically the same as a weighted regression
+     of the raw effect on SE with weights 1/SE², which is how Egger's
+     original paper framed it. Conventionally tested at α = 0.10, not
+     0.05, since the test is typically underpowered with few studies.*/
+  {
+    id:          'eggers-test',
+    name:        "Egger's Test",
+    hint:        't = β₀ / SE(β₀), regressing y/SE on 1/SE, df = k−2',
+    category:    'Bayesian & Meta-Analysis',
+    description: "Tests for funnel-plot asymmetry — a regression-based signal of possible small-study effects or publication bias in a meta-analysis.",
+
+    formulas: [
+      {
+        label: 'Standardized Variables',
+        latex: 'x_i = \\dfrac{1}{SE_i}\\;\\text{(precision)}, \\qquad y_i^{*} = \\dfrac{y_i}{SE_i}\\;\\text{(standardized effect)}'
+      },
+      {
+        label: 'Ordinary Least Squares Regression',
+        latex: 'y_i^{*} = \\beta_0 + \\beta_1 x_i + \\varepsilon_i'
+      },
+      {
+        label: 'Test of the Intercept',
+        latex: 't = \\dfrac{\\hat\\beta_0}{SE(\\hat\\beta_0)}, \\qquad df = k-2'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Study',
+    groupMax: 12,
+    groupFields: [
+      { prefix: 'name',   label: 'Name / Date (optional)' },
+      { prefix: 'effect', label: 'Effect Estimate' },
+      { prefix: 'se',     label: 'SE' },
+    ],
+    inputs: [
+      { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
+      { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.30 },
+      { id: 'se1',     label: 'Study 1 SE',               default: 0.10 },
+      { id: 'name2',   type: 'text', label: 'Study 2 Name / Date (optional)', default: '' },
+      { id: 'effect2', label: 'Study 2 Effect Estimate', default: 0.25 },
+      { id: 'se2',     label: 'Study 2 SE',               default: 0.11 },
+      { id: 'name3',   type: 'text', label: 'Study 3 Name / Date (optional)', default: '' },
+      { id: 'effect3', label: 'Study 3 Effect Estimate', default: 0.38 },
+      { id: 'se3',     label: 'Study 3 SE',               default: 0.09 },
+      { id: 'name4',   type: 'text', label: 'Study 4 Name / Date (optional)', default: '' },
+      { id: 'effect4', label: 'Study 4 Effect Estimate', default: 0.42 },
+      { id: 'se4',     label: 'Study 4 SE',               default: 0.16 },
+      { id: 'name5',   type: 'text', label: 'Study 5 Name / Date (optional)', default: '' },
+      { id: 'effect5', label: 'Study 5 Effect Estimate', default: 0.33 },
+      { id: 'se5',     label: 'Study 5 SE',               default: 0.14 },
+      { id: 'name6',   type: 'text', label: 'Study 6 Name / Date (optional)', default: '' },
+      { id: 'effect6', label: 'Study 6 Effect Estimate', default: 0.60 },
+      { id: 'se6',     label: 'Study 6 SE',               default: 0.28 },
+      { id: 'name7',   type: 'text', label: 'Study 7 Name / Date (optional)', default: '' },
+      { id: 'effect7', label: 'Study 7 Effect Estimate', default: 0.50 },
+      { id: 'se7',     label: 'Study 7 SE',               default: 0.30 },
+      { id: 'name8',   type: 'text', label: 'Study 8 Name / Date (optional)', default: '' },
+      { id: 'effect8', label: 'Study 8 Effect Estimate', default: 0.85 },
+      { id: 'se8',     label: 'Study 8 SE',               default: 0.42 },
+      { id: 'name9',   type: 'text', label: 'Study 9 Name / Date (optional)', default: '' },
+      { id: 'effect9', label: 'Study 9 Effect Estimate', default: 0.95 },
+      { id: 'se9',     label: 'Study 9 SE',               default: 0.50 },
+      { id: 'name10',   type: 'text', label: 'Study 10 Name / Date (optional)', default: '' },
+      { id: 'effect10', label: 'Study 10 Effect Estimate', default: 1.15 },
+      { id: 'se10',     label: 'Study 10 SE',               default: 0.60 },
+      { id: 'name11',   type: 'text', label: 'Study 11 Name / Date (optional)', default: '' },
+      { id: 'effect11', label: 'Study 11 Effect Estimate (optional)', default: '' },
+      { id: 'se11',     label: 'Study 11 SE (optional)',               default: '' },
+      { id: 'name12',   type: 'text', label: 'Study 12 Name / Date (optional)', default: '' },
+      { id: 'effect12', label: 'Study 12 Effect Estimate (optional)', default: '' },
+      { id: 'se12',     label: 'Study 12 SE (optional)',               default: '' },
+    ],
+
+    example(values) {
+      const { studies, error } = gatherEffectStudies(values, 12);
+      if (error || studies.length < 3 || studies.some(s => s.se <= 0) || typeof jStat === 'undefined' || !jStat.studentt)
+        return 'Enter an Effect Estimate and SE for at least 3 studies to see a worked medical example here.';
+      const { k, intercept, t, df } = eggersRegression(studies);
+      const pValue = 2 * (1 - jStat.studentt.cdf(Math.abs(t), df));
+      const f = v => +v.toFixed(2);
+      const tail = pValue < 0.10
+        ? "the funnel plot is significantly asymmetric — a warning sign that smaller, noisier trials are systematically showing larger effects than the larger trials, consistent with (though not proof of) publication bias"
+        : 'no significant funnel-plot asymmetry was detected';
+      return `A systematic review pools ${k} trials of a new antiemetic, but the smallest, least precise trials all report noticeably larger effects than the largest, most precise ones — the classic funnel-plot asymmetry pattern. Regressing each trial's standardized effect on its precision, the intercept is ${f(intercept)} (t = ${f(t)}, df = ${df}), ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate(values) {
+      const { studies, error } = gatherEffectStudies(values, 12);
+      if (error) return [err(error)];
+      if (studies.length < 3) return [err("Enter Effect and SE for at least 3 studies — Egger's test needs df = k − 2 ≥ 1")];
+      if (studies.some(s => s.se <= 0)) return [err('Every study SE must be greater than 0')];
+      if (typeof jStat === 'undefined' || !jStat.studentt)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const { k, intercept, slope, seIntercept, t, df } = eggersRegression(studies);
+      const pValue = 2 * (1 - jStat.studentt.cdf(Math.abs(t), df));
+      const isSignificant = pValue < 0.10;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Number of Studies (k)', value: k, ci: null, isRatio: false },
+        { label: 'Intercept (β₀)', value: f(intercept), ci: null, isRatio: false, highlight: true },
+        { label: 'SE(Intercept)', value: f(seIntercept), ci: null, isRatio: false },
+        { label: 'Slope (β₁)', value: f(slope), ci: null, isRatio: false },
+        { label: 't-Statistic', value: f(t), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom (df)', value: df, ci: null, isRatio: false },
+        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.10 — Egger\'s test convention)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? 'Reject H₀ — the intercept differs significantly from zero, indicating funnel-plot asymmetry (a possible small-study effect or publication bias).'
+            : 'Fail to reject H₀ — no significant funnel-plot asymmetry detected.' },
+      ];
+
+      if (k < 10) {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: `With only ${k} studies, this test has limited power to detect real asymmetry — most guidance (e.g. the Cochrane Handbook) suggests at least 10 studies before relying on Egger's test at all.` });
+      }
+
+      rows.push({ label: 'Note', isText: true, isHtml: true, ci: null, isRatio: false,
+        value: `Egger's test is typically underpowered, which is why it conventionally tests against α = 0.10 rather than 0.05 — treat this as a screening signal, not proof of publication bias, and pair it with a visual look at the funnel plot itself (see <a href="#learn/reading-funnel-plots">How to Read a Funnel Plot</a>). If your effect measure is a ratio (OR, RR, HR), enter its natural log here, the same convention used by the <a href="#meta-analysis">Meta-Analysis</a> calculator.` });
+
+      return rows;
+    }
+  },
+
   /* ── 62. CRAMER'S V ─────────────────────────────────────────────────────
      Association strength for an r×c contingency table (r, c > 2),
      from a chi-square test of independence. Matches the source
@@ -11947,6 +12077,30 @@ function gatherEffectStudies(values, maxStudies = 6) {
   return { studies };
 }
 
+// Egger's test regression: OLS of each study's standardized effect
+// (effect/SE) on its precision (1/SE) — algebraically the same as a
+// weighted regression of the raw effect on SE with weights 1/SE²,
+// which is how Egger et al. (1997) originally framed it. Returns the
+// intercept/slope/t-statistic only; callers compute the p-value via
+// jStat.studentt.cdf themselves, matching this file's convention of
+// keeping p-value lookups in calculate()/example(), not in helpers.
+function eggersRegression(studies) {
+  const k = studies.length;
+  const x = studies.map(s => 1 / s.se);
+  const y = studies.map(s => s.effect / s.se);
+  const xbar = x.reduce((a, b) => a + b, 0) / k;
+  const ybar = y.reduce((a, b) => a + b, 0) / k;
+  const Sxx = x.reduce((s, xi) => s + (xi - xbar) ** 2, 0);
+  const Sxy = x.reduce((s, xi, i) => s + (xi - xbar) * (y[i] - ybar), 0);
+  const slope = Sxy / Sxx;
+  const intercept = ybar - slope * xbar;
+  const df = k - 2;
+  const SSE = x.reduce((s, xi, i) => s + (y[i] - (intercept + slope * xi)) ** 2, 0);
+  const seIntercept = Math.sqrt((SSE / df) * (1 / k + xbar ** 2 / Sxx));
+  const t = intercept / seIntercept;
+  return { k, intercept, slope, seIntercept, t, df };
+}
+
 // Reads r{1..6}/n{1..6} pairs for 'meta-analysis-correlations', same
 // blank-slot convention as gatherEffectStudies() — validates each
 // provided study's r is a proper correlation and n is large enough
@@ -15390,6 +15544,7 @@ const CALCULATOR_INDEX = [
   { id: 'bayesian-cri',            name: 'Bayesian Credible Intervals',  category: 'Bayesian & Meta-Analysis',    description: 'Derives Beta-posterior credible intervals for a proportion given prior and observed data.',      status: 'available' },
   { id: 'bayes-factor',            name: 'Bayes Factor',                 category: 'Bayesian & Meta-Analysis',    description: 'Quantifies the relative evidence for H₁ vs H₀ on a continuous scale.',                         status: 'available' },
   { id: 'meta-analysis',           name: 'Meta-Analysis (Q, τ², I², PI)', category: 'Bayesian & Meta-Analysis',  description: 'Pools effect sizes, tests heterogeneity, and computes prediction intervals.',                  status: 'available' },
+  { id: 'eggers-test',             name: "Egger's Test",                 category: 'Bayesian & Meta-Analysis',  description: 'Tests for funnel-plot asymmetry — a regression-based signal of possible small-study effects or publication bias in a meta-analysis.', status: 'available' },
   { id: 'hksj-meta-analysis',      name: 'Hartung-Knapp-Sidik-Jonkman (HKSJ) Method', category: 'Bayesian & Meta-Analysis', description: 'Compares the standard normal-based random-effects confidence interval to the Hartung-Knapp-Sidik-Jonkman adjustment, which is typically wider and more robust, especially with few studies or high heterogeneity.', status: 'available' },
   { id: 'meta-analysis-proportions', name: 'Meta-Analysis for Proportions', category: 'Bayesian & Meta-Analysis', description: 'Pools proportions (e.g., prevalence or event rates) across studies from raw event counts and sample sizes, using a variance-stabilizing transformation (or a one-stage GLMM), then tests heterogeneity and computes a prediction interval.', status: 'available' },
   { id: 'network-meta-analysis',   name: 'Network Meta-Analysis (Indirect & Mixed Comparisons)', category: 'Bayesian & Meta-Analysis', description: 'Combines direct and indirect evidence across three or more named treatments into one connected network, producing a network diagram, a full league table, heterogeneity statistics, and a frequentist treatment ranking.', status: 'available' },
@@ -16001,6 +16156,7 @@ const WIZARD_TREE = {
     results: [
       { id: 'meta-analysis',      why: 'Pools effect sizes across studies, tests heterogeneity, and computes a prediction interval.' },
       { id: 'hksj-meta-analysis', why: 'Compares the standard random-effects CI to the more conservative Hartung-Knapp-Sidik-Jonkman adjustment — worth checking whenever you have fewer than about 5-10 studies.' },
+      { id: 'eggers-test',        why: 'Once pooled, checks whether the funnel plot is asymmetric — a possible sign of small-study effects or publication bias (best with 10+ studies).' },
     ]
   },
   networkMetaResult: { results: [ { id: 'network-meta-analysis', why: 'Combines direct and indirect evidence across the whole treatment network into a league table, heterogeneity/inconsistency statistics, and a treatment ranking.' } ] },
@@ -16066,6 +16222,7 @@ const LEARN_WIZARD_TREE = {
       { label: 'A plot with a shaded equivalence or non-inferiority zone', next: 'res_equiv' },
       { label: 'A step-down curve tracking survival over time', next: 'res_km' },
       { label: 'A scatter plot of labeled studies from a meta-analysis, showing each one\'s heterogeneity contribution vs. its influence on the pooled result', next: 'res_baujat' },
+      { label: 'A scatter plot of studies\' effect size against precision, shaped like an inverted funnel', next: 'res_funnel' },
     ]
   },
   res_forest:      { results: [ { id: 'reading-forest-plots', why: "The standard chart for a single study's effect estimate or a meta-analysis's pooled result." } ] },
@@ -16075,6 +16232,7 @@ const LEARN_WIZARD_TREE = {
   res_equiv:       { results: [ { id: 'reading-equivalence-plots', why: 'Reading whether a confidence interval actually falls inside the zone that counts as "equivalent."' } ] },
   res_km:          { results: [ { id: 'reading-kaplan-meier-cox', why: 'Step curves, censoring tick marks, and what a Cox hazard ratio adds on top.' } ] },
   res_baujat:      { results: [ { id: 'reading-baujat-plots', why: 'Spotting which studies in a meta-analysis are both discordant and consequential, not just discordant.' } ] },
+  res_funnel:      { results: [ { id: 'reading-funnel-plots', why: 'Spotting whether small studies are missing in a lopsided way — a possible sign of publication bias.' } ] },
 
   // ── APPRAISING STUDIES BY DESIGN ──────────────────────────────────
   appraiseKind: {
@@ -16314,6 +16472,7 @@ const SEARCH_KEYWORDS = {
   'bayesian-cri':   ['credible interval', 'bayesian proportion estimate'],
   'bayes-factor':   ['bayes factor', 'convert a p-value to evidence strength'],
   'meta-analysis':  ['meta-analysis', 'pooled effect size', 'heterogeneity', 'forest plot', 'pool multiple studies', 'systematic review'],
+  'eggers-test':    ["egger's test", 'eggers test', 'funnel plot asymmetry', 'publication bias test', 'small-study effects', 'regression test of asymmetry', 'systematic review'],
   'hksj-meta-analysis': ['hartung-knapp', 'hartung knapp sidik jonkman', 'hksj', 'knapp-hartung', 'sidik-jonkman', 'refined variance random effects', 't-distribution meta-analysis', 'wider confidence interval meta-analysis', 'systematic review'],
   'meta-analysis-proportions': ['meta-analysis for proportions', 'pooled prevalence', 'pooled proportion', 'pooled event rate', 'arcsine transformation', 'freeman-tukey', 'logit transformation proportion', 'prevalence meta-analysis', 'pooling percentages', 'glmm meta-analysis', 'generalized linear mixed model', 'binomial-normal model', 'one-stage meta-analysis', 'logit glmm', 'systematic review'],
   'network-meta-analysis': ['network meta-analysis', 'nma', 'indirect comparison', 'mixed treatment comparison', 'bucher method', 'league table', 'multiple treatments comparison', 'p-score', 'sucra', 'ranking treatments', 'network diagram', 'network graph', 'network plot', 'evidence web', 'network geometry', 'systematic review'],
@@ -17352,6 +17511,15 @@ const NOTATION = {
     { symbol: 'SE_{RE}', meaning: 'Standard error of the random-effects pooled estimate.' },
     { symbol: 'RR_i, OR_i', meaning: "In Ratio mode, a study's risk ratio or odds ratio, entered as its natural log and exponentiated back after pooling." },
   ],
+  'eggers-test': [
+    { symbol: 'x_i', meaning: "A study's precision — the reciprocal of its Standard Error (1/SE_i)." },
+    { symbol: 'y_i^{*}', meaning: "A study's standardized effect — its Effect Estimate divided by its own SE." },
+    { symbol: '\\beta_0', meaning: 'Intercept of the regression line — the quantity actually being tested; a value far from zero signals funnel-plot asymmetry.' },
+    { symbol: '\\beta_1', meaning: 'Slope of the regression line, reflecting the overall size of the pooled effect once standardized by precision.' },
+    { symbol: 'k', meaning: 'Number of studies entered.' },
+    { symbol: 'df', meaning: 'Degrees of freedom for the t-test on the intercept, equal to k − 2.' },
+    { symbol: 't', meaning: "The intercept divided by its own standard error — the test statistic used to get Egger's test p-value." },
+  ],
   'hksj-meta-analysis': [
     { symbol: 'y_i,\\ SE_i', meaning: "A study's own entered Effect Estimate and Standard Error." },
     { symbol: 'w_i^{*}', meaning: 'Random-effects weight for study i, 1/(SE_i² + τ²) — identical for both methods below, since they share the same τ².' },
@@ -18029,6 +18197,85 @@ const GUIDES = [
     related: [
       { id: 'meta-analysis', why: 'If a Baujat plot flags a study, rerun this calculator with that study excluded as a leave-one-out sensitivity check to see whether the pooled estimate or its significance actually changes.' },
       { id: 'reading-forest-plots', why: "Companion chart-reading guide — covers the Q, τ², I² heterogeneity captions that a Baujat plot's x-axis is built from." },
+      { id: 'reading-funnel-plots', why: 'A different meta-analysis diagnostic — checks for small-study/publication-bias asymmetry, rather than which studies are both heterogeneous and influential.' },
+    ],
+  },
+
+  {
+    id: 'reading-funnel-plots',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Funnel Plot',
+    blurb: 'Why a symmetric inverted funnel is reassuring, and what a gap in one corner might be hiding.',
+    dek: `A funnel plot checks something a forest plot can't: whether the small studies in a meta-analysis are missing in a lopsided way &mdash; the visual signature of possible publication bias or other small-study effects.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 250" style="width:100%;height:auto;display:block;" role="img" aria-label="Two example funnel plots, one symmetric and one asymmetric">
+  <text x="150" y="12" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#4A4E6B">Symmetric — reassuring</text>
+  <text x="440" y="12" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#E07B2C">Asymmetric — possible bias</text>
+  <line x1="40" y1="16" x2="40" y2="216" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="40" y1="216" x2="260" y2="216" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="16" y="116" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099" transform="rotate(-90 16 116)">SE (large studies at top)</text>
+  <text x="150" y="230" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">Effect size</text>
+  <line x1="150" y1="16" x2="150" y2="216" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <line x1="150" y1="16" x2="42" y2="216" stroke="#E07B2C" stroke-width="1.25" stroke-dasharray="5,3"/>
+  <line x1="150" y1="16" x2="258" y2="216" stroke="#E07B2C" stroke-width="1.25" stroke-dasharray="5,3"/>
+  <circle cx="145" cy="38" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="160" cy="44" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="135" cy="58" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="172" cy="68" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="120" cy="98" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="184" cy="108" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="100" cy="148" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="200" cy="158" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="90" cy="184" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="210" cy="190" r="3.2" fill="#4E6EDB" opacity=".8"/>
+
+  <line x1="330" y1="16" x2="330" y2="216" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="330" y1="216" x2="550" y2="216" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="440" y="230" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">Effect size</text>
+  <line x1="440" y1="16" x2="440" y2="216" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <line x1="440" y1="16" x2="332" y2="216" stroke="#E07B2C" stroke-width="1.25" stroke-dasharray="5,3"/>
+  <line x1="440" y1="16" x2="548" y2="216" stroke="#E07B2C" stroke-width="1.25" stroke-dasharray="5,3"/>
+  <polygon points="380,150 440,150 440,216 350,216" fill="#E05C5C" opacity=".1" stroke="#E05C5C" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="392" y="205" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#B23A3A">missing studies</text>
+  <circle cx="435" cy="38" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="450" cy="44" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="425" cy="58" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="462" cy="68" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="458" cy="98" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="472" cy="108" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="490" cy="148" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="505" cy="160" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="520" cy="178" r="3.2" fill="#4E6EDB" opacity=".8"/>
+  <circle cx="500" cy="192" r="3.2" fill="#4E6EDB" opacity=".8"/>
+</svg>`,
+    figureCaption: `Two hypothetical meta-analyses of ten trials each. Left: studies scatter fairly evenly on both sides of the pooled effect at every level of precision — the classic symmetric, inverted-funnel shape. Right: the same large trials sit near the top, but the small, imprecise trials only ever land on the side favoring a larger effect — the bottom-left corner, where small trials with null or unfavorable results would fall, is conspicuously empty.`,
+    legend: [
+      { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Each point &mdash; one study, plotted as (its effect size, its standard error).` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Thin dashed vertical line &mdash; the pooled effect estimate.` },
+      { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#E07B2C" stroke-width="2" stroke-dasharray="5,3"/></svg>`, text: `Amber dashed lines &mdash; the pseudo 95% confidence region (pooled effect &plusmn; 1.96&times;SE) that widens as precision decreases.` },
+      { swatchStyle: 'background:#E05C5C;opacity:.25;border-radius:2px;', text: `Shaded red region &mdash; where studies are conspicuously missing, the pattern this plot is designed to catch.` },
+    ],
+    sections: [
+      {
+        heading: "What's plotted on each axis",
+        html: `<p>The x-axis is each study's effect estimate. The y-axis is a measure of precision &mdash; usually the standard error (SE) &mdash; plotted with the axis flipped so large, precise studies (small SE) sit near the <strong>top</strong> and small, imprecise studies (large SE) sit near the <strong>bottom</strong>. Because sampling error naturally shrinks as a study gets larger, small studies scatter more widely around the true effect while large studies cluster tightly near it. That's exactly why a "clean" funnel plot looks like a symmetric, inverted funnel or triangle &mdash; narrow at the top, widening as precision decreases toward the bottom.</p>`,
+      },
+      {
+        heading: 'Why asymmetry, not shape, is the signal',
+        html: `<p>A funnel plot isn't judged by whether it looks symmetric in some absolute sense &mdash; it's judged by whether small studies scatter about as evenly on both sides of the pooled effect as large studies do near the top. A gap in one corner, like the one shaded above, is the classic signature of publication bias: small studies with null or unfavorable results simply never got published, submitted, or included, while similarly small studies that happened to find a large, "positive" effect did.</p>`,
+      },
+      {
+        heading: 'Publication bias is not the only explanation',
+        html: `<p>Asymmetry can also come from genuine differences between small and large trials that have nothing to do with publication bias: small trials are often run first, in more homogeneous or highly selected populations, with less standardized protocols, or with a higher risk of bias &mdash; any of which can genuinely inflate their effect estimates. Funnel-plot asymmetry is a prompt to investigate further (checking Egger's test, the included studies' populations and timing, and their risk of bias), not an automatic diagnosis of publication bias on its own.</p>`,
+      },
+      {
+        heading: 'A visual check needs a statistical one alongside it',
+        html: `<p>Reading funnel-plot symmetry by eye is inherently subjective, especially with fewer than about 10 studies, where random scatter alone can look asymmetric. Egger's test formalizes the same question as a regression of each study's standardized effect on its precision, giving a p-value alongside the picture instead of a judgment call from squinting at a scatter plot.</p>`,
+      },
+    ],
+    related: [
+      { id: 'eggers-test', why: "Puts a p-value on the same asymmetry this plot shows visually — regressing each study's standardized effect on its precision." },
+      { id: 'meta-analysis', why: 'Pools the same effect-size/SE data shown here into a fixed- and random-effects estimate, forest plot, and heterogeneity statistics.' },
+      { id: 'reading-baujat-plots', why: 'A different meta-analysis diagnostic — flags which studies are both heterogeneous and influential, rather than checking for small-study asymmetry.' },
     ],
   },
 
