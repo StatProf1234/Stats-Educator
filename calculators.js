@@ -4776,8 +4776,8 @@ const CALCULATORS = [
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant ? `Reject H₀ — significant association (Monte Carlo exact p = ${formatPValue(p)})` : 'Fail to reject H₀ — no significant association detected' },
         { label: 'Reliability of the Asymptotic Test', isText: true, ci: null, isRatio: false, value: reliabilityNote },
-        { label: 'Method', isText: true, ci: null, isRatio: false,
-          value: "Random tables are drawn under the observed row/column margins via sequential conditional hypergeometric sampling (the same construction behind R's r2dtable()/Patefield's algorithm), and the Monte Carlo p-value is the proportion of simulated tables with a chi-square statistic at least as extreme as observed (Laplace +1/+1 estimator). The 95% CI reflects simulation (not sampling) uncertainty and narrows with more permutations." },
+        { label: 'Method', isText: true, isHtml: true, ci: null, isRatio: false,
+          value: "Random tables are drawn under the observed row/column margins via sequential conditional hypergeometric sampling (the same construction behind R's r2dtable()/Patefield's algorithm), and the Monte Carlo p-value is the proportion of simulated tables with a chi-square statistic at least as extreme as observed (Laplace +1/+1 estimator). The 95% CI reflects simulation (not sampling) uncertainty and narrows with more permutations — see <a href=\"#learn/appraisal-monte-carlo-pvalues\">Reading a Monte Carlo (Simulated) p-value</a> for how to judge whether B was large enough." },
       ];
     }
   },
@@ -11475,6 +11475,132 @@ const CALCULATORS = [
     }
   },
 
+  /* ── ANCOVA (2-GROUP, ONE COVARIATE) ─────────────────────────────────
+     Compares two groups' outcome means adjusting for a continuous
+     covariate (typically a baseline measurement) — the standard
+     analysis for a two-arm trial with a pre-treatment score, and
+     generally more powerful than comparing raw post-scores or change
+     scores alone (Vickers & Altman, BMJ 2001). Computed via the
+     classical sums-of-squares route (Huitema, "The Analysis of
+     Covariance"): a pooled within-group slope adjusts the between-
+     groups sum of squares, rather than fitting the equivalent GLM via
+     matrix regression. Also reports a homogeneity-of-regression-
+     slopes check, the assumption a common-slope ANCOVA depends on.  */
+  {
+    id:          'ancova',
+    name:        'ANCOVA (2-Group, One Covariate)',
+    hint:        'F = MS_groups,adj / MS_error,adj, adjusting Y for baseline X',
+    category:    'ANOVA',
+    description: "Compares two groups' outcome means while statistically adjusting for a continuous baseline covariate — the standard analysis for a two-arm trial with a baseline measurement, and generally more powerful than comparing raw post-scores or change scores alone.",
+
+    formulas: [
+      {
+        label: 'ANCOVA Model (Common Slope)',
+        latex: 'Y_{ij} = \\mu + \\alpha_i + \\beta\\left(X_{ij}-\\bar{X}\\right) + \\varepsilon_{ij}'
+      },
+      {
+        label: 'Adjusted (Residual) Error Sum of Squares',
+        latex: 'SSY_{E,adj} = SSY_E - \\dfrac{SP_{XY,E}^2}{SSX_E}, \\qquad df_{E,adj}=N-3'
+      },
+      {
+        label: 'Adjusted Between-Groups Sum of Squares',
+        latex: 'SSY_{Groups,adj} = SSY_{T,adj} - SSY_{E,adj}, \\qquad df_{Groups}=1'
+      },
+      {
+        label: 'F-Test of the Adjusted Group Difference',
+        latex: 'F = \\dfrac{MS_{Groups,adj}}{MS_{E,adj}} \\;\\sim\\; F_{1,\\,N-3}'
+      },
+      {
+        label: 'Adjusted Mean Difference',
+        latex: '\\Delta_{adj} = \\left(\\bar{Y}_2-\\bar{Y}_1\\right) - b\\left(\\bar{X}_2-\\bar{X}_1\\right)'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'x1', type: 'textarea', label: 'Group 1 Baseline / Covariate (X, comma-separated)', default: '6,7,5,8,6,7,5,6' },
+      { id: 'y1', type: 'textarea', label: 'Group 1 Outcome (Y, comma-separated)',              default: '5,6,4,7,5,4,4,5' },
+      { id: 'x2', type: 'textarea', label: 'Group 2 Baseline / Covariate (X, comma-separated)', default: '7,6,8,5,7,6,8,7' },
+      { id: 'y2', type: 'textarea', label: 'Group 2 Outcome (Y, comma-separated)',              default: '4,3,5,2,3,3,4,3' },
+    ],
+
+    example({ x1, y1, x2, y2 }) {
+      const X1 = parseNumberList(x1), Y1 = parseNumberList(y1);
+      const X2 = parseNumberList(x2), Y2 = parseNumberList(y2);
+      if (X1.length !== Y1.length || X2.length !== Y2.length || X1.length < 3 || X2.length < 3 ||
+          X1.some(v => !isFinite(v)) || Y1.some(v => !isFinite(v)) || X2.some(v => !isFinite(v)) || Y2.some(v => !isFinite(v)) ||
+          typeof jStat === 'undefined' || !jStat.centralF)
+        return 'Enter at least 3 paired Baseline/Outcome values in each group to see a worked medical example here.';
+      const r = ancovaStats(X1, Y1, X2, Y2);
+      if (r.error) return 'Enter Baseline values that are not all identical within each group to see a worked medical example here.';
+      const pF = 1 - jStat.centralF.cdf(r.F, 1, r.dfE);
+      const f = v => +v.toFixed(2);
+      const tail = pF < 0.05
+        ? 'a significant treatment effect remains after accounting for where each patient started'
+        : 'no significant treatment effect remains once baseline is accounted for';
+      return `A trial randomizes ${r.n1 + r.n2} patients to Control or Treatment and measures a pain score both at baseline and at follow-up. Raw follow-up means alone would confound the treatment effect with any baseline imbalance between arms, so ANCOVA adjusts each patient's follow-up score for their own baseline score first: the adjusted mean difference is ${f(r.adjDiff)} points (F(1,${r.dfE}) = ${f(r.F)}, ${formatPText(pF)}) — ${tail}.`;
+    },
+
+    calculate({ x1, y1, x2, y2 }) {
+      const X1 = parseNumberList(x1), Y1 = parseNumberList(y1);
+      const X2 = parseNumberList(x2), Y2 = parseNumberList(y2);
+      if (X1.some(v => !isFinite(v)) || Y1.some(v => !isFinite(v)) || X2.some(v => !isFinite(v)) || Y2.some(v => !isFinite(v)))
+        return [err('All values must be numeric')];
+      if (X1.length !== Y1.length) return [err('Group 1: Baseline and Outcome must have the same number of values (paired data)')];
+      if (X2.length !== Y2.length) return [err('Group 2: Baseline and Outcome must have the same number of values (paired data)')];
+      if (X1.length < 3 || X2.length < 3) return [err('Each group needs at least 3 paired Baseline/Outcome values')];
+      if (typeof jStat === 'undefined' || !jStat.centralF || !jStat.studentt)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const r = ancovaStats(X1, Y1, X2, Y2);
+      if (r.error) return [err(r.error)];
+
+      const pF = 1 - jStat.centralF.cdf(r.F, 1, r.dfE);
+      const pB = 2 * (1 - jStat.studentt.cdf(Math.abs(r.tB), r.dfE));
+      const tCrit = jStat.studentt.inv(0.975, r.dfE);
+      const diffCI = [r.adjDiff - tCrit * r.seDiff, r.adjDiff + tCrit * r.seDiff];
+      const pSlopes = r.dfSep > 0 ? 1 - jStat.centralF.cdf(r.Fslopes, 1, r.dfSep) : null;
+
+      const isSignificant = pF < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Group Sizes (n₁, n₂)', value: `${r.n1}, ${r.n2}`, ci: null, isRatio: false },
+        { label: 'Group 1 — Raw Mean Baseline / Outcome', value: `${f(r.x1m, 2)} / ${f(r.y1m, 2)}`, ci: null, isRatio: false },
+        { label: 'Group 2 — Raw Mean Baseline / Outcome', value: `${f(r.x2m, 2)} / ${f(r.y2m, 2)}`, ci: null, isRatio: false },
+        { label: 'Common Slope (b) — Covariate → Outcome', value: f(r.b), ci: null, isRatio: false },
+        { label: 't-Statistic (slope) & p-value', isText: true, ci: null, isRatio: false,
+          value: `t = ${f(r.tB)}, ${formatPText(pB)}` },
+        { label: 'Group 1 Adjusted Mean', value: f(r.adjMean1), ci: null, isRatio: false },
+        { label: 'Group 2 Adjusted Mean', value: f(r.adjMean2), ci: null, isRatio: false },
+        { label: 'Adjusted Mean Difference (Group 2 − Group 1)', value: f(r.adjDiff), ci: [f(diffCI[0]), f(diffCI[1])], isRatio: false, highlight: true },
+        { label: 'F-Statistic (Group Effect, Adjusted)', value: f(r.F), ci: null, isRatio: false, highlight: true },
+        { label: 'Degrees of Freedom', value: `1, ${r.dfE}`, ci: null, isRatio: false },
+        { label: 'p-value', value: formatPValue(pF), ci: null, isRatio: false, highlight: true },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? 'Reject H₀ — the groups differ significantly on the outcome after adjusting for the covariate.'
+            : 'Fail to reject H₀ — no significant group difference once the covariate is accounted for.' },
+      ];
+
+      if (pSlopes !== null) {
+        rows.push({ label: 'Homogeneity of Regression Slopes — F-Statistic', value: f(r.Fslopes), ci: null, isRatio: false });
+        rows.push({ label: 'Homogeneity of Regression Slopes — p-value', isText: true, ci: null, isRatio: false,
+          value: `F(1,${r.dfSep}) = ${f(r.Fslopes)}, ${formatPText(pSlopes)} — ${pSlopes < 0.05
+            ? 'the two groups\' own slopes differ significantly, so the common-slope ANCOVA above is questionable; the covariate-outcome relationship itself may depend on group, which a common adjusted difference can\'t capture'
+            : 'no significant difference between the two groups\' own slopes, supporting the common-slope assumption this ANCOVA relies on'}` });
+      }
+
+      rows.push({ label: 'Scatter Plot with Adjusted Regression Lines', isSVG: true,
+        svg: ancovaScatterSVG(X1, Y1, X2, Y2, r.b, r.y1m - r.b * r.x1m, r.y2m - r.b * r.x2m, r.xGrand) });
+
+      rows.push({ label: 'Note', isText: true, isHtml: true, ci: null, isRatio: false,
+        value: `ANCOVA assumes a linear covariate-outcome relationship with the <em>same</em> slope in both groups (checked above) — if that assumption fails, or if the covariate wasn't measured before group assignment, the adjusted difference above isn't a valid causal comparison. See <a href="#unpaired-t-test">Unpaired t-Test</a> for the unadjusted comparison, or <a href="#paired-t-test">Paired t-Test</a> for a within-group before/after comparison.` });
+
+      return rows;
+    }
+  },
+
 ];
 
 
@@ -12099,6 +12225,57 @@ function eggersRegression(studies) {
   const seIntercept = Math.sqrt((SSE / df) * (1 / k + xbar ** 2 / Sxx));
   const t = intercept / seIntercept;
   return { k, intercept, slope, seIntercept, t, df };
+}
+
+// ANCOVA (2-group, one covariate) via the classical sums-of-squares
+// route (Huitema, "The Analysis of Covariance"): pools each group's
+// within-group SSX/SSY/SPXY to get one common slope, uses it to
+// adjust the pooled error SS, then applies the same adjustment to the
+// total (group-ignoring) sums so the difference isolates the adjusted
+// between-groups SS. Also returns the separate-slopes error SS needed
+// for the homogeneity-of-regression-slopes check. Returns { error }
+// if either group's covariate has zero variance (slope undefined).
+function ancovaStats(x1, y1, x2, y2) {
+  const n1 = x1.length, n2 = x2.length, N = n1 + n2;
+  const mean = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const ssOf = (arr, m) => arr.reduce((s, v) => s + (v - m) ** 2, 0);
+  const spOf = (xs, ys, xm, ym) => xs.reduce((s, v, i) => s + (v - xm) * (ys[i] - ym), 0);
+
+  const x1m = mean(x1), y1m = mean(y1), x2m = mean(x2), y2m = mean(y2);
+  const SSX1 = ssOf(x1, x1m), SSY1 = ssOf(y1, y1m), SPXY1 = spOf(x1, y1, x1m, y1m);
+  const SSX2 = ssOf(x2, x2m), SSY2 = ssOf(y2, y2m), SPXY2 = spOf(x2, y2, x2m, y2m);
+  if (SSX1 === 0 || SSX2 === 0) return { error: 'Baseline/Covariate values must have some spread (not all identical) within each group' };
+
+  const SSX_E = SSX1 + SSX2, SSY_E = SSY1 + SSY2, SPXY_E = SPXY1 + SPXY2;
+  const b = SPXY_E / SSX_E;
+  const SSY_E_adj = SSY_E - (SPXY_E ** 2) / SSX_E;
+  const dfE = N - 3;
+
+  const xGrand = (n1 * x1m + n2 * x2m) / N, yGrand = (n1 * y1m + n2 * y2m) / N;
+  const allX = [...x1, ...x2], allY = [...y1, ...y2];
+  const SSX_T  = ssOf(allX, xGrand);
+  const SSY_T  = ssOf(allY, yGrand);
+  const SPXY_T = spOf(allX, allY, xGrand, yGrand);
+  const SSY_T_adj = SSY_T - (SPXY_T ** 2) / SSX_T;
+
+  const SS_groups_adj = SSY_T_adj - SSY_E_adj;
+  const MS_E_adj = SSY_E_adj / dfE;
+  const F = SS_groups_adj / MS_E_adj;
+
+  const seB = Math.sqrt(MS_E_adj / SSX_E);
+  const tB  = b / seB;
+
+  const adjMean1 = y1m - b * (x1m - xGrand);
+  const adjMean2 = y2m - b * (x2m - xGrand);
+  const adjDiff  = adjMean2 - adjMean1;
+  const seDiff   = Math.sqrt(MS_E_adj * (1 / n1 + 1 / n2 + ((x1m - x2m) ** 2) / SSX_E));
+
+  const SSE_sep = (SSY1 - (SPXY1 ** 2) / SSX1) + (SSY2 - (SPXY2 ** 2) / SSX2);
+  const dfSep = N - 4;
+  const Fslopes = dfSep > 0 ? ((SSY_E_adj - SSE_sep) / 1) / (SSE_sep / dfSep) : null;
+
+  return { n1, n2, N, x1m, y1m, x2m, y2m, xGrand, b, seB, tB, dfE, F,
+    adjMean1, adjMean2, adjDiff, seDiff, Fslopes, dfSep };
 }
 
 // Reads r{1..6}/n{1..6} pairs for 'meta-analysis-correlations', same
@@ -14949,6 +15126,72 @@ function regressionScatterSVG(xs, ys, slope, intercept) {
 </svg>`;
 }
 
+// ANCOVA scatter: both groups' (baseline, outcome) points plotted
+// together, with two parallel regression lines sharing the common
+// pooled slope but each group's own intercept — the vertical gap
+// between the two lines is constant everywhere (that's what "common
+// slope" means), and equals the ANCOVA-adjusted difference at the
+// dashed grand-mean guide.
+function ancovaScatterSVG(x1, y1, x2, y2, slope, intercept1, intercept2, xGrandMean) {
+  const W = 560, H = 320;
+  const PL = 48, PR = 16, PT = 16, PB = 40;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+
+  const allX = [...x1, ...x2];
+  let xMin = Math.min(...allX), xMax = Math.max(...allX);
+  const line1YAtMin = intercept1 + slope * xMin, line1YAtMax = intercept1 + slope * xMax;
+  const line2YAtMin = intercept2 + slope * xMin, line2YAtMax = intercept2 + slope * xMax;
+  let yMin = Math.min(...y1, ...y2, line1YAtMin, line1YAtMax, line2YAtMin, line2YAtMax);
+  let yMax = Math.max(...y1, ...y2, line1YAtMin, line1YAtMax, line2YAtMin, line2YAtMax);
+
+  const xPad = (xMax - xMin) * 0.08 || 1, yPad = (yMax - yMin) * 0.12 || 1;
+  xMin -= xPad; xMax += xPad; yMin -= yPad; yMax += yPad;
+
+  const toX = v => PL + ((v - xMin) / (xMax - xMin)) * plotW;
+  const toY = v => PT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  const tick = v => {
+    const av = Math.abs(v);
+    return av !== 0 && av < 1 ? v.toFixed(2) : av < 10 ? v.toFixed(1) : v.toFixed(0);
+  };
+
+  const gridSteps = 5;
+  const gridY = Array.from({ length: gridSteps + 1 }, (_, i) => yMin + (i / gridSteps) * (yMax - yMin)).map(v => {
+    const y = toY(v).toFixed(1);
+    return `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#EEF1F7" stroke-width="1"/>
+      <text x="${PL - 6}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${tick(v)}</text>`;
+  }).join('');
+
+  const xTickCount = 5;
+  const xTicks = Array.from({ length: xTickCount + 1 }, (_, i) => xMin + (i / xTickCount) * (xMax - xMin)).map(v => {
+    const x = toX(v).toFixed(1);
+    return `<line x1="${x}" y1="${(PT + plotH).toFixed(1)}" x2="${x}" y2="${(PT + plotH + 4).toFixed(1)}" stroke="#CDD2E0" stroke-width="1"/>
+      <text x="${x}" y="${H - 22}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${tick(v)}</text>`;
+  }).join('');
+
+  const line1 = `<line x1="${toX(xMin).toFixed(1)}" y1="${toY(line1YAtMin).toFixed(1)}" x2="${toX(xMax).toFixed(1)}" y2="${toY(line1YAtMax).toFixed(1)}" stroke="#4E6EDB" stroke-width="2"/>`;
+  const line2 = `<line x1="${toX(xMin).toFixed(1)}" y1="${toY(line2YAtMin).toFixed(1)}" x2="${toX(xMax).toFixed(1)}" y2="${toY(line2YAtMax).toFixed(1)}" stroke="#E07B2C" stroke-width="2"/>`;
+
+  const dots1 = x1.map((x, i) => `<circle cx="${toX(x).toFixed(1)}" cy="${toY(y1[i]).toFixed(1)}" r="3.5" fill="#4E6EDB" opacity=".75"/>`).join('');
+  const dots2 = x2.map((x, i) => `<circle cx="${toX(x).toFixed(1)}" cy="${toY(y2[i]).toFixed(1)}" r="3.5" fill="#E07B2C" opacity=".75"/>`).join('');
+
+  const gmX = toX(xGrandMean).toFixed(1);
+  const grandMeanLine = `<line x1="${gmX}" y1="${PT}" x2="${gmX}" y2="${PT + plotH}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Scatter plot of baseline vs outcome for both groups, with parallel ANCOVA-adjusted regression lines">
+  <rect x="${PL}" y="${PT}" width="${plotW}" height="${plotH}" fill="none" stroke="#CDD2E0" stroke-width="1"/>
+  ${gridY}
+  ${xTicks}
+  ${grandMeanLine}
+  ${line1}
+  ${line2}
+  ${dots1}
+  ${dots2}
+  <text x="${(PL + plotW / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Baseline / Covariate (X)</text>
+  <text x="12" y="${(PT + plotH / 2).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099" transform="rotate(-90 12 ${(PT + plotH / 2).toFixed(1)})">Outcome (Y)</text>
+</svg>`;
+}
+
 /* ── BLAND-ALTMAN & EQUIVALENCE-TEST HELPERS ─────────────────────────────── */
 
 // Mean-difference (Bland-Altman) scatter: each point is one subject's
@@ -15475,6 +15718,7 @@ const CALCULATOR_INDEX = [
   { id: 'holm-sidak-test',      name: "Holm-Šídák Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons following ANOVA, using pooled-variance t-tests with the Holm-Šídák step-down correction for multiple comparisons.', status: 'available' },
   { id: 'shapiro-wilk-test',    name: 'Shapiro-Wilk Test',               category: 'ANOVA',                       description: 'Tests whether a sample of continuous data is consistent with a normal distribution — the assumption behind parametric tests like the t-test and ANOVA.', status: 'available' },
   { id: 'repeated-measures-anova', name: 'Repeated Measures ANOVA',      category: 'ANOVA',                       description: 'Analyzes data from designs where the same subjects are measured under multiple conditions.',   status: 'available' },
+  { id: 'ancova',               name: 'ANCOVA (2-Group, One Covariate)', category: 'ANOVA',                       description: "Compares two groups' outcome means while statistically adjusting for a continuous baseline covariate — the standard analysis for a two-arm trial with a baseline measurement.", status: 'available' },
 
   // ── 7. CORRELATION & REGRESSION ──────────────────────────────────────
   { id: 'pearson-r',            name: "Pearson's Correlation",           category: 'Correlation & Regression',    description: "Measures the strength and direction of the linear relationship between two continuous variables.", status: 'available'  },
@@ -15695,9 +15939,15 @@ const WIZARD_TREE = {
     options: [
       { label: 'Show that they differ (standard hypothesis test)',                     next: 'twoGroupContinuous' },
       { label: "Show they're equivalent or non-inferior (e.g., generic vs. brand-name drug)", next: 'equivalenceResult' },
+      { label: 'Adjust the comparison for a baseline/covariate measurement (e.g., a trial with a pre-treatment score)', next: 'ancovaResult' },
     ]
   },
   equivalenceResult: { results: [ { id: 'equivalence-test', why: 'The two one-sided tests (TOST) procedure for equivalence or non-inferiority against a pre-set margin.' } ] },
+  ancovaResult: {
+    results: [
+      { id: 'ancova', why: 'Compares the two groups on the outcome while statistically adjusting for each subject\'s own baseline/covariate value — generally more powerful and less bias-prone than comparing raw post-scores or change scores alone.' },
+    ]
+  },
 
   twoGroupContinuous: {
     question: 'Are the two groups paired (the same subjects measured twice) or independent (different subjects)?',
@@ -16304,6 +16554,7 @@ const LEARN_WIZARD_TREE = {
   res_confound: { results: [
     { id: 'appraisal-confounding-bias', why: 'The core mechanism behind most observational-study appraisal.' },
     { id: 'appraisal-study-design', why: "Where a given design actually sits in the hierarchy, and when that hierarchy doesn't hold." },
+    { id: 'appraisal-ancova', why: 'What it means when a trial statistically adjusts for a baseline covariate instead of comparing raw post-scores.' },
   ]},
   res_prevalence: { results: [ { id: 'appraisal-diagnostic-tests-prevalence', why: 'The same test performs differently in a screening population than in a specialty referral clinic.' } ] },
   res_survival:   { results: [ { id: 'appraisal-survival-basics', why: 'Censoring, the log-rank test, and what a hazard ratio assumes to stay valid.' } ] },
@@ -16316,6 +16567,7 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-table2-fallacy', why: "Only the exposure of interest in a regression table was built to be unconfounded — the rest weren't." },
     { id: 'appraisal-regression-to-mean', why: 'Why a before/after study with no control group will almost always look like "improvement."' },
     { id: 'appraisal-subgroup-interaction', why: '"Worked in women but not men" is usually not what the data actually show.' },
+    { id: 'appraisal-monte-carlo-pvalues', why: '"p < 0.001" from a simulated/permutation test can just mean the simulation budget ran out, not that the true p-value is tiny.' },
   ]},
 
   // ── QUICK REFERENCE ───────────────────────────────────────────────
@@ -16404,6 +16656,7 @@ const SEARCH_KEYWORDS = {
   'holm-sidak-test':        ['holm-sidak test', 'holm sidak', 'post hoc test', 'pairwise comparison after anova', 'multiple comparisons correction', 'step-down sidak'],
   'shapiro-wilk-test':      ['shapiro-wilk test', 'shapiro wilk', 'test for normality', 'normality assumption', 'is my data normally distributed'],
   'repeated-measures-anova': ['repeated measures anova', 'same subjects multiple conditions'],
+  'ancova':                 ['ancova', 'analysis of covariance', 'adjust for baseline', 'baseline-adjusted analysis', 'covariate-adjusted comparison', 'change score vs ancova', 'adjusted mean difference', 'randomized controlled trial', 'homogeneity of regression slopes'],
 
   // Correlation & Regression
   'pearson-r':            ['pearson correlation', 'linear correlation', 'correlation coefficient r'],
@@ -16994,6 +17247,16 @@ const NOTATION = {
     { symbol: 'SS_{error}', meaning: 'Leftover variation after removing both the condition effect and the subject effect.' },
     { symbol: 'SS_T', meaning: 'Total sum of squares across every measurement in the subjects × conditions matrix.' },
     { symbol: 'F', meaning: 'F-statistic — ratio of the condition effect\'s mean square to the error mean square, with the between-subject variation removed.' },
+  ],
+  'ancova': [
+    { symbol: 'X_{ij}, Y_{ij}', meaning: "Subject j's Baseline/Covariate and Outcome values in group i." },
+    { symbol: 'b', meaning: "The common (pooled within-group) slope — how much Outcome changes per unit of Baseline, assumed equal in both groups." },
+    { symbol: 'SSX_E,\\ SSY_E,\\ SP_{XY,E}', meaning: "Pooled within-group sums of squares/cross-products for the Covariate, Outcome, and their product, combined across both groups." },
+    { symbol: 'SSY_{E,adj}', meaning: 'Error sum of squares left over after the covariate\'s predictable share of Outcome variation is removed.' },
+    { symbol: 'SSY_{T,adj}', meaning: 'The same adjustment applied to the total (group-ignoring) sums — the baseline against which the adjusted group effect is measured.' },
+    { symbol: '\\bar{X}_i,\\ \\bar{Y}_i', meaning: "Group i's raw (unadjusted) mean Baseline and mean Outcome." },
+    { symbol: '\\Delta_{adj}', meaning: "The ANCOVA-adjusted difference in Outcome between the two groups, after accounting for any Baseline imbalance between them." },
+    { symbol: 'N', meaning: 'Total sample size across both groups.' },
   ],
 
   // Correlation & Regression
@@ -18758,6 +19021,43 @@ const GUIDES = [
       { id: 'measures-of-association', why: 'The same RR/OR output that confounding and bias can distort if not accounted for.' },
       { id: 'ipw-ate', why: 'Uses inverse probability weighting to adjust for measured confounders in an observational analysis.' },
       { id: 'assoc-pred-intervals', why: 'Prediction intervals for measures of association, useful when communicating uncertainty beyond a single confidence interval.' },
+      { id: 'appraisal-ancova', why: "Applies the same 'don't adjust for a variable on the causal pathway' rule to choosing a covariate in a baseline-adjusted trial analysis." },
+    ],
+  },
+
+  {
+    id: 'appraisal-ancova',
+    category: 'Critical Appraisal of the Literature',
+    title: 'How to Interpret an ANCOVA-Adjusted Result',
+    blurb: 'What "adjusted for baseline" actually buys a trial, and the covariate pitfalls worth checking before trusting the adjusted number.',
+    dek: `Many trials report a between-group difference adjusted for a baseline covariate (ANCOVA) rather than a simple comparison of raw follow-up scores or change scores. The adjusted number usually isn't just a formality &mdash; but it isn't automatically trustworthy either.`,
+    sections: [
+      {
+        heading: 'Why adjust for baseline at all?',
+        html: `<p>There are three ways to analyze a two-arm trial with a pre- and post-treatment measurement: compare the raw follow-up scores, compare each patient's change score (follow-up minus baseline), or use ANCOVA to adjust the follow-up score for baseline directly. Even under perfect randomization, the two arms can differ somewhat at baseline just by chance &mdash; and whenever baseline and follow-up are correlated (the usual case), that chance imbalance biases a raw follow-up comparison up or down depending on which way it happened to run.</p>
+          <p>Comparing change scores looks like a fix, but is provably less statistically efficient (wider confidence intervals, lower power) than ANCOVA whenever the baseline-to-follow-up correlation is imperfect (Vickers &amp; Altman, <em>BMJ</em> 2001, "Statistics Notes: Analysis of covariance") &mdash; and change scores remain vulnerable to regression to the mean pulling patients who started at an extreme baseline back toward the average regardless of treatment. ANCOVA statistically removes the share of the outcome that baseline alone would predict before comparing groups, which is both more powerful and unbiased by chance baseline imbalance.</p>`,
+      },
+      {
+        heading: 'Reading the adjusted difference vs. the raw one',
+        html: `<p>A paper reporting ANCOVA usually shows each group's raw (unadjusted) mean alongside an "adjusted mean" or "adjusted difference," with its own confidence interval and p-value. The adjusted numbers, not the raw ones, are what the treatment comparison should be read from. It's normal, not suspicious, for the adjusted means to look noticeably different from the raw means whenever the two arms started at different baseline levels &mdash; correcting for exactly that is the whole point.</p>`,
+      },
+      {
+        heading: 'The assumption underneath it: one slope for every group',
+        html: `<p>Standard ANCOVA assumes the baseline-to-outcome relationship has the <strong>same slope in every group</strong> &mdash; that is, "the effect of starting point on outcome" doesn't itself depend on which treatment a patient received. If that fails, a single adjusted difference is a misleading summary, since the true group difference actually depends on where a patient started. The standard check is a treatment &times; baseline interaction term; its absence, not just a significant main group effect, is worth confirming before trusting one adjusted number for every patient.</p>`,
+      },
+      {
+        heading: 'The covariate has to be pre-treatment',
+        html: `<p>A valid covariate must be measured before randomization (or otherwise unaffected by treatment). Adjusting for something measured after treatment began, when treatment itself could have changed it, turns the covariate into a potential mediator &mdash; and "adjusting away" a mediator can bias the very effect the study is trying to estimate. This is a special case of the "don't adjust for a variable on the causal pathway" rule from the confounding guide above: a baseline severity score is a safe covariate; a mid-treatment side-effect score usually is not.</p>`,
+      },
+      {
+        heading: 'Beyond a single covariate',
+        html: `<p>The calculator linked below handles the common two-group, one-covariate case, but the same logic scales up: ANCOVA can adjust for several covariates at once (baseline score, age, site) and can compare more than two groups, using the same general-linear-model machinery as multiple regression under the hood.</p>`,
+      },
+    ],
+    related: [
+      { id: 'ancova', why: 'Computes the two-group, one-covariate case described here, including the homogeneity-of-regression-slopes check.' },
+      { id: 'unpaired-t-test', why: 'The unadjusted comparison ANCOVA improves on whenever baseline and outcome are correlated.' },
+      { id: 'multiple-regression', why: 'The general-linear-model machinery ANCOVA extends to several covariates or more than two groups at once.' },
     ],
   },
 
@@ -19027,6 +19327,41 @@ const GUIDES = [
     ],
     related: [
       { id: 'paired-t-test', why: 'The most common test applied to before/after data — pairing controls for individual differences, but not for regression to the mean.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-monte-carlo-pvalues',
+    category: 'Common Statistical Pitfalls',
+    title: 'Reading a Monte Carlo (Simulated) p-value',
+    blurb: 'A permutation-based p-value has a precision floor set by how many simulations were run — "p < 0.001" from 1,000 permutations isn\'t what it looks like.',
+    dek: `Some test statistics have no fast, exact formula — the space of possible tables or rearrangements is simply too large to enumerate directly. A Monte Carlo (simulation-based) test estimates the exact p-value instead of computing it outright, and that estimate is only as precise as the number of simulations behind it.`,
+    sections: [
+      {
+        heading: 'What a Monte Carlo p-value actually is',
+        html: `<p>For a test like an r&times;c contingency table too large or too sparse for a fast exact formula, a Monte Carlo exact test draws a large number of random tables (B) that share the same row and column totals as the one actually observed, computes each simulated table's test statistic, and reports the fraction that are at least as extreme as the observed one. That fraction is an <em>estimate</em> of the true exact p-value, not the p-value itself &mdash; it converges to the true value as B grows, the same way a sample mean converges to a population mean as n grows.</p>`,
+      },
+      {
+        heading: 'The pitfall: a resolution floor set by B',
+        html: `<p>With B simulated tables, the smallest possible nonzero count is 1 out of B, which means the method simply cannot distinguish a true p-value of 0.0005 from one of 0.00001 unless B is large enough to resolve the difference. A study that ran only 1,000 permutations and reports "p &lt; 0.001" may really just mean "0 of 1,000 simulated tables were as extreme as the one observed" &mdash; a floor set by the simulation budget, not a razor-precise estimate of an astronomically small true p-value. The identical-looking "p &lt; 0.001" from 100,000 permutations is a far stronger statement. Always check how many simulations were run before treating a very small simulated p-value as unusually convincing.</p>`,
+      },
+      {
+        heading: 'Why it should never be reported as exactly 0',
+        html: `<p>A raw count of 0 extreme tables out of B naively suggests p = 0, but that overstates the method's precision &mdash; with a finite number of simulations, there is always some chance a more extreme table simply wasn't drawn this time. The standard fix adds one to both the numerator and denominator, reporting (extreme tables + 1) / (B + 1) instead of extreme tables / B, which guarantees a small but never literally zero p-value and behaves like a proper upper bound on the true exact p-value. A paper reporting a bare "p = 0.000" from a simulation-based test, with no such adjustment mentioned, is a small red flag for methodological carelessness.</p>`,
+      },
+      {
+        heading: 'What to check in the methods section',
+        html: `<p>Three things distinguish a carefully reported Monte Carlo result from a casual one: the number of simulations or permutations actually run (bigger is more precise, and more computationally expensive); whether a confidence interval or standard error was reported alongside the p-value itself, reflecting the simulation's own uncertainty (which shrinks as B grows) separately from ordinary sampling uncertainty; and, for a result sitting close to the significance threshold, whether it was shown to be stable across reruns or random seeds.</p>`,
+      },
+      {
+        heading: 'Not a substitute for enough data',
+        html: `<p>A Monte Carlo exact p-value is just a computationally tractable way to approximate the same answer an exact combinatorial test would give directly &mdash; it doesn't add statistical power, and it can't rescue a study that is simply too small or too sparse to say anything precise about the effect itself. A wide confidence interval on the effect size, not just a small p-value, is still the clearest sign of how much (or little) the data can actually support, regardless of which method produced the p-value.</p>`,
+      },
+    ],
+    related: [
+      { id: 'monte-carlo-exact-test', why: 'Computes exactly this kind of p-value, using the same Laplace +1/+1 adjustment and reporting a confidence interval on the simulated p-value discussed here.' },
+      { id: 'fishers-exact', why: 'The exact combinatorial method Monte Carlo simulation approximates once direct enumeration becomes computationally infeasible.' },
+      { id: 'appraisal-p-values', why: 'The general definition of a p-value this guide assumes as background.' },
     ],
   },
 
