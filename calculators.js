@@ -14381,12 +14381,30 @@ function predictionIntervalWhiskerSVG(toX, PL, y, piLo, piHi, transform) {
 // positional change is needed, only the null-line's label). The
 // heterogeneity caption sits below the baseline, in an enlarged
 // bottom margin (PB) reserved just for it.
+// Right-side "SMD [95% CI]" + "Weight" text columns, shared by every
+// per-study forest plot on the site — the plot's squares/lines already
+// convey this visually (position, marker size), but published forest
+// plots always print the exact numbers too, so the chart is readable
+// without cross-referencing the results table above it. Column x's
+// are relative to the canvas's own right edge, so callers just widen
+// PR and pass the same two x positions everywhere.
+function forestSideColumns(x1, x2, y, effect, ciLo, ciHi, weightPct, transform, opts = {}) {
+  const fmt = v => (+transform(v).toFixed(2)).toString();
+  const color = opts.color || '#4A4E6B';
+  const weightText = weightPct == null ? '' :
+    `<text x="${x2}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${weightPct.toFixed(1)}%</text>`;
+  return `
+      <text x="${x1}" y="${(y + 3).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="${color}">${fmt(effect)} [${fmt(ciLo)}, ${fmt(ciHi)}]</text>
+      ${weightText}`;
+}
+
 function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform) {
   const k = studies.length;
   const rowH = 24;
-  const W = 560;
-  const PL = 108, PR = 20, PT = 20, PB = 40;
+  const W = 700;
+  const PL = 108, PR = 158, PT = 20, PB = 40;
   const plotW = W - PL - PR;
+  const colX1 = W - PR + 8, colX2 = W - 6;
   const hasPI = Array.isArray(pi);
   const diamondGap = 21;
   const dividerY = PT + k * rowH;
@@ -14402,6 +14420,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
   const zeroX = toX(0).toFixed(1);
 
+  const sumW = weightsFE.reduce((s, w) => s + w, 0);
   const maxW = Math.max(...weightsFE);
   const sizeFor = w => 4 + 6 * (w / maxW);
   const fmt = v => (+transform(v).toFixed(2)).toString();
@@ -14415,7 +14434,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
       <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
       <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
-      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${fmt(s.effect)}</text>`;
+      ${forestSideColumns(colX1, colX2, y, s.effect, ciLo, ciHi, (weightsFE[i] / sumW) * 100, transform)}`;
   }).join('');
 
   const diamond = (ciLo, ciHi, pt, y, label, color) => {
@@ -14424,7 +14443,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
       <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
-      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${fmt(pt)}</text>`;
+      ${forestSideColumns(colX1, colX2, y, pt, ciLo, ciHi, null, transform, { color })}`;
   };
 
   const yFE = dividerY + diamondGap + rowH / 2;
@@ -14433,9 +14452,11 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   const reDiamond = diamond(ciRE[0], ciRE[1], pooledRE, yRE, 'Random-Effects', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates, with SMD, 95% CI, and weight columns">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Estimate [95% CI]</text>
+  <text x="${colX2}" y="${(PT - 6).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   ${rows}
   <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
   ${feDiamond}
@@ -14456,8 +14477,9 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
 function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi) {
   const k = studies.length;
   const rowH = 24;
-  const W = 560;
-  const PL = 108, PR = 20, PT = 20, PB = 40;
+  const W = 700;
+  const PL = 108, PR = 158, PT = 20, PB = 40;
+  const colX1 = W - PR + 8, colX2 = W - 6;
   // Same gap used between the divider line and the pooled-estimate
   // rows as the other forest plots' diamonds (proportionForestPlotSVG,
   // glmmForestPlotSVG), so every forest plot on the site reads
@@ -14477,6 +14499,7 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   const toX = v => PL + ((v - lo) / (hi - lo)) * (W - PL - PR);
   const zeroX = toX(0).toFixed(1);
 
+  const sumW = weightsFE.reduce((s, w) => s + w, 0);
   const maxW = Math.max(...weightsFE);
   const sizeFor = w => 4 + 6 * (w / maxW);
   const fmt = v => (+transform(v).toFixed(2)).toString();
@@ -14490,7 +14513,7 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
       <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
       <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
-      <text x="${xc}" y="${(y - sz / 2 - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${fmt(s.effect)}</text>`;
+      ${forestSideColumns(colX1, colX2, y, s.effect, ciLo, ciHi, (weightsFE[i] / sumW) * 100, transform)}`;
   }).join('');
 
   const diamond = (ciLo, ciHi, pt, y, label, color) => {
@@ -14499,7 +14522,7 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
     return `
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
       <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
-      <text x="${xc}" y="${(y - dh - 4).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="600" fill="${color}">${fmt(pt)}</text>`;
+      ${forestSideColumns(colX1, colX2, y, pt, ciLo, ciHi, null, transform, { color })}`;
   };
 
   const yNormal = dividerY + diamondGap + rowH / 2;
@@ -14508,9 +14531,11 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   const hksjDiamond = diamond(ciHKSJ[0], ciHKSJ[1], pooledRE, yHKSJ, 'HKSJ (t)', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate, with SMD, 95% CI, and weight columns">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Estimate [95% CI]</text>
+  <text x="${colX2}" y="${(PT - 6).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   ${rows}
   <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
   ${normalDiamond}
@@ -14696,13 +14721,17 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, 
 // treatment's random-effects estimate versus the network's chosen
 // reference treatment (no pooled diamonds here — each row already
 // IS a model-implied pooled estimate, borrowing both direct and
-// indirect evidence from the whole network).
+// indirect evidence from the whole network). No weight column here,
+// unlike the per-study forest plots above — each row is already a
+// synthesized treatment-vs-reference estimate, not raw per-study
+// data, so a "% weight" wouldn't have the same meaning.
 function networkForestSVG(items, isRatio, referenceLabel, transform) {
   const k = items.length;
   const rowH = 24;
-  const W = 560;
-  const PL = 130, PR = 20, PT = 26, PB = 26;
+  const W = 660;
+  const PL = 130, PR = 118, PT = 26, PB = 26;
   const plotW = W - PL - PR;
+  const colX1 = W - PR + 8;
   const H = PT + k * rowH + PB;
   const baseline = H - PB;
 
@@ -14724,13 +14753,14 @@ function networkForestSVG(items, isRatio, referenceLabel, transform) {
       <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(s.label)}</text>
       <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
       <rect x="${(+xc - 4).toFixed(1)}" y="${(y - 4).toFixed(1)}" width="8" height="8" fill="#4E6EDB"/>
-      <text x="${xc}" y="${(y - 8).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${fmt(s.effect)}</text>`;
+      ${forestSideColumns(colX1, W - 6, y, s.effect, ciLo, ciHi, null, transform)}`;
   }).join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment, with point estimate and 95% CI columns">
   <text x="${PL}" y="14" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Reference: ${esc(referenceLabel)}</text>
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Estimate [95% CI]</text>
   ${rows}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
 </svg>`;
