@@ -387,6 +387,162 @@ function renderHome() {
 
 /* ── SELECTION WIZARDS ──────────────────────────────────── */
 
+// Reverse index of a decision tree: every reachable node's path (an
+// array of node ids from 'start', not including 'start' itself),
+// found by a one-time breadth-first walk. Used by the free-text
+// "smart start" box below to jump straight to a result node's full
+// path rather than only its id — the path is what actually drives
+// the wizard (it's the URL hash), so a bare node id isn't enough to
+// navigate there. Cached per tree object, since neither WIZARD_TREE
+// nor LEARN_WIZARD_TREE changes at runtime.
+const wizardPathCache = new Map();
+function getWizardPaths(tree) {
+  if (wizardPathCache.has(tree)) return wizardPathCache.get(tree);
+  const paths = { start: [] };
+  const queue = ['start'];
+  const seen = new Set(['start']);
+  while (queue.length) {
+    const id = queue.shift();
+    const node = tree[id];
+    if (!node || !node.options) continue;
+    for (const opt of node.options) {
+      if (seen.has(opt.next)) continue;
+      seen.add(opt.next);
+      paths[opt.next] = [...paths[id], opt.next];
+      queue.push(opt.next);
+    }
+  }
+  wizardPathCache.set(tree, paths);
+  return paths;
+}
+
+// Free-text descriptions are ordinary prose ("comparing an oral
+// health score between two treatment groups..."), unlike the short,
+// term-heavy fragments the sidebar search is normally typed with — so
+// common filler words are filtered out before scoring here. Otherwise
+// a word as short and generic as "vs" can accidentally out-weigh the
+// actual medical/statistical terms in the same query, since it still
+// counts as a whole-word hit against any curated SEARCH_KEYWORDS
+// phrase that happens to contain it (e.g. "generic vs brand-name drug").
+const WIZARD_STOPWORDS = new Set([
+  'a','an','the','and','or','of','in','on','at','to','for','with','vs','versus',
+  'is','are','was','were','be','been','being','my','our','their','this','that',
+  'these','those','it','its','as','by','from','after','before','than','then',
+  'so','if','not','no','do','does','did','has','have','had','will','would',
+  'can','could','should','about','between','across','per','via','using','use',
+  'used','who','what','when','where','how','which','i','we','you','your',
+]);
+
+// Scores a wizard "results" leaf against a free-text description by
+// taking the BEST individual match among everything that leaf
+// recommends (not the sum — a leaf with many results, like the plain
+// descriptive-stats one, shouldn't win just by having more entries),
+// and remembering WHICH result achieved it. That specific result —
+// not necessarily the leaf's own nominal "primary" recommendation —
+// is what the smart-start preview card shows, so a query that really
+// matches a secondary suggestion (e.g. Shapiro-Wilk tucked inside the
+// 1-Way ANOVA leaf) is credited to the thing it actually matched.
+// Reuses searchScore()/searchScoreGuide() — the exact same weighted
+// fields (name, curated SEARCH_KEYWORDS phrases, hint/blurb,
+// description/dek, category) the sidebar search already uses — so
+// the same phrase finds the same destination whether typed into the
+// sidebar or into this box.
+function scoreWizardLeaf(leaf, filter, filterWords, resolveItem, scoreItem) {
+  let best = 0, bestResult = null;
+  for (const r of leaf.results) {
+    const item = resolveItem(r.id);
+    if (!item) continue;
+    const s = scoreItem(item, filter, filterWords);
+    if (s > best) { best = s; bestResult = r; }
+  }
+  return { score: best, bestResult };
+}
+
+// Ranks every reachable result node in `tree` against a free-text
+// description, best first; [] if nothing scored above 0. `resolveItem`
+// and `scoreItem` are threaded through from the same cfg the rest of
+// renderWizardGeneric uses, so this works for both the calculator
+// finder and the Learn guide finder without duplicating it per tree.
+function matchWizardDescription(tree, query, resolveItem, scoreItem) {
+  const filter = query.trim().toLowerCase();
+  if (!filter) return [];
+  // Free-text prose comes with commas/periods attached to words ("two
+  // groups," "measurement.") that a plain whitespace split would leave
+  // stuck to the token, silently breaking every match for that word —
+  // this pulls out word-like runs instead (keeping internal hyphens/
+  // apostrophes, so "case-control" and "don't" stay single tokens).
+  const filterWords = (filter.match(/[a-z0-9]+(?:['-][a-z0-9]+)*/g) || [])
+    .filter(w => w.length > 1 && !WIZARD_STOPWORDS.has(w));
+  const paths = getWizardPaths(tree);
+  return Object.keys(tree)
+    .filter(key => tree[key].results && paths[key])
+    .map(key => {
+      const { score, bestResult } = scoreWizardLeaf(tree[key], filter, filterWords, resolveItem, scoreItem);
+      return { key, path: paths[key], score, bestResult };
+    })
+    .filter(m => m.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
+
+// Renders the free-text "smart start" box's own result cards (a
+// best-match "primary" card plus up to 2 close runners-up), reusing
+// the exact same .wizard-result-card markup as a normal results
+// screen so a match found this way looks like what clicking through
+// the questions would have produced. Each card is headlined by the
+// SPECIFIC calculator/guide that actually matched (m.bestResult) —
+// not necessarily the leaf's own nominal "primary" recommendation —
+// so a query that really matches a secondary suggestion tucked inside
+// a bigger leaf (e.g. Shapiro-Wilk inside the 1-Way ANOVA leaf) gets
+// credited to the thing it actually matched. Runners-up only show if
+// they scored at least 60% of the top match, so a lopsided win
+// doesn't clutter the box with irrelevant "also maybe" noise.
+function renderWizardSmartResults(matches, cfg) {
+  const container = document.getElementById('wizard-smart-results');
+  if (!container) return;
+
+  if (!matches.length) {
+    container.innerHTML = `<p class="wizard-smart-empty">No confident match for that — try adding a bit more detail (what's being measured, how many groups, whether it's the same subjects measured twice), or answer the questions below instead.</p>`;
+    return;
+  }
+
+  const [top, ...rest] = matches;
+  const runnersUp = rest.filter(m => m.score >= top.score * 0.6).slice(0, 2);
+
+  const cardFor = (m, isPrimary) => {
+    const item = cfg.resolveItem(m.bestResult.id);
+    if (!item) return '';
+    return `
+      <a class="wizard-result-card${isPrimary ? ' primary' : ''}" href="#${cfg.homeHash}/${m.path.join('/')}">
+        ${isPrimary ? '<div class="wizard-result-badge">Best Match</div>' : ''}
+        <div class="wizard-result-name">${esc(cfg.itemName(item))}</div>
+        <div class="wizard-result-hint">${esc(cfg.itemHint(item))}</div>
+        <div class="wizard-result-why">${esc(m.bestResult.why)}</div>
+      </a>`;
+  };
+
+  container.innerHTML = `
+    <div class="wizard-results">
+      ${cardFor(top, true)}
+      ${runnersUp.length ? `<div class="wizard-also-label">Other possibilities</div>` : ''}
+      ${runnersUp.map(m => cardFor(m, false)).join('')}
+    </div>`;
+}
+
+// Wires up the smart-start box's button/Enter-key handling. Only
+// called right after the box's own markup has been injected into the
+// DOM (see renderWizardGeneric below), so the elements always exist.
+function initWizardSmartStart(cfg) {
+  const input = document.getElementById('wizard-smart-input');
+  const btn = document.getElementById('wizard-smart-submit');
+  if (!input || !btn) return;
+  const run = () => {
+    const matches = matchWizardDescription(cfg.tree, input.value, cfg.resolveItem, cfg.scoreItem);
+    renderWizardSmartResults(matches, cfg);
+  };
+  btn.addEventListener('click', run);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+}
+
 // Shared renderer for both decision-tree wizards — the calculator one
 // (WIZARD_TREE, pointed at CALCULATORS) and the Learn hub one
 // (LEARN_WIZARD_TREE, pointed at GUIDES). Same {question, options} /
@@ -403,6 +559,10 @@ function renderHome() {
 //   itemHref    — (item) => href for that item's own page
 //   itemName    — (item) => headline text for the result card
 //   itemHint    — (item) => secondary line for the result card
+//   scoreItem   — (optional) (item, filter, filterWords) => number,
+//                 enabling the free-text "smart start" box on the
+//                 tree's start screen (currently only passed for the
+//                 calculator finder — see renderWizard below)
 function renderWizardGeneric(path, cfg) {
   const { tree, homeHash, eyebrow, resolveItem, itemHref, itemName, itemHint } = cfg;
   const currentId = path.length ? path[path.length - 1] : 'start';
@@ -414,22 +574,48 @@ function renderWizardGeneric(path, cfg) {
   }
 
   // Breadcrumb: for each step, look up the option label that was
-  // chosen to get there (the label lives on the PREVIOUS node).
-  const crumbs = ['start', ...path].map((id, i, arr) => {
-    if (i === 0) return null;
-    const prevNode = tree[arr[i - 1]];
+  // chosen to get there (the label lives on the PREVIOUS node), and
+  // link it back to the point right before that step was answered —
+  // clicking a crumb re-asks just that one question instead of
+  // forcing "Start over" from scratch.
+  const crumbs = [];
+  let prevId = 'start';
+  path.forEach((id, i) => {
+    const prevNode = tree[prevId];
     const opt = prevNode && prevNode.options && prevNode.options.find(o => o.next === id);
-    return opt ? opt.label : null;
-  }).filter(Boolean);
+    if (opt) {
+      const hrefPath = path.slice(0, i);
+      crumbs.push({ label: opt.label, href: `#${homeHash}${hrefPath.length ? '/' + hrefPath.join('/') : ''}` });
+    }
+    prevId = id;
+  });
 
   const breadcrumbHtml = crumbs.length ? `
     <div class="wizard-breadcrumb">
       <a href="#${homeHash}">Start over</a>
-      ${crumbs.map(c => `<span class="wizard-crumb-sep">›</span><span class="wizard-crumb">${esc(c)}</span>`).join('')}
+      ${crumbs.map(c => `<span class="wizard-crumb-sep">›</span><a href="${c.href}">${esc(c.label)}</a>`).join('')}
     </div>` : '';
 
   const backHref = path.length > 1 ? `#${homeHash}/${path.slice(0, -1).join('/')}` : `#${homeHash}`;
   const backHtml = path.length ? `<a class="wizard-back" href="${backHref}">← Back</a>` : '';
+
+  // Free-text shortcut, shown only on the tree's very first screen and
+  // only when the caller opted in (cfg.scoreItem) — see renderWizard
+  // below. Scans the same calculators/guides the questions do, via
+  // matchWizardDescription(), so it's a shortcut into the same
+  // destinations rather than a separate, unaudited path.
+  const smartStartHtml = (cfg.scoreItem && currentId === 'start') ? `
+    <div class="wizard-smart-start">
+      <label class="wizard-smart-start-label" for="wizard-smart-input">Or, describe your study in your own words</label>
+      <div class="wizard-smart-start-row">
+        <input type="text" id="wizard-smart-input" class="input-el wizard-smart-input" autocomplete="off"
+               placeholder="e.g., comparing an oral health score between two treatment groups, adjusting for a baseline measurement">
+        <button type="button" id="wizard-smart-submit" class="wizard-smart-submit-btn">Find my calculator</button>
+      </div>
+      <div class="wizard-smart-hint">This is a shortcut into the same questions below, not a separate judgment call — check the "why" on whatever it suggests before trusting it.</div>
+      <div id="wizard-smart-results"></div>
+    </div>
+    <div class="wizard-or-divider">or answer step by step</div>` : '';
 
   if (node.question) {
     const optionsHtml = node.options.map(opt => `
@@ -441,6 +627,7 @@ function renderWizardGeneric(path, cfg) {
     view().innerHTML = `
       <div class="calc-eyebrow">${esc(eyebrow)}</div>
       ${breadcrumbHtml}
+      ${smartStartHtml}
       <h1 class="wizard-question">${esc(node.question)}</h1>
       <div class="wizard-options">${optionsHtml}</div>
       ${backHtml}
@@ -472,6 +659,8 @@ function renderWizardGeneric(path, cfg) {
     `;
   }
 
+  if (cfg.scoreItem && currentId === 'start') initWizardSmartStart(cfg);
+
   document.getElementById('main').scrollTop = 0;
 }
 
@@ -484,6 +673,7 @@ function renderWizard(path) {
     itemHref: calc => `#${calc.id}`,
     itemName: calc => calc.name,
     itemHint: calc => calc.hint,
+    scoreItem: searchScore,
   });
 }
 
