@@ -667,6 +667,49 @@ body {
   margin-bottom: 8px;
 }
 
+/* ── DESIGNS HUB (renderDesignsHub) ──────────────────
+   Same card-grid language as .home-cards/.home-card, but its own
+   classes rather than reuse — the copy here is a full "why" sentence
+   pulled from DESIGN_WIZARD_TREE, not a name+hint+description triplet,
+   so the card only needs two text blocks, not three. */
+.design-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.design-card {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 20px;
+  text-decoration: none;
+  display: block;
+  min-width: 0;
+  transition: box-shadow .15s, border-color .15s, transform .1s;
+}
+
+.design-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(78,110,219,.09), var(--shadow-sm);
+  transform: translateY(-2px);
+}
+
+.design-card-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 7px;
+  line-height: 1.3;
+}
+
+.design-card-use {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+
 /* ── INDEX SECTIONS ────────────────────────────────── */
 
 /* Full Calculator Index only (renderHome()) — the Learn hub keeps its

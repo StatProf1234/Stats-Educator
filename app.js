@@ -107,6 +107,10 @@ function route() {
     renderDesignWizard(hash === 'designwizard' ? [] : hash.slice('designwizard/'.length).split('/'));
     return;
   }
+  if (hash === 'designs') {
+    renderDesignsHub();
+    return;
+  }
   if (hash === 'learn' || hash.startsWith('learn/')) {
     if (hash === 'learn') { renderLearnHub(); return; }
     const guide = GUIDES.find(g => g.id === hash.slice('learn/'.length));
@@ -293,6 +297,18 @@ function calculatorCountSummary() {
   return { total, available, categories, availLabel, plainLabel };
 }
 
+// Shared 3-way toggle at the top of each hub page (Calculator home,
+// Learn hub, Designs hub) — `active` marks which one is current.
+function hubToggleHtml(active) {
+  const link = (href, label, key) => `<a href="${href}" class="hub-toggle-link${active === key ? ' active' : ''}">${label}</a>`;
+  return `
+    <div class="hub-toggle">
+      ${link('#', 'Calculators', 'calculators')}
+      ${link('#learn', 'Learn', 'learn')}
+      ${link('#designs', 'Designs', 'designs')}
+    </div>`;
+}
+
 function renderHome() {
   // Group CALCULATOR_INDEX by category, preserving insertion order
   const groups = {};
@@ -350,10 +366,7 @@ function renderHome() {
   }).join('');
 
   view().innerHTML = `
-    <div class="hub-toggle">
-      <a href="#" class="hub-toggle-link active">Calculators</a>
-      <a href="#learn" class="hub-toggle-link">Learn</a>
-    </div>
+    ${hubToggleHtml('calculators')}
     <div class="home-eyebrow">Statistical Calculator Library</div>
     <h1 class="home-title">Full Calculator Index</h1>
     <p class="home-desc">
@@ -782,6 +795,10 @@ function renderDesignWizard(path) {
 function renderLearnHub() {
   const groups = {};
   for (const g of GUIDES) {
+    // Now has its own dedicated hub at #designs (renderDesignsHub) —
+    // listing it here too would show the same 11 guides twice on the
+    // same site.
+    if (g.category === 'Appraising Studies by Design') continue;
     (groups[g.category] = groups[g.category] || []).push(g);
   }
 
@@ -827,10 +844,7 @@ function renderLearnHub() {
   }).join('');
 
   view().innerHTML = `
-    <div class="hub-toggle">
-      <a href="#" class="hub-toggle-link">Calculators</a>
-      <a href="#learn" class="hub-toggle-link active">Learn</a>
-    </div>
+    ${hubToggleHtml('learn')}
     <div class="home-eyebrow">Critical Appraisal &amp; Reference</div>
     <h1 class="home-title">Learn</h1>
     <p class="home-desc">Reference guides for using this site well — how to recognize the kind of data you're working with, how to read the charts these calculators produce, and how to critically appraise the studies you're applying them to. Looking for a specific calculator instead? See the Calculator Index.</p>
@@ -859,6 +873,56 @@ function renderLearnHub() {
     });
   });
 
+  document.getElementById('main').scrollTop = 0;
+}
+
+// The 11 design leaves of DESIGN_WIZARD_TREE, in a sensible browsing
+// order for this page's grid (causal → observational → diagnostic →
+// evidence-synthesis → other). Each card reuses that leaf's own
+// primary guide + "why" text rather than separately written copy, so
+// this page and the wizard's own reasoning can never drift apart.
+const DESIGN_GLANCE_ORDER = [
+  'rctResult', 'cohortResult', 'caseControlResult', 'prevalenceResult',
+  'diagAccuracyResult', 'aiStudyResult',
+  'systematicReviewResult', 'scopingReviewResult',
+  'prognosisResult', 'guidelineResult', 'pilotResult',
+];
+
+// Dedicated landing page for "planning research, not analyzing it
+// yet" — the counterpart to the Calculator home page and Learn hub
+// that DESIGN_WIZARD_TREE's own leaves never had until now (they only
+// had the wizard, reachable by no other path). Same
+// banner-into-its-own-wizard pattern as the other two hubs.
+function renderDesignsHub() {
+  const cards = DESIGN_GLANCE_ORDER.map(key => {
+    const leaf = DESIGN_WIZARD_TREE[key];
+    const primary = leaf.results[0];
+    const guide = GUIDES.find(g => g.id === primary.id);
+    if (!guide) return '';
+    return `
+      <a class="design-card" href="#learn/${guide.id}">
+        <div class="design-card-name">${esc(guide.title.replace(/^Appraising /, ''))}</div>
+        <div class="design-card-use">${esc(primary.why)}</div>
+      </a>`;
+  }).join('');
+
+  view().innerHTML = `
+    ${hubToggleHtml('designs')}
+    <div class="home-eyebrow">Research Design Reference</div>
+    <h1 class="home-title">Study Designs</h1>
+    <p class="home-desc">Planning a study rather than analyzing one you already have? Start here — a quick reference for matching your research question to the design built for it, before you get to the calculator stage. Each design links to its own in-depth critical-appraisal guide. Looking for a specific calculator or guide instead? See Calculators or Learn.</p>
+    <a class="wizard-banner" href="#designwizard">
+      <span class="wizard-banner-icon">?</span>
+      <span class="wizard-banner-text">Not sure where to start? Answer a few quick questions to find the right design.</span>
+      <span class="wizard-banner-arrow">→</span>
+    </a>
+    <a class="wizard-banner alt-banner" href="#learn">
+      <span class="wizard-banner-icon">L</span>
+      <span class="wizard-banner-text">Each design below links to its own in-depth critical-appraisal guide, under Learn.</span>
+      <span class="wizard-banner-arrow">→</span>
+    </a>
+    <div class="design-grid">${cards}</div>
+  `;
   document.getElementById('main').scrollTop = 0;
 }
 
