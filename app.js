@@ -538,13 +538,31 @@ function renderWizardSmartResults(matches, cfg) {
 function initWizardSmartStart(cfg) {
   const input = document.getElementById('wizard-smart-input');
   const btn = document.getElementById('wizard-smart-submit');
+  const clearBtn = document.getElementById('wizard-smart-clear');
+  const resultsEl = document.getElementById('wizard-smart-results');
   if (!input || !btn) return;
+
   const run = () => {
     const matches = matchWizardDescription(cfg.tree, input.value, cfg.resolveItem, cfg.scoreItem);
     renderWizardSmartResults(matches, cfg);
   };
   btn.addEventListener('click', run);
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+
+  // Clear (×) button — same pattern as the sidebar's #search-clear:
+  // hidden until there's text to clear, then one click empties the
+  // box, wipes whatever results were showing (so the box is ready for
+  // a fresh description rather than looking stuck on the old answer),
+  // and refocuses so typing the next query needs no extra click.
+  if (clearBtn) {
+    input.addEventListener('input', () => { clearBtn.hidden = input.value === ''; });
+    clearBtn.addEventListener('click', () => {
+      input.value = '';
+      clearBtn.hidden = true;
+      if (resultsEl) resultsEl.innerHTML = '';
+      input.focus();
+    });
+  }
 }
 
 // Shared renderer for both decision-tree wizards — the calculator one
@@ -612,8 +630,11 @@ function renderWizardGeneric(path, cfg) {
     <div class="wizard-smart-start">
       <label class="wizard-smart-start-label" for="wizard-smart-input">Or, describe your study in your own words</label>
       <div class="wizard-smart-start-row">
-        <input type="text" id="wizard-smart-input" class="input-el wizard-smart-input" autocomplete="off"
-               placeholder="e.g., comparing an oral health score between two treatment groups, adjusting for a baseline measurement">
+        <div class="wizard-smart-input-wrap">
+          <input type="text" id="wizard-smart-input" class="input-el wizard-smart-input" autocomplete="off"
+                 placeholder="e.g., comparing an oral health score between two treatment groups, adjusting for a baseline measurement">
+          <button type="button" id="wizard-smart-clear" class="wizard-smart-clear" aria-label="Clear text" hidden>&times;</button>
+        </div>
         <button type="button" id="wizard-smart-submit" class="wizard-smart-submit-btn">Find my calculator</button>
       </div>
       <div class="wizard-smart-hint">This is a shortcut into the same questions below, not a separate judgment call — check the "why" on whatever it suggests before trusting it.</div>
