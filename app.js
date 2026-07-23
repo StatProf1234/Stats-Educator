@@ -126,17 +126,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Two things wait for a settled layout before scrolling: opening a
     // <details> and clearing the wrap's max-height both change the
-    // page's total scrollable height, and a row near the END of a
-    // freshly-revealed section — with block: 'center' — needs the
-    // browser to already know about content that comes after it to
-    // center correctly; measuring against a stale (pre-reflow) layout
-    // under-counts that space. A double rAF guarantees at least one
-    // full layout+paint cycle has completed first. block: 'start'
-    // (rather than 'center') also sidesteps the case entirely for a
-    // row with little or nothing below it to center against.
+    // page's total scrollable height, and measuring against a stale
+    // (pre-reflow) layout under-counts it. A double rAF guarantees at
+    // least one full layout+paint cycle has completed first.
+    //
+    // scrollIntoView()'s own alignment/clamping turned out unreliable
+    // for a row that's both last in its table AND in the final
+    // section (e.g. STROBE) — there's little content after it, and it
+    // was overshooting past the row to the actual bottom of the page.
+    // Computed and clamped explicitly against #main instead: the
+    // target position can never exceed #main's real max scrollTop, so
+    // it's mechanically impossible to scroll past genuine content.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const scrollAnchor = target.querySelector('td') || target;
-      scrollAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const main = document.getElementById('main');
+      if (main) {
+        const anchorRect = scrollAnchor.getBoundingClientRect();
+        const mainRect = main.getBoundingClientRect();
+        const desiredTop = main.scrollTop + (anchorRect.top - mainRect.top) - 24;
+        const maxScroll = main.scrollHeight - main.clientHeight;
+        main.scrollTo({ top: Math.max(0, Math.min(desiredTop, maxScroll)), behavior: 'smooth' });
+      } else {
+        scrollAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       if (wrap) {
         setTimeout(() => {
           wrap.style.maxHeight = prevMaxHeight;
