@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // attempts at reproducing that in JS), and this skips routing for
     // that one resulting hashchange instead of falling through to
     // route()'s calculator/guide lookup and rendering renderHome().
-    console.log('[gloss-debug] hashchange fired, hash=', location.hash, 'skipRouteOnce=', window.__skipRouteOnce);
     if (window.__skipRouteOnce) { window.__skipRouteOnce = false; return; }
     applyActiveState();
     route();
@@ -107,10 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // row inside a still-closed section has no meaningful position to
     // scroll to yet. Force it open first.
     const details = target.closest('details');
-    const mainForLog = document.getElementById('main');
-    console.log('[gloss-debug] scrollTop before opening details:', mainForLog && mainForLog.scrollTop);
     if (details && !details.open) details.open = true;
-    console.log('[gloss-debug] scrollTop right after details.open=true:', mainForLog && mainForLog.scrollTop);
 
     // Each glossary table is additionally wrapped in a .ref-table-wrap
     // with its own max-height/overflow-y (an independent scrollbar for
@@ -136,17 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // link. __skipRouteOnce (see the hashchange listener above) stops
     // the resulting hashchange from reaching the SPA router.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const main = document.getElementById('main');
-      console.log('[gloss-debug] before jump:', {
-        id, detailsFound: !!details, detailsOpen: details && details.open,
-        wrapFound: !!wrap, currentHash: location.hash,
-        mainScrollTop: main && main.scrollTop, mainScrollHeight: main && main.scrollHeight,
-      });
       window.__skipRouteOnce = true;
       location.hash = id;
-      console.log('[gloss-debug] after jump: hash=', location.hash, 'mainScrollTop=', main && main.scrollTop);
       setTimeout(() => {
-        console.log('[gloss-debug] +400ms: mainScrollTop=', main && main.scrollTop);
         if (wrap) {
           wrap.style.maxHeight = prevMaxHeight;
           wrap.style.overflowY = prevOverflowY;
