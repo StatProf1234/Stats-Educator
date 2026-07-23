@@ -11666,6 +11666,363 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 106. HARDY-WEINBERG EQUILIBRIUM TEST ──────────────────────────────
+     Chi-square goodness-of-fit test comparing observed genotype counts
+     for a biallelic marker against Hardy-Weinberg expected counts
+     (p², 2pq, q²) estimated from the sample's own allele frequency —
+     df = 1, not k−1 = 2, since one parameter (p) was estimated from
+     the data before computing the expected counts. Also reports the
+     inbreeding coefficient F = 1 − (observed heterozygosity / expected
+     heterozygosity), whose sign indicates the direction of departure
+     even when the χ² test itself isn't significant: F > 0 is a
+     heterozygote deficit (often population stratification or
+     inbreeding), F < 0 a heterozygote excess (often a genotyping or
+     batch artifact).                                                */
+  {
+    id:          'hardy-weinberg-equilibrium',
+    name:        'Hardy-Weinberg Equilibrium Test',
+    hint:        'χ² goodness-of-fit (df = 1), allele frequencies, and F',
+    category:    'Genetics & Genomics',
+    description: 'Tests whether observed genotype counts for a biallelic marker match Hardy-Weinberg equilibrium expectations, and reports allele frequencies and the inbreeding coefficient.',
+
+    formulas: [
+      {
+        label: 'Allele Frequencies',
+        latex: 'p = \\dfrac{2n_{AA}+n_{Aa}}{2N}, \\qquad q = 1-p'
+      },
+      {
+        label: 'Hardy-Weinberg Expected Genotype Counts',
+        latex: 'E_{AA}=p^2N, \\qquad E_{Aa}=2pqN, \\qquad E_{aa}=q^2N'
+      },
+      {
+        label: 'Chi-Square Goodness-of-Fit',
+        latex: '\\chi^2=\\displaystyle\\sum\\frac{(O_i-E_i)^2}{E_i}, \\qquad df=1'
+      },
+      {
+        label: 'Inbreeding Coefficient',
+        latex: 'F = 1-\\dfrac{n_{Aa}/N}{2pq}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'nAA', label: 'Homozygous AA Count', default: 50 },
+      { id: 'nAa', label: 'Heterozygous Aa Count', default: 40 },
+      { id: 'naa', label: 'Homozygous aa Count', default: 10 },
+    ],
+
+    example(values) {
+      const { nAA, nAa, naa } = values;
+      if (![nAA, nAa, naa].every(v => isFinite(v) && v >= 0) || typeof jStat === 'undefined' || !jStat.chisquare)
+        return 'Enter all three genotype counts to see a worked medical example here.';
+      const N = nAA + nAa + naa;
+      if (N < 1) return 'Enter all three genotype counts to see a worked medical example here.';
+      const p = (2 * nAA + nAa) / (2 * N);
+      const q = 1 - p;
+      if (p === 0 || q === 0) return 'Enter genotype counts implying both alleles are present to see a worked medical example here.';
+      const eAA = p * p * N, eAa = 2 * p * q * N, eaa = q * q * N;
+      const chi2 = (nAA - eAA) ** 2 / eAA + (nAa - eAa) ** 2 / eAa + (naa - eaa) ** 2 / eaa;
+      const pValue = 1 - jStat.chisquare.cdf(chi2, 1);
+      const f = v => +v.toFixed(2);
+      return `A lab genotypes ${N} unrelated individuals at a single SNP, observing ${nAA} AA, ${nAa} Aa, and ${naa} aa. From the allele frequency alone (p = ${f(p)} for A), Hardy-Weinberg equilibrium predicts ${f(eAA)} AA, ${f(eAa)} Aa, and ${f(eaa)} aa if mating were random and no other evolutionary force were acting on this marker — comparing that to what was actually observed gives χ² = ${f(chi2)}, ${pValue < 0.05 ? 'a significant departure from equilibrium' : 'not a significant departure from equilibrium'} (${formatPText(pValue)}).`;
+    },
+
+    calculate(values) {
+      const { nAA, nAa, naa } = values;
+      if (![nAA, nAa, naa].every(v => v !== '' && v != null && isFinite(v)))
+        return [err('Enter all three genotype counts')];
+      if (![nAA, nAa, naa].every(Number.isInteger) || [nAA, nAa, naa].some(v => v < 0))
+        return [err('Genotype counts must be non-negative whole numbers')];
+      const N = nAA + nAa + naa;
+      if (N < 1) return [err('Enter at least one genotyped individual across the three counts')];
+      if (typeof jStat === 'undefined' || !jStat.chisquare)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const p = (2 * nAA + nAa) / (2 * N);
+      const q = 1 - p;
+      if (p === 0 || q === 0)
+        return [err('Every genotyped individual carries the same allele — there is no variation here to test for Hardy-Weinberg equilibrium')];
+
+      const eAA = p * p * N, eAa = 2 * p * q * N, eaa = q * q * N;
+      const chi2 = (nAA - eAA) ** 2 / eAA + (nAa - eAa) ** 2 / eAa + (naa - eaa) ** 2 / eaa;
+      const df = 1;
+      const pValue = 1 - jStat.chisquare.cdf(chi2, df);
+      const isSignificant = pValue < 0.05;
+
+      const obsHet = nAa / N;
+      const expHet = 2 * p * q;
+      const Fis = 1 - obsHet / expHet;
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const minExpected = Math.min(eAA, eAa, eaa);
+
+      const rows = [
+        { label: 'Total Genotyped (N)', value: N, ci: null, isRatio: false },
+        { label: 'Allele Frequency p (A)', value: f(p), ci: null, isRatio: false, highlight: true },
+        { label: 'Allele Frequency q (a)', value: f(q), ci: null, isRatio: false, highlight: true },
+        { label: 'Expected AA (p²N)', value: f(eAA, 2), ci: null, isRatio: false },
+        { label: 'Expected Aa (2pqN)', value: f(eAa, 2), ci: null, isRatio: false },
+        { label: 'Expected aa (q²N)', value: f(eaa, 2), ci: null, isRatio: false },
+        { label: 'Chi-Square Statistic (χ²)', value: f(chi2), ci: null, isRatio: false, highlight: true },
+        { label: 'Degrees of Freedom (df)', value: df, ci: null, isRatio: false },
+        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Inbreeding Coefficient (F)', value: f(Fis), ci: null, isRatio: false },
+      ];
+
+      if (minExpected < 5) {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: `Minimum expected genotype count is ${f(minExpected, 2)}, below 5 — the χ² approximation may be unreliable here, particularly for a rare allele. Interpret this p-value cautiously, or use an exact test (e.g., Wigginton et al., 2005) instead.` });
+      }
+
+      rows.push({ label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+        value: isSignificant
+          ? `Reject H₀ — genotype counts depart significantly from Hardy-Weinberg equilibrium (${Fis > 0 ? 'a heterozygote deficit' : 'a heterozygote excess'}, F = ${f(Fis)}). Consider population stratification, inbreeding, genotyping error, or a real evolutionary force (selection, non-random mating) acting on this marker.`
+          : 'Fail to reject H₀ — genotype counts are consistent with Hardy-Weinberg equilibrium.' });
+
+      return rows;
+    }
+  },
+
+  /* ── 107. MENDELIAN RANDOMIZATION (IVW & MR-EGGER) ─────────────────────
+     Two-sample MR: estimates a modifiable exposure's causal effect on
+     an outcome from k genetic instruments (SNPs), each entered as its
+     own SNP→exposure and SNP→outcome effect/SE pair (as if drawn from
+     two separate GWAS, the now-standard two-sample design). Each
+     instrument's Wald ratio β_Y/β_X, with a first-order (NOME) SE, is
+     pooled by inverse-variance weighting (IVW) — mathematically the
+     exact same fixed-effect pooling the site's Meta-Analysis
+     calculator performs, just applied to per-instrument ratio
+     estimates instead of per-study effects, right down to reporting a
+     Cochran's Q/I² for instrument heterogeneity. MR-Egger regression
+     (weighted regression of β_Y on β_X, both oriented positive) is
+     fit alongside it once ≥3 instruments allow it, giving a second,
+     pleiotropy-adjusted causal estimate plus an intercept test for
+     directional horizontal pleiotropy. Instrument strength is reported
+     via each instrument's F-statistic — the mirror image of Egger's
+     Test's small-study-effects check, here applied to instruments
+     instead of studies.                                              */
+  {
+    id:          'mendelian-randomization',
+    name:        'Mendelian Randomization (IVW & MR-Egger)',
+    hint:        'Two-sample IVW causal estimate, MR-Egger pleiotropy test, instrument F-stats',
+    category:    'Genetics & Genomics',
+    description: "Estimates a modifiable exposure's causal effect on an outcome from genetic instruments (SNPs), using inverse-variance-weighted (IVW) pooling and MR-Egger regression, with instrument-strength (F-statistic) and directional-pleiotropy (Egger intercept) checks.",
+
+    formulas: [
+      {
+        label: "Per-Instrument Wald Ratio",
+        latex: '\\hat\\beta_i = \\dfrac{\\hat\\beta_{Y_i}}{\\hat\\beta_{X_i}}, \\qquad SE(\\hat\\beta_i)\\approx\\left|\\dfrac{SE_{Y_i}}{\\hat\\beta_{X_i}}\\right|'
+      },
+      {
+        label: 'Inverse-Variance-Weighted (IVW) Estimate',
+        latex: '\\hat\\beta_{IVW}=\\dfrac{\\sum w_i\\hat\\beta_i}{\\sum w_i}, \\quad w_i=\\dfrac{\\hat\\beta_{X_i}^2}{SE_{Y_i}^2}'
+      },
+      {
+        label: 'Instrument Heterogeneity',
+        latex: 'Q=\\displaystyle\\sum w_i(\\hat\\beta_i-\\hat\\beta_{IVW})^2'
+      },
+      {
+        label: 'Instrument Strength',
+        latex: 'F_i = \\left(\\dfrac{\\hat\\beta_{X_i}}{SE_{X_i}}\\right)^{2}'
+      },
+      {
+        label: 'MR-Egger Regression',
+        latex: '\\hat\\beta_{Y_i} = \\beta_0+\\beta_1\\hat\\beta_{X_i}+\\varepsilon_i \\quad (\\text{weighted by } 1/SE_{Y_i}^2)'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Instrument',
+    groupMax: 10,
+    groupFields: [
+      { prefix: 'name',  label: 'SNP / Instrument (optional)' },
+      { prefix: 'betaX', label: 'SNP→Exposure Effect' },
+      { prefix: 'seX',   label: 'SNP→Exposure SE' },
+      { prefix: 'betaY', label: 'SNP→Outcome Effect' },
+      { prefix: 'seY',   label: 'SNP→Outcome SE' },
+    ],
+    inputs: [
+      { id: 'measure', type: 'select', label: 'Outcome Measure', default: 'or',
+        note: 'Ratio measures (OR/RR/HR) are pooled on the log scale — enter each instrument\'s SNP→Outcome effect as ln(OR), ln(RR), or ln(HR). Risk Difference is validated to stay within [-1, 1]; the other measures have no such fixed bound to check.',
+        options: EFFECT_MEASURE_OPTIONS },
+      { id: 'name1',   type: 'text', label: 'Instrument 1 SNP (optional)', default: '' },
+      { id: 'betaX1',  label: 'Instrument 1 SNP→Exposure Effect', default: 0.30 },
+      { id: 'seX1',    label: 'Instrument 1 SNP→Exposure SE',     default: 0.02 },
+      { id: 'betaY1',  label: 'Instrument 1 SNP→Outcome Effect',  default: 0.045 },
+      { id: 'seY1',    label: 'Instrument 1 SNP→Outcome SE',      default: 0.010 },
+      { id: 'name2',   type: 'text', label: 'Instrument 2 SNP (optional)', default: '' },
+      { id: 'betaX2',  label: 'Instrument 2 SNP→Exposure Effect', default: 0.18 },
+      { id: 'seX2',    label: 'Instrument 2 SNP→Exposure SE',     default: 0.03 },
+      { id: 'betaY2',  label: 'Instrument 2 SNP→Outcome Effect',  default: 0.028 },
+      { id: 'seY2',    label: 'Instrument 2 SNP→Outcome SE',      default: 0.012 },
+      { id: 'name3',   type: 'text', label: 'Instrument 3 SNP (optional)', default: '' },
+      { id: 'betaX3',  label: 'Instrument 3 SNP→Exposure Effect', default: 0.25 },
+      { id: 'seX3',    label: 'Instrument 3 SNP→Exposure SE',     default: 0.025 },
+      { id: 'betaY3',  label: 'Instrument 3 SNP→Outcome Effect',  default: 0.035 },
+      { id: 'seY3',    label: 'Instrument 3 SNP→Outcome SE',      default: 0.011 },
+      { id: 'name4',   type: 'text', label: 'Instrument 4 SNP (optional)', default: '' },
+      { id: 'betaX4',  label: 'Instrument 4 SNP→Exposure Effect (optional)', default: '' },
+      { id: 'seX4',    label: 'Instrument 4 SNP→Exposure SE (optional)',     default: '' },
+      { id: 'betaY4',  label: 'Instrument 4 SNP→Outcome Effect (optional)',  default: '' },
+      { id: 'seY4',    label: 'Instrument 4 SNP→Outcome SE (optional)',      default: '' },
+      { id: 'name5',   type: 'text', label: 'Instrument 5 SNP (optional)', default: '' },
+      { id: 'betaX5',  label: 'Instrument 5 SNP→Exposure Effect (optional)', default: '' },
+      { id: 'seX5',    label: 'Instrument 5 SNP→Exposure SE (optional)',     default: '' },
+      { id: 'betaY5',  label: 'Instrument 5 SNP→Outcome Effect (optional)',  default: '' },
+      { id: 'seY5',    label: 'Instrument 5 SNP→Outcome SE (optional)',      default: '' },
+      { id: 'name6',   type: 'text', label: 'Instrument 6 SNP (optional)', default: '' },
+      { id: 'betaX6',  label: 'Instrument 6 SNP→Exposure Effect (optional)', default: '' },
+      { id: 'seX6',    label: 'Instrument 6 SNP→Exposure SE (optional)',     default: '' },
+      { id: 'betaY6',  label: 'Instrument 6 SNP→Outcome Effect (optional)',  default: '' },
+      { id: 'seY6',    label: 'Instrument 6 SNP→Outcome SE (optional)',      default: '' },
+      { id: 'name7',   type: 'text', label: 'Instrument 7 SNP (optional)', default: '' },
+      { id: 'betaX7',  label: 'Instrument 7 SNP→Exposure Effect (optional)', default: '' },
+      { id: 'seX7',    label: 'Instrument 7 SNP→Exposure SE (optional)',     default: '' },
+      { id: 'betaY7',  label: 'Instrument 7 SNP→Outcome Effect (optional)',  default: '' },
+      { id: 'seY7',    label: 'Instrument 7 SNP→Outcome SE (optional)',      default: '' },
+      { id: 'name8',   type: 'text', label: 'Instrument 8 SNP (optional)', default: '' },
+      { id: 'betaX8',  label: 'Instrument 8 SNP→Exposure Effect (optional)', default: '' },
+      { id: 'seX8',    label: 'Instrument 8 SNP→Exposure SE (optional)',     default: '' },
+      { id: 'betaY8',  label: 'Instrument 8 SNP→Outcome Effect (optional)',  default: '' },
+      { id: 'seY8',    label: 'Instrument 8 SNP→Outcome SE (optional)',      default: '' },
+      { id: 'name9',   type: 'text', label: 'Instrument 9 SNP (optional)', default: '' },
+      { id: 'betaX9',  label: 'Instrument 9 SNP→Exposure Effect (optional)', default: '' },
+      { id: 'seX9',    label: 'Instrument 9 SNP→Exposure SE (optional)',     default: '' },
+      { id: 'betaY9',  label: 'Instrument 9 SNP→Outcome Effect (optional)',  default: '' },
+      { id: 'seY9',    label: 'Instrument 9 SNP→Outcome SE (optional)',      default: '' },
+      { id: 'name10',  type: 'text', label: 'Instrument 10 SNP (optional)', default: '' },
+      { id: 'betaX10', label: 'Instrument 10 SNP→Exposure Effect (optional)', default: '' },
+      { id: 'seX10',   label: 'Instrument 10 SNP→Exposure SE (optional)',     default: '' },
+      { id: 'betaY10', label: 'Instrument 10 SNP→Outcome Effect (optional)',  default: '' },
+      { id: 'seY10',   label: 'Instrument 10 SNP→Outcome SE (optional)',      default: '' },
+    ],
+
+    example(values) {
+      const { instruments, error } = gatherMRInstruments(values);
+      if (error || instruments.length < 2 || instruments.some(s => s.seX <= 0 || s.seY <= 0 || s.betaX === 0) ||
+          typeof jStat === 'undefined' || !jStat.chisquare)
+        return 'Enter Exposure and Outcome effect/SE for at least 2 instruments to see a worked medical example here.';
+      const measureInfo = effectMeasureInfo(values.measure);
+      const transform = v => measureInfo.isRatio ? Math.exp(v) : v;
+      const k = instruments.length;
+      const ratios = instruments.map(s => {
+        const beta = s.betaY / s.betaX;
+        const se = Math.abs(s.seY / s.betaX);
+        return { beta, w: 1 / (se * se) };
+      });
+      const sumW = ratios.reduce((s, r) => s + r.w, 0);
+      const betaIVW = ratios.reduce((s, r) => s + r.w * r.beta, 0) / sumW;
+      const meanF = instruments.reduce((s, x) => s + (x.betaX / x.seX) ** 2, 0) / k;
+      const f = v => +v.toFixed(3);
+      return `${k} genetic instruments (SNPs), each robustly associated with the exposure (mean F-statistic = ${f(meanF)}), are combined via inverse-variance weighting to estimate the exposure's causal effect on the outcome: IVW estimate = ${f(transform(betaIVW))} (${measureInfo.label}) — a purely observational estimate, but one that sidesteps the confounding a standard observational study of this exposure would face, since genotype is assigned effectively at random at conception.`;
+    },
+
+    calculate(values) {
+      const { instruments, error } = gatherMRInstruments(values);
+      if (error) return [err(error)];
+      if (instruments.length < 2) return [err('Enter Exposure and Outcome effect/SE for at least 2 instruments (SNPs)')];
+      if (instruments.some(s => s.seX <= 0 || s.seY <= 0)) return [err("Every instrument's SE (both Exposure and Outcome) must be greater than 0")];
+      if (instruments.some(s => s.betaX === 0)) return [err("Every instrument's SNP→Exposure effect must be non-zero — a zero effect provides no information as an instrument")];
+      if (typeof jStat === 'undefined' || !jStat.chisquare || !jStat.studentt)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const measureInfo = effectMeasureInfo(values.measure);
+      const boundError = checkEffectMeasureBound(
+        instruments.map(s => ({ effect: s.betaY, label: s.label })), measureInfo);
+      if (boundError) return boundError;
+
+      const { isRatio, label: measureLabel } = measureInfo;
+      const transform = v => isRatio ? Math.exp(v) : v;
+      const k = instruments.length;
+      const Z = 1.96;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const ratios = instruments.map(s => {
+        const effect = s.betaY / s.betaX;
+        const se = Math.abs(s.seY / s.betaX);
+        const w = 1 / (se * se);
+        const F = (s.betaX / s.seX) ** 2;
+        return { label: s.label, effect, se, w, F };
+      });
+
+      const sumW = ratios.reduce((s, r) => s + r.w, 0);
+      const betaIVW = ratios.reduce((s, r) => s + r.w * r.effect, 0) / sumW;
+      const seIVW = Math.sqrt(1 / sumW);
+      const ciIVW = [betaIVW - Z * seIVW, betaIVW + Z * seIVW];
+
+      const Q = ratios.reduce((s, r) => s + r.w * (r.effect - betaIVW) ** 2, 0);
+      const df = k - 1;
+      const pQ = 1 - jStat.chisquare.cdf(Q, df);
+      const I2 = Q > 0 ? Math.max(0, (Q - df) / Q) * 100 : 0;
+
+      const meanF = ratios.reduce((s, r) => s + r.F, 0) / k;
+      const minF = Math.min(...ratios.map(r => r.F));
+
+      const rows = [
+        { label: 'Number of Instruments (k)', value: k, ci: null, isRatio: false },
+        { label: `IVW Causal Estimate (${measureLabel})`, value: f(transform(betaIVW)),
+          ci: [f(transform(ciIVW[0])), f(transform(ciIVW[1]))], isRatio, highlight: true },
+        { label: "Cochran's Q (instrument heterogeneity)", value: f(Q), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom (df)', value: df, ci: null, isRatio: false },
+        { label: 'p-value (heterogeneity test)', value: formatPValue(pQ), ci: null, isRatio: false },
+        { label: 'I² (% variance due to heterogeneity)', value: f(I2, 1), ci: null, isRatio: false, highlight: true },
+        { label: 'Mean Instrument F-Statistic', value: f(meanF, 1), ci: null, isRatio: false },
+        { label: 'Minimum Instrument F-Statistic', value: f(minF, 1), ci: null, isRatio: false, highlight: minF < 10 },
+      ];
+
+      if (minF < 10) {
+        rows.push({ label: 'Note — Weak Instrument', isText: true, ci: null, isRatio: false,
+          value: `At least one instrument has F < 10 (minimum here: ${f(minF, 1)}), the conventional rule-of-thumb threshold for adequate instrument strength. Weak instruments bias a two-sample MR causal estimate toward the null and inflate its variance — treat this result cautiously, and consider dropping the weak instrument(s) or seeking a stronger proxy for the exposure.` });
+      }
+
+      const egger = mrEggerRegression(instruments);
+      if (egger) {
+        const tCrit = jStat.studentt.inv(0.975, egger.df);
+        const ciSlope = [egger.slope - tCrit * egger.seSlope, egger.slope + tCrit * egger.seSlope];
+        const ciIntercept = [egger.intercept - tCrit * egger.seIntercept, egger.intercept + tCrit * egger.seIntercept];
+        const pIntercept = 2 * (1 - jStat.studentt.cdf(Math.abs(egger.intercept / egger.seIntercept), egger.df));
+
+        rows.push(
+          { label: `MR-Egger Causal Estimate (${measureLabel})`, value: f(transform(egger.slope)),
+            ci: [f(transform(ciSlope[0])), f(transform(ciSlope[1]))], isRatio, highlight: true },
+          { label: 'MR-Egger Intercept (directional pleiotropy test)', value: f(egger.intercept),
+            ci: [f(ciIntercept[0]), f(ciIntercept[1])], isRatio: false },
+          { label: 'MR-Egger Intercept p-value', value: formatPValue(pIntercept), ci: null, isRatio: false, highlight: pIntercept < 0.05 },
+        );
+
+        if (pIntercept < 0.05) {
+          rows.push({ label: 'Note — Directional Pleiotropy Detected', isText: true, ci: null, isRatio: false,
+            value: `The MR-Egger intercept differs significantly from zero (${formatPText(pIntercept)}), suggesting directional horizontal pleiotropy — at least some instruments may be affecting the outcome through a pathway other than the exposure. The MR-Egger slope above adjusts for this and is generally preferred over the IVW estimate when this note appears, though MR-Egger itself assumes any pleiotropic effect is independent of instrument strength (the "InSIDE" assumption) and has substantially lower precision than IVW.` });
+        }
+        if (k < 10) {
+          rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+            value: `MR-Egger's intercept test has low power with only ${k} instruments — a non-significant intercept here does not rule out pleiotropy, only that this test, with this few instruments, could not detect it.` });
+        }
+
+        rows.push({
+          label: 'Forest Plot', isSVG: true,
+          svg: mrForestPlotSVG(ratios, sumW, betaIVW, ciIVW,
+            { slope: egger.slope, ciSlope }, isRatio, { Q, df, pQ, I2 }, transform, measureLabel)
+        });
+      } else {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: k < 3
+            ? 'MR-Egger requires at least 3 instruments (df = k − 2 ≥ 1) to fit its intercept and slope.'
+            : "MR-Egger could not be fit — the instruments' exposure effects do not vary enough to estimate a slope." });
+
+        rows.push({
+          label: 'Forest Plot', isSVG: true,
+          svg: mrForestPlotSVG(ratios, sumW, betaIVW, ciIVW, null, isRatio, { Q, df, pQ, I2 }, transform, measureLabel)
+        });
+      }
+
+      rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `IVW estimates a causal effect of ${f(transform(betaIVW))} (${measureLabel}) for the exposure on the outcome, using ${k} genetic instruments. ${I2 < 25 ? 'Low' : I2 < 75 ? 'Moderate' : 'High'} heterogeneity across instrument-specific ratio estimates (I² = ${f(I2, 1)}%)${I2 >= 50 ? ' — worth scrutinizing individual instruments for pleiotropy, since this exceeds what sampling variation alone would typically produce' : ''}.` });
+
+      return rows;
+    }
+  },
+
 ];
 
 
@@ -12268,6 +12625,23 @@ function gatherEffectStudies(values, maxStudies = 6) {
   return { studies };
 }
 
+// Reads betaX{1..10}/seX{1..10}/betaY{1..10}/seY{1..10} quads out of
+// the raw input values for 'mendelian-randomization' — one quad per
+// genetic instrument (SNP) — skipping blank slots so instruments
+// beyond the first few are optional.
+function gatherMRInstruments(values, maxInstruments = 10) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const instruments = [];
+  for (let i = 1; i <= maxInstruments; i++) {
+    const bx = values['betaX' + i], sx = values['seX' + i], by = values['betaY' + i], sy = values['seY' + i];
+    const any = provided(bx) || provided(sx) || provided(by) || provided(sy);
+    const all = provided(bx) && provided(sx) && provided(by) && provided(sy);
+    if (all) instruments.push({ label: studyLabel(values, i), betaX: bx, seX: sx, betaY: by, seY: sy });
+    else if (any) return { error: `Instrument ${i}: enter SNP→Exposure Effect, SNP→Exposure SE, SNP→Outcome Effect, and SNP→Outcome SE, or leave all four blank` };
+  }
+  return { instruments };
+}
+
 // Egger's test regression: OLS of each study's standardized effect
 // (effect/SE) on its precision (1/SE) — algebraically the same as a
 // weighted regression of the raw effect on SE with weights 1/SE²,
@@ -12290,6 +12664,47 @@ function eggersRegression(studies) {
   const seIntercept = Math.sqrt((SSE / df) * (1 / k + xbar ** 2 / Sxx));
   const t = intercept / seIntercept;
   return { k, intercept, slope, seIntercept, t, df };
+}
+
+// MR-Egger regression: weighted OLS of each genetic instrument's
+// SNP-outcome effect (β_Y) on its SNP-exposure effect (β_X), weighted
+// by 1/SE_Y² — NOT the same regression as eggersRegression() above
+// (that one tests funnel-plot asymmetry across STUDIES in a
+// meta-analysis; this one tests directional horizontal pleiotropy
+// across INSTRUMENTS in a Mendelian Randomization analysis). Every
+// instrument's β_X is oriented positive first — flipping its sign,
+// and β_Y's sign along with it, whenever β_X started negative — which
+// MR-Egger's derivation requires (Bowden et al., 2015). The slope is
+// the pleiotropy-adjusted causal estimate; the intercept tests for
+// directional pleiotropy (H0: intercept = 0). Returns null if fewer
+// than 2 residual degrees of freedom remain, or if the instruments'
+// β_X values don't vary enough to fit a slope at all.
+function mrEggerRegression(instruments) {
+  const k = instruments.length;
+  const df = k - 2;
+  if (df < 1) return null;
+
+  const oriented = instruments.map(s => {
+    const flip = s.betaX < 0;
+    return { betaX: flip ? -s.betaX : s.betaX, betaY: flip ? -s.betaY : s.betaY, seY: s.seY };
+  });
+  const w   = oriented.map(s => 1 / (s.seY * s.seY));
+  const W   = w.reduce((a, b) => a + b, 0);
+  const Sx  = oriented.reduce((s, o, i) => s + w[i] * o.betaX, 0);
+  const Sy  = oriented.reduce((s, o, i) => s + w[i] * o.betaY, 0);
+  const Sxx = oriented.reduce((s, o, i) => s + w[i] * o.betaX * o.betaX, 0);
+  const Sxy = oriented.reduce((s, o, i) => s + w[i] * o.betaX * o.betaY, 0);
+  const denom = W * Sxx - Sx * Sx;
+  if (denom === 0) return null;
+
+  const slope = (W * Sxy - Sx * Sy) / denom;
+  const intercept = (Sy - slope * Sx) / W;
+  const rss = oriented.reduce((s, o, i) => s + w[i] * (o.betaY - intercept - slope * o.betaX) ** 2, 0);
+  const sigma2 = rss / df;
+  const seSlope = Math.sqrt(sigma2 * W / denom);
+  const seIntercept = Math.sqrt(sigma2 * Sxx / denom);
+
+  return { slope, seSlope, intercept, seIntercept, df };
 }
 
 // ANCOVA (2-group, one covariate) via the classical sums-of-squares
@@ -14414,6 +14829,20 @@ function tau2CaptionSVG(cx, y, tau2) {
   return `<text x="${cx}" y="${y}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">τ² (between-study variance) = ${tau2.toFixed(3)}</text>`;
 }
 
+// Caption for the Mendelian Randomization forest plot: Cochran's Q
+// here tests whether per-instrument Wald-ratio estimates agree beyond
+// sampling error (excess heterogeneity is a signal worth checking for
+// pleiotropy), the same Q/I² interpretation as heterogeneityCaptionSVG
+// above — but with no τ² term. MR-Egger's slope is a separate,
+// regression-based causal estimate, not a random-effects reweighting
+// of the same IVW pooling the way Random-Effects is a reweighting of
+// Fixed-Effect elsewhere on this site, so there's no single shared τ²
+// between the two diamonds this plot draws.
+function instrumentHeterogeneityCaptionSVG(cx, y, het) {
+  const { Q, df, pQ, I2 } = het;
+  return `<text x="${cx}" y="${y}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">Instrument heterogeneity: Q = ${Q.toFixed(2)} (df = ${df}, ${formatPText(pQ)}); I² = ${I2.toFixed(1)}%</text>`;
+}
+
 // Prediction-interval "whisker": a dashed line with small end caps
 // spanning [piLo, piHi], drawn as its OWN row below the pooled
 // diamonds (not overlaid on one of them) so it reads as a distinct
@@ -14847,6 +15276,86 @@ function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabe
   <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
   ${rows}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+</svg>`;
+}
+
+// Per-instrument Wald-ratio forest plot for 'mendelian-randomization':
+// each genetic instrument's own ratio estimate (β_Y/β_X) with its
+// first-order (NOME-approximation) CI, sized by its IVW weight — the
+// same visual grammar as the site's other per-study forest plots —
+// plus the pooled IVW estimate as a blue diamond and, once at least 3
+// instruments let it be fit, the MR-Egger slope as a second, amber
+// diamond, so the pleiotropy-naive and pleiotropy-adjusted causal
+// estimates are directly comparable at a glance. No prediction
+// interval here — a PI answers "where would one more STUDY's true
+// effect fall," a question that doesn't map onto MR's instruments.
+function mrForestPlotSVG(items, sumW, betaIVW, ciIVW, egger, isRatio, het, transform, measureLabel) {
+  const k = items.length;
+  const rowH = 24;
+  const W = 700;
+  const PL = 108, PR = 158, PT = 20, PB = 40;
+  const plotW = W - PL - PR;
+  const colX1 = W - PR + 8, colX2 = W - 16;
+  const hasEgger = !!egger;
+  const diamondGap = 21;
+  const dividerY = PT + k * rowH;
+  const H = dividerY + diamondGap + (hasEgger ? 2 : 1) * rowH + PB;
+  const baseline = H - PB;
+
+  const allVals = [
+    ...items.flatMap(it => [it.effect - 1.96 * it.se, it.effect + 1.96 * it.se]),
+    ...ciIVW,
+    ...(hasEgger ? egger.ciSlope : []),
+    0,
+  ];
+  let lo = Math.min(...allVals), hi = Math.max(...allVals);
+  const pad = (hi - lo) * 0.12 || 1;
+  lo -= pad; hi += pad;
+
+  const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
+  const zeroX = toX(0).toFixed(1);
+
+  const maxW = Math.max(...items.map(it => it.w));
+  const sizeFor = w => 4 + 6 * (w / maxW);
+
+  const rows = items.map((it, i) => {
+    const y = PT + i * rowH + rowH / 2;
+    const ciLo = it.effect - 1.96 * it.se, ciHi = it.effect + 1.96 * it.se;
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(it.effect).toFixed(1);
+    const sz = sizeFor(it.w);
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">${esc(it.label)}</text>
+      <line x1="${x1}" y1="${y.toFixed(1)}" x2="${x2}" y2="${y.toFixed(1)}" stroke="#4E6EDB" stroke-width="1.5"/>
+      <rect x="${(+xc - sz / 2).toFixed(1)}" y="${(y - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" fill="#4E6EDB"/>
+      ${forestSideColumns(colX1, colX2, y, it.effect, ciLo, ciHi, (it.w / sumW) * 100, transform)}`;
+  }).join('');
+
+  const diamond = (ciLo, ciHi, pt, y, label, color) => {
+    const x1 = toX(ciLo).toFixed(1), x2 = toX(ciHi).toFixed(1), xc = toX(pt).toFixed(1);
+    const dh = 6;
+    return `
+      <text x="${PL - 10}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="${color}">${label}</text>
+      <polygon points="${x1},${y} ${xc},${(y - dh).toFixed(1)} ${x2},${y} ${xc},${(y + dh).toFixed(1)}" fill="${color}"/>
+      ${forestSideColumns(colX1, colX2, y, pt, ciLo, ciHi, null, transform, { color })}`;
+  };
+
+  const yIVW = dividerY + diamondGap + rowH / 2;
+  const ivwDiamond = diamond(ciIVW[0], ciIVW[1], betaIVW, yIVW, 'IVW', '#4E6EDB');
+  const eggerDiamond = hasEgger
+    ? diamond(egger.ciSlope[0], egger.ciSlope[1], egger.slope, dividerY + diamondGap + rowH + rowH / 2, 'MR-Egger', '#E07B2C')
+    : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each genetic instrument's Wald ratio estimate and the pooled IVW${hasEgger ? ' and MR-Egger' : ''} causal estimate, with ${measureLabel}, 95% CI, and weight columns">
+  <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
+  <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? `${measureLabel} = 1` : 'null = 0'}</text>
+  <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureLabel} [95% CI]</text>
+  <text x="${colX2}" y="${(PT - 6).toFixed(1)}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
+  ${rows}
+  <line x1="${PL}" y1="${dividerY.toFixed(1)}" x2="${W - PR}" y2="${dividerY.toFixed(1)}" stroke="#7B8099" stroke-width="1.5"/>
+  ${ivwDiamond}
+  ${eggerDiamond}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  ${instrumentHeterogeneityCaptionSVG(W / 2, H - 12, het)}
 </svg>`;
 }
 
@@ -15912,6 +16421,10 @@ const CALCULATOR_INDEX = [
   { id: 'kaplan-meier',            name: 'Kaplan-Meier Survival Curve',  category: 'Survival Analysis',           description: 'Estimates the probability of surviving past each time point from time-to-event data with censoring, plotting a step curve and reporting median survival time.', status: 'available' },
   { id: 'log-rank-test',           name: 'Log-Rank Test',                category: 'Survival Analysis',           description: 'Compares survival distributions between two groups using the log-rank test, from time-to-event data with censoring.', status: 'available' },
   { id: 'cox-ph',                  name: 'Cox Proportional Hazards (Hazard Ratio)', category: 'Survival Analysis', description: 'Estimates the hazard ratio between two groups from time-to-event data with censoring, via a univariate Cox regression.', status: 'available' },
+
+  // ── 14. GENETICS & GENOMICS ───────────────────────────────────────────
+  { id: 'hardy-weinberg-equilibrium', name: 'Hardy-Weinberg Equilibrium Test', category: 'Genetics & Genomics', description: 'Tests whether observed genotype counts for a biallelic marker match Hardy-Weinberg equilibrium expectations, and reports allele frequencies and the inbreeding coefficient.', status: 'available' },
+  { id: 'mendelian-randomization',    name: 'Mendelian Randomization (IVW & MR-Egger)', category: 'Genetics & Genomics', description: "Estimates a modifiable exposure's causal effect on an outcome from genetic instruments (SNPs), using inverse-variance-weighted (IVW) pooling and MR-Egger regression, with instrument-strength (F-statistic) and directional-pleiotropy (Egger intercept) checks.", status: 'available' },
 
 ];
 
@@ -17066,6 +17579,9 @@ const SEARCH_KEYWORDS = {
   'log-rank-test': ['log-rank test', 'compare survival curves', 'compare two groups survival', 'prognostic study', 'cohort study'],
   'cox-ph':        ['cox proportional hazards', 'cox regression', 'hazard ratio', 'survival regression', 'time to event regression', 'prognostic study', 'cohort study'],
 
+  'hardy-weinberg-equilibrium': ['hardy-weinberg equilibrium', 'hwe test', 'genotype frequencies', 'allele frequency', 'population genetics', 'candidate gene study', 'gwas quality control', 'inbreeding coefficient'],
+  'mendelian-randomization':    ['mendelian randomization', 'mr ivw', 'mr-egger', 'instrumental variable', 'genetic instrument', 'snp causal effect', 'weak instrument bias', 'horizontal pleiotropy', 'two-sample mr', 'gwas'],
+
 };
 
 /* ── NOTATION GLOSSARY ────────────────────────────────────────────────────
@@ -18182,6 +18698,23 @@ const NOTATION = {
     { symbol: '\\chi^2', meaning: 'Log-Rank test statistic comparing observed vs expected events in Group 1 across all time points.' },
     { symbol: '\\text{Var}_i', meaning: 'Variance of the observed event count in Group 1 at time i, used to weight each time point.' },
     { symbol: 'n_{2i}', meaning: 'Number of Group 2 subjects still at risk just before time i.' },
+  ],
+
+  'hardy-weinberg-equilibrium': [
+    { symbol: 'n_{AA}, n_{Aa}, n_{aa}', meaning: 'Observed counts of each genotype at a biallelic marker.' },
+    { symbol: 'p, q', meaning: 'Frequencies of the two alleles (A and a) estimated from the sample; p + q = 1.' },
+    { symbol: 'E_{AA}, E_{Aa}, E_{aa}', meaning: 'Genotype counts expected under Hardy-Weinberg equilibrium, given p and q.' },
+    { symbol: '\\chi^2', meaning: 'Chi-square statistic summarizing how far observed genotype counts are from Hardy-Weinberg expected counts.' },
+    { symbol: 'F', meaning: 'Inbreeding coefficient — the proportional deficit (F > 0) or excess (F < 0) of observed heterozygotes relative to Hardy-Weinberg expectation.' },
+  ],
+  'mendelian-randomization': [
+    { symbol: '\\hat\\beta_{X_i}, SE_{X_i}', meaning: "Instrument i's estimated effect (and SE) of the genetic variant on the exposure." },
+    { symbol: '\\hat\\beta_{Y_i}, SE_{Y_i}', meaning: "Instrument i's estimated effect (and SE) of the genetic variant on the outcome." },
+    { symbol: '\\hat\\beta_i', meaning: "Instrument i's Wald ratio estimate of the exposure's causal effect on the outcome." },
+    { symbol: 'w_i', meaning: 'Inverse-variance weight assigned to instrument i in the IVW pooling.' },
+    { symbol: '\\hat\\beta_{IVW}', meaning: 'Inverse-variance-weighted pooled causal estimate across all instruments.' },
+    { symbol: 'F_i', meaning: "Instrument i's F-statistic from the SNP-exposure association, used to check instrument strength (conventionally F < 10 flags a weak instrument)." },
+    { symbol: '\\beta_0, \\beta_1', meaning: "MR-Egger's intercept (a directional-pleiotropy test) and slope (the pleiotropy-adjusted causal estimate)." },
   ],
 
 };
@@ -20623,7 +21156,7 @@ const GUIDES = [
       },
       {
         heading: 'Population stratification: the same confounding problem in genetic clothing',
-        html: `<p>Allele frequencies differ systematically across ancestral subpopulations for reasons that have nothing to do with any disease &mdash; simple genetic drift and population history. If a study's cases and controls (or an exposed and unexposed group) differ in ancestry composition for any reason unrelated to the trait itself &mdash; recruiting cases from one clinic and controls from another with a different regional or ethnic composition, for instance &mdash; a marker that merely happens to have a different frequency across those ancestries can show a spurious association with the outcome. This is confounding by ancestry, and it is arguably the single most important source of false-positive genetic associations across all three designs in this guide.</p><p>Standard mitigations include genomic control (comparing the observed distribution of test statistics genome-wide to what's expected under the null, summarized as an inflation factor λ that should sit close to 1 if stratification is well controlled), adjusting for the top principal components of genome-wide genetic variation as covariates, and family-based designs such as the transmission disequilibrium test (TDT), which compares which allele a heterozygous parent actually transmits to an affected offspring against the 50/50 transmission expected by Mendelian inheritance &mdash; a design that is structurally immune to population stratification, since the comparison happens entirely within families rather than across unrelated cases and controls.</p>`,
+        html: `<p>Allele frequencies differ systematically across ancestral subpopulations for reasons that have nothing to do with any disease &mdash; simple genetic drift and population history. If a study's cases and controls (or an exposed and unexposed group) differ in ancestry composition for any reason unrelated to the trait itself &mdash; recruiting cases from one clinic and controls from another with a different regional or ethnic composition, for instance &mdash; a marker that merely happens to have a different frequency across those ancestries can show a spurious association with the outcome. This is confounding by ancestry, and it is arguably the single most important source of false-positive genetic associations across all three designs in this guide.</p><p>Standard mitigations include genomic control (comparing the observed distribution of test statistics genome-wide to what's expected under the null, summarized as an inflation factor λ that should sit close to 1 if stratification is well controlled), adjusting for the top principal components of genome-wide genetic variation as covariates, and family-based designs such as the transmission disequilibrium test (TDT), which compares which allele a heterozygous parent actually transmits to an affected offspring against the 50/50 transmission expected by Mendelian inheritance &mdash; a design that is structurally immune to population stratification, since the comparison happens entirely within families rather than across unrelated cases and controls.</p><p>A cheap, routine screen worth checking in any genotyped dataset: whether each marker's genotype counts follow <a href="#hardy-weinberg-equilibrium">Hardy-Weinberg equilibrium</a> in the control group. A marker that significantly departs from equilibrium in controls (who, absent disease-related selection, should show no such departure) more often flags a genotyping artifact than a real biological signal &mdash; and unnoticed stratification is one of several plausible causes of that departure, alongside plain assay error.</p>`,
       },
       {
         heading: 'Winner\'s curse: why replication effect sizes always look smaller',
@@ -20631,7 +21164,7 @@ const GUIDES = [
       },
       {
         heading: 'Mendelian Randomization: using genotype as a natural experiment',
-        html: `<p>Because alleles are randomly assorted from parents to offspring at conception (Mendel's law of independent assortment), a person's genotype at a locus that influences a modifiable exposure &mdash; LDL cholesterol, body mass index, alcohol consumption &mdash; is effectively randomly allocated with respect to the confounders (diet, socioeconomic status, health behaviors) that undermine a conventional observational association between that exposure and an outcome. Mendelian Randomization (MR) exploits this by using one or more such genetic variants as instrumental variables to estimate the exposure's causal effect on an outcome, without needing to measure or adjust for the confounders directly &mdash; nature's own quasi-randomized experiment, run at conception.</p><p>The dominant modern implementation is two-sample MR: the SNP-exposure association and the SNP-outcome association are estimated in two separate, non-overlapping GWAS (often both already public), then combined &mdash; most commonly via inverse-variance weighting (IVW) across instruments, using the same weighted-pooling logic as this site's meta-analysis calculators. Two-sample MR's popularity owes largely to this reuse: it lets researchers test a causal hypothesis using existing published summary statistics, without ever needing individual-level data on both the exposure and the outcome in the same cohort.</p>`,
+        html: `<p>Because alleles are randomly assorted from parents to offspring at conception (Mendel's law of independent assortment), a person's genotype at a locus that influences a modifiable exposure &mdash; LDL cholesterol, body mass index, alcohol consumption &mdash; is effectively randomly allocated with respect to the confounders (diet, socioeconomic status, health behaviors) that undermine a conventional observational association between that exposure and an outcome. Mendelian Randomization (MR) exploits this by using one or more such genetic variants as instrumental variables to estimate the exposure's causal effect on an outcome, without needing to measure or adjust for the confounders directly &mdash; nature's own quasi-randomized experiment, run at conception.</p><p>The dominant modern implementation is two-sample MR: the SNP-exposure association and the SNP-outcome association are estimated in two separate, non-overlapping GWAS (often both already public), then combined &mdash; most commonly via inverse-variance weighting (IVW) across instruments, using the same weighted-pooling logic as this site's meta-analysis calculators. Two-sample MR's popularity owes largely to this reuse: it lets researchers test a causal hypothesis using existing published summary statistics, without ever needing individual-level data on both the exposure and the outcome in the same cohort. The <a href="#mendelian-randomization">Mendelian Randomization</a> calculator on this site implements exactly this IVW pooling, alongside the MR-Egger sensitivity analysis covered next.</p>`,
       },
       {
         heading: 'Mendelian Randomization\'s three core assumptions — and what breaks each one',
@@ -20658,6 +21191,8 @@ const GUIDES = [
       { id: 'appraisal-study-design', why: 'Places these designs within the broader evidence hierarchy — Mendelian Randomization in particular straddles the observational/experimental divide that hierarchy is built around.' },
       { id: 'meta-analysis', why: 'The inverse-variance pooling method GWAS meta-analyses and two-sample MR\'s IVW estimator both build on directly.' },
       { id: 'logistic-regression', why: 'The standard model for a candidate gene or GWAS case-control analysis, typically with genetic principal components added as covariates to control population stratification.' },
+      { id: 'hardy-weinberg-equilibrium', why: 'The routine genotyping quality-control check this guide\'s population-stratification section recommends running on the control group.' },
+      { id: 'mendelian-randomization', why: 'Runs the IVW and MR-Egger analysis this guide describes directly on your own genetic instruments.' },
     ],
   },
 
