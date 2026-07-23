@@ -107,7 +107,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // row inside a still-closed section has no meaningful position to
     // scroll to yet. Force it open first.
     const details = target.closest('details');
+    const mainForLog = document.getElementById('main');
+    console.log('[gloss-debug] scrollTop before opening details:', mainForLog && mainForLog.scrollTop);
     if (details && !details.open) details.open = true;
+    console.log('[gloss-debug] scrollTop right after details.open=true:', mainForLog && mainForLog.scrollTop);
 
     // Each glossary table is additionally wrapped in a .ref-table-wrap
     // with its own max-height/overflow-y (an independent scrollbar for
