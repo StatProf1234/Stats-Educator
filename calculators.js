@@ -18870,6 +18870,7 @@ const GUIDES = [
       { id: 'cohens-kappa', why: 'Chance-corrected agreement between two raters on categorical classifications.' },
       { id: 'fleiss-kappa', why: 'Extends Cohen\'s Kappa to three or more raters on unordered categories.' },
       { id: 'mcnemars-test', why: 'Tests paired/matched nominal data, such as before-and-after classification of the same subjects.' },
+      { id: 'appraisal-survey-research', why: 'A worked "Yes/No/Don\'t Know" survey example applying this exact menu of tests, plus the response-bias issues that come before analysis.' },
     ],
   },
 
@@ -19980,6 +19981,55 @@ const GUIDES = [
       { id: 'mid-calculator', why: "Computes the distribution-based and anchor-based MID estimates this guide's interpretability section covers." },
       { id: 'appraisal-appraising-rcts', why: 'Covers intention-to-treat analysis and missing-outcome handling in general — the same principles this guide applies specifically to PRO dropout.' },
       { id: 'appraisal-effect-measures', why: 'The same statistical-vs-clinical-significance distinction this guide applies to MID, covered there for RR/OR/absolute effects.' },
+      { id: 'appraisal-survey-research', why: 'The broader response-bias and question-design issues that apply to any self-report questionnaire, not just validated PROMs.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-survey-research',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Appraising Questionnaire and Survey Research: Response Biases, Non-Response, and Choosing the Right Analysis',
+    blurb: 'A well-validated instrument still produces bad data if respondents shade their answers toward what looks good, agree with everything regardless of content, or never receive the questionnaire in the first place.',
+    dek: `Survey and questionnaire research has its own characteristic failure points, distinct from a validated PROM's psychometric properties (covered in the PROM guide) and distinct from having "enough" respondents (a sample-size question this site's Sample Size for a Survey calculator handles). This guide covers what happens between writing the questions and getting them answered — question wording, response-scale design, the biases that distort self-report answers, non-response as a selection-bias problem rather than a power problem, and how to match a categorical response format to the right analysis.`,
+    sections: [
+      {
+        heading: 'Question wording: biases baked in before anyone answers',
+        html: `<p>A leading question suggests its own answer ("Don't you agree that wait times are too long?" invites agreement regardless of the respondent's actual view). A double-barreled question asks two things at once ("Was the clinic clean and the staff friendly?") and makes a single response uninterpretable, since disagreement could reflect either half. Recall-period problems arise whenever a question asks about a stretch of time long enough that memory degrades or reconstructs the answer ("how many alcoholic drinks did you have in the past year?") &mdash; a specific instance of the recall bias covered in <a href="#learn/appraisal-confounding-bias">Confounding, Bias, and Why Randomization Matters</a>, here arising from the instrument's design rather than the study's. All three are best caught before deployment, via pilot testing and cognitive interviewing (asking a small group of respondents to think aloud while answering, to surface which questions are actually being understood as intended).</p>`,
+      },
+      {
+        heading: 'Response scale design: points, balance, and the "Don\'t Know" option',
+        html: `<p>A Likert-type scale's number of points (5 versus 7, for instance), whether it's balanced (equal numbers of positive and negative options around a true midpoint) or skewed toward one end, and whether it includes an explicit neutral midpoint, all measurably affect how respondents answer the identical underlying question. Offering "Don't know" or "Not applicable" as legitimate options reduces the measurement error that comes from forcing a guess out of someone with no real opinion &mdash; but it also gives respondents an easy way to skip a question they could actually answer with a little more effort, a genuine tradeoff rather than a free improvement. There's no universally correct choice; what matters for appraisal is whether the instrument's designers tested and reported on these choices, rather than picking a scale by convention alone.</p>`,
+      },
+      {
+        heading: 'Social desirability bias: self-report drifting toward the answer that looks good',
+        html: `<p>Respondents systematically over-report socially approved behaviors (exercise frequency, medication adherence, handwashing) and under-report stigmatized ones (heavy alcohol use, illicit drug use, unsafe sex) &mdash; not necessarily out of conscious deception, but because self-presentation shapes self-report even in anonymous settings, and more so in non-anonymous ones. Mitigations include anonymous rather than identified administration, indirect questioning techniques such as the randomized response technique (which introduces controlled random noise into individual answers so no single response is attributable, while still permitting an unbiased estimate of the group-level rate), and validated social-desirability scales administered alongside the instrument of interest, specifically to measure and statistically adjust for this tendency.</p>`,
+      },
+      {
+        heading: 'Acquiescence and extreme-response styles: patterns unrelated to the question\'s content',
+        html: `<p>Acquiescence bias is a tendency to agree with or endorse a statement regardless of its actual content, observed more strongly in some populations and cultural contexts than others. A related pattern, response style, describes a respondent's general tendency toward extreme options (always picking "strongly agree" or "strongly disagree") or toward central tendency (always picking the middle option), independent of the specific items being asked. The standard mitigation is including reverse-worded items within a scale (phrasing some items so that agreement indicates the opposite of the underlying construct), which lets a pure acquiescence responder be identified and, in some analyses, adjusted for &mdash; at the cost of reverse-worded items themselves being harder for respondents to parse correctly, a real comprehension tradeoff documented across many validated instruments.</p>`,
+      },
+      {
+        heading: 'Non-response bias: a selection problem, not a power problem',
+        html: `<p>Non-response bias is not the same issue the Sample Size for a Survey calculator's response-rate adjustment addresses. That calculator answers "how many people do I need to contact to end up with enough respondents" &mdash; a question about statistical power. Non-response bias is a question about validity: do the people who didn't respond differ systematically, on the very thing being measured, from the people who did? A high response rate does not guarantee low non-response bias (a survey can achieve 80% response and still be badly biased if the missing 20% differ sharply on the outcome), and a low response rate does not automatically imply high bias either (a 30% response rate causes no problem at all if non-respondents are, on average, no different from respondents). Practical checks include comparing early versus late responders (late responders are often a reasonable proxy for what non-responders would have said, under the logic that they required more reminders and effort to reach) and comparing the achieved sample's demographics against known population benchmarks where those are available.</p>`,
+      },
+      {
+        heading: 'Choosing the right analysis: matching the test to the response format',
+        html: `<p>A single survey item with unordered response categories &mdash; "Yes / No / Don't Know," for instance &mdash; is nominal data (see <a href="#learn/data-nominal">Nominal Data</a>), even though it's tempting to code it 1 / 0 / 0.5 and average the result. That coding falsely treats "Don't Know" as a numeric midpoint between "Yes" and "No"; it isn't a compromise position, it's a separate, unordered response (no opinion formed, or none volunteered), and averaging across it produces a number with no real interpretation.</p><p>Which tool is correct depends on the actual question being asked. Comparing the Yes/No/Don't Know split across two or more groups (by treatment arm, by sex, by site) is a test of association on the resulting r&times;c table &mdash; the <a href="#cramers-v">Cramer's V</a> calculator on this site runs the underlying chi-square test of independence and reports effect size together, or the <a href="#monte-carlo-exact-test">Monte Carlo Exact Test</a> if expected cell counts are too sparse to trust the chi-square approximation (a common situation with a three-level outcome and a modest sample). Testing the observed split against a hypothesized or previously published distribution instead calls for the <a href="#chi-square-gof">Chi-Square Goodness-of-Fit</a> test. And at the planning stage, before any data are collected, the <a href="#sample-size-survey">Sample Size for a Survey</a> calculator sizes the sample needed to estimate one category's proportion (say, the proportion answering "Yes") to a target margin of error.</p><p>Worth checking explicitly, rather than assuming: if the response options actually carry a real order &mdash; "Disagree / Neutral / Agree," rather than "Yes / No / Don't Know" &mdash; the item is ordinal, not nominal, and belongs with the tools in <a href="#learn/data-ordinal">Ordinal Data</a> instead. The two look superficially similar (both are one categorical question with three response options) but call for different analyses, precisely because one has a meaningful order and the other doesn't.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports survey results, check the response rate and whether early-versus-late (or responder-versus-population-benchmark) comparisons were reported before trusting that non-response didn't bias the result &mdash; a response rate alone, high or low, doesn't answer that question. And check whether a multi-category item was analyzed with a method that matches its actual measurement level (nominal versus ordinal), rather than defaulting to a mean and SD because the categories happened to be coded as numbers.</p>`,
+      },
+    ],
+    related: [
+      { id: 'data-nominal', why: 'Confirms that an unordered multi-category item like "Yes/No/Don\'t Know" is nominal data, with the full menu of appropriate tests.' },
+      { id: 'data-ordinal', why: 'The companion case — response options with a genuine order — and why that calls for different tools entirely.' },
+      { id: 'cramers-v', why: 'Tests association between a nominal survey item and a grouping variable, across a table larger than 2×2.' },
+      { id: 'monte-carlo-exact-test', why: 'The exact-test alternative to Cramer\'s V when a nominal item\'s expected cell counts are too sparse to trust.' },
+      { id: 'chi-square-gof', why: 'Tests a nominal item\'s observed distribution against a hypothesized or previously published one.' },
+      { id: 'sample-size-survey', why: 'Sizes a survey sample to a target margin of error — the response-rate math this guide\'s non-response section explicitly distinguishes from non-response bias.' },
+      { id: 'appraisal-confounding-bias', why: 'Covers recall bias in general — one specific instance of the question-wording problems this guide details.' },
+      { id: 'appraisal-patient-reported-outcomes', why: 'The companion guide for validated clinical instruments specifically — this guide\'s scope is broader, covering any self-report questionnaire.' },
     ],
   },
 
