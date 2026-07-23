@@ -76,6 +76,25 @@ document.addEventListener('DOMContentLoaded', () => {
     exportSVGAsImage(svgEl, btn.dataset.filename || 'chart', btn.dataset.format);
   });
 
+  // Glossary quick-index links (#gloss-*) jump to a row within the
+  // SAME rendered guide page — but a #gloss-xxx hash never matches a
+  // calculator/guide id, so letting it reach the hash router's route()
+  // would fall through to renderHome(), destroying the very page the
+  // link is supposed to jump within. Intercepted here instead: scroll
+  // to the target directly and skip the router entirely. Falls back to
+  // normal hash navigation (whatever that does) if the target isn't in
+  // the current DOM, e.g. a stale/bookmarked link on a cold page load.
+  document.addEventListener('click', e => {
+    const link = e.target.closest('a[href^="#gloss-"]');
+    if (!link) return;
+    const id = link.getAttribute('href').slice(1);
+    const target = document.getElementById(id);
+    if (!target) return;
+    e.preventDefault();
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    history.replaceState(null, '', '#' + id);
+  });
+
   route();
 });
 
