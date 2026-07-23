@@ -24,6 +24,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   window.addEventListener('hashchange', () => {
+    // Set (and immediately consumed) by the glossary quick-index click
+    // handler below — it deliberately writes location.hash itself, to
+    // get the browser's own native same-page-anchor scrolling (which
+    // correctly walks nested scroll containers, unlike several manual
+    // attempts at reproducing that in JS), and this skips routing for
+    // that one resulting hashchange instead of falling through to
+    // route()'s calculator/guide lookup and rendering renderHome().
+    if (window.__skipRouteOnce) { window.__skipRouteOnce = false; return; }
     applyActiveState();
     route();
   });
@@ -80,26 +88,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // SAME rendered guide page — but a #gloss-xxx hash never matches a
   // calculator/guide id, so letting it reach the hash router's route()
   // would fall through to renderHome(), destroying the very page the
-  // link is supposed to jump within. Intercepted here instead: scroll
-  // to the target directly and skip the router entirely. Falls back to
-  // normal hash navigation (whatever that does) if the target isn't in
-  // the current DOM, e.g. a stale/bookmarked link on a cold page load.
-  //
-  // Plain scrollIntoView() isn't reliable here for two separate
-  // reasons: (1) the target is a <tr> — several browsers have long-
-  // standing quirks scrolling table rows specifically, since a row's
-  // layout box doesn't behave like an ordinary block element; and (2)
-  // even a working scrollIntoView would have to walk TWO nested scroll
-  // containers, not one: #app is a fixed-height shell (overflow:
-  // hidden), so the page itself scrolls inside #main rather than
-  // window/body, and each glossary table is additionally wrapped in a
-  // .ref-table-wrap with its own max-height/overflow-y for tall
-  // tables. Rather than reimplementing that math by hand (fragile —
-  // an earlier version of this fix overshot to the bottom of the
-  // page), the wrap's own scrollbox is neutralized for the moment of
-  // scrolling, reducing it back down to the single-container case
-  // scrollIntoView already handles correctly, and the scroll targets a
-  // <td> inside the row rather than the <tr> itself.
+  // link is supposed to jump within. Handled here instead: open the
+  // row's section/table if collapsed, then let the browser's own
+  // native same-page-anchor scrolling do the actual jump (see the
+  // longer comment below) rather than reimplementing it by hand.
   document.addEventListener('click', e => {
     const link = e.target.closest('a[href^="#gloss-"]');
     if (!link) return;
@@ -116,6 +108,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const details = target.closest('details');
     if (details && !details.open) details.open = true;
 
+    // Each glossary table is additionally wrapped in a .ref-table-wrap
+    // with its own max-height/overflow-y (an independent scrollbar for
+    // tall tables) — neutralized here so the row's position resolves
+    // against #main (the page's real scroll container — #app is a
+    // fixed-height shell with overflow: hidden) instead of getting
+    // trapped inside the wrap's own small scrollbox.
     const wrap = target.closest('.ref-table-wrap');
     const prevMaxHeight = wrap ? wrap.style.maxHeight : null;
     const prevOverflowY = wrap ? wrap.style.overflowY : null;
@@ -124,49 +122,25 @@ document.addEventListener('DOMContentLoaded', () => {
       wrap.style.overflowY = 'visible';
     }
 
-    // Two things wait for a settled layout before scrolling: opening a
-    // <details> and clearing the wrap's max-height both change the
-    // page's total scrollable height, and measuring against a stale
-    // (pre-reflow) layout under-counts it. A double rAF guarantees at
-    // least one full layout+paint cycle has completed first.
-    //
-    // scrollIntoView()'s own alignment/clamping turned out unreliable
-    // for a row that's both last in its table AND in the final
-    // section (e.g. STROBE) — there's little content after it, and it
-    // was overshooting past the row to the actual bottom of the page.
-    // Computed and clamped explicitly against #main instead: the
-    // target position can never exceed #main's real max scrollTop, so
-    // it's mechanically impossible to scroll past genuine content.
+    // Several attempts at reproducing "scroll this into view" by hand
+    // (scrollIntoView with various options, then manual pixel math
+    // against #main) all produced subtly wrong positions. Simplest
+    // reliable fix: let the browser's own native same-page-anchor
+    // scrolling do it — writing location.hash makes the browser jump
+    // to the matching id itself, correctly walking whatever nested
+    // scroll containers exist, the same as a normal in-page anchor
+    // link. __skipRouteOnce (see the hashchange listener above) stops
+    // the resulting hashchange from reaching the SPA router.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const scrollAnchor = target.querySelector('td') || target;
-      const main = document.getElementById('main');
-      if (main) {
-        const anchorRect = scrollAnchor.getBoundingClientRect();
-        const mainRect = main.getBoundingClientRect();
-        const desiredTop = main.scrollTop + (anchorRect.top - mainRect.top) - 24;
-        const maxScroll = main.scrollHeight - main.clientHeight;
-        const clamped = Math.max(0, Math.min(desiredTop, maxScroll));
-        // TEMPORARY DIAGNOSTIC — remove once the scroll behaves correctly.
-        console.log('[gloss-debug]', {
-          id, detailsOpen: details && details.open, wrapFound: !!wrap,
-          anchorTop: anchorRect.top, mainTop: mainRect.top,
-          mainScrollTopBefore: main.scrollTop, desiredTop, maxScroll, clamped,
-          mainScrollHeight: main.scrollHeight, mainClientHeight: main.clientHeight,
-        });
-        main.scrollTo({ top: clamped, behavior: 'smooth' });
-        setTimeout(() => console.log('[gloss-debug] scrollTop after', main.scrollTop), 800);
-      } else {
-        console.log('[gloss-debug] #main not found, falling back to scrollIntoView');
-        scrollAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-      if (wrap) {
-        setTimeout(() => {
+      window.__skipRouteOnce = true;
+      location.hash = id;
+      setTimeout(() => {
+        if (wrap) {
           wrap.style.maxHeight = prevMaxHeight;
           wrap.style.overflowY = prevOverflowY;
-        }, 700);
-      }
+        }
+      }, 400);
     }));
-    history.replaceState(null, '', '#' + id);
   });
 
   route();
