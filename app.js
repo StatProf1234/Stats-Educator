@@ -84,6 +84,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // to the target directly and skip the router entirely. Falls back to
   // normal hash navigation (whatever that does) if the target isn't in
   // the current DOM, e.g. a stale/bookmarked link on a cold page load.
+  //
+  // Plain scrollIntoView() isn't reliable here because the target row
+  // sits behind TWO independent scroll containers, not one: #app is a
+  // fixed-height shell (overflow: hidden), so the page itself scrolls
+  // inside #main rather than window/body — and each glossary table is
+  // additionally wrapped in a .ref-table-wrap with its own max-height/
+  // overflow-y for tall tables. Computed manually instead of trusting
+  // the browser to walk both nested contexts on its own.
   document.addEventListener('click', e => {
     const link = e.target.closest('a[href^="#gloss-"]');
     if (!link) return;
@@ -91,7 +99,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const target = document.getElementById(id);
     if (!target) return;
     e.preventDefault();
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    const wrap = target.closest('.ref-table-wrap');
+    if (wrap) {
+      const wrapRect = wrap.getBoundingClientRect();
+      const rowRect = target.getBoundingClientRect();
+      const delta = (rowRect.top - wrapRect.top) - wrap.clientHeight / 2 + rowRect.height / 2;
+      wrap.scrollTo({ top: wrap.scrollTop + delta, behavior: 'smooth' });
+    }
+    const main = document.getElementById('main');
+    if (main) {
+      const mainRect = main.getBoundingClientRect();
+      const elRect = (wrap || target).getBoundingClientRect();
+      const delta = (elRect.top - mainRect.top) - 24;
+      main.scrollTo({ top: main.scrollTop + delta, behavior: 'smooth' });
+    }
     history.replaceState(null, '', '#' + id);
   });
 
