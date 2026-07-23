@@ -145,8 +145,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const mainRect = main.getBoundingClientRect();
         const desiredTop = main.scrollTop + (anchorRect.top - mainRect.top) - 24;
         const maxScroll = main.scrollHeight - main.clientHeight;
-        main.scrollTo({ top: Math.max(0, Math.min(desiredTop, maxScroll)), behavior: 'smooth' });
+        const clamped = Math.max(0, Math.min(desiredTop, maxScroll));
+        // TEMPORARY DIAGNOSTIC — remove once the scroll behaves correctly.
+        console.log('[gloss-debug]', {
+          id, detailsOpen: details && details.open, wrapFound: !!wrap,
+          anchorTop: anchorRect.top, mainTop: mainRect.top,
+          mainScrollTopBefore: main.scrollTop, desiredTop, maxScroll, clamped,
+          mainScrollHeight: main.scrollHeight, mainClientHeight: main.clientHeight,
+        });
+        main.scrollTo({ top: clamped, behavior: 'smooth' });
+        setTimeout(() => console.log('[gloss-debug] scrollTop after', main.scrollTop), 800);
       } else {
+        console.log('[gloss-debug] #main not found, falling back to scrollIntoView');
         scrollAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
       if (wrap) {
