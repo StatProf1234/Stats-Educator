@@ -662,7 +662,7 @@ function renderWizardGeneric(path, cfg) {
         </div>
         <button type="button" id="wizard-smart-submit" class="wizard-smart-submit-btn">${esc(cfg.smartStartButtonLabel)}</button>
       </div>
-      <div class="wizard-smart-hint">This is a shortcut into the same questions below, not a separate judgment call — check the "why" on whatever it suggests before trusting it.</div>
+      <div class="wizard-smart-hint">This just matches your words to the same recommendations below — it can guess wrong. Read the explanation under each recommended ${esc(cfg.smartStartResultLabel || 'calculator')} before trusting it.</div>
       <div id="wizard-smart-results"></div>
     </div>
     <div class="wizard-or-divider">or answer step by step</div>` : '';
@@ -726,6 +726,7 @@ function renderWizard(path) {
     scoreItem: searchScore,
     smartStartPlaceholder: 'e.g., comparing an oral health score between two treatment groups, adjusting for a baseline measurement',
     smartStartButtonLabel: 'Find my calculator',
+    smartStartResultLabel: 'calculator',
   });
 }
 
@@ -779,6 +780,7 @@ function renderDesignWizard(path) {
     scoreItem: scoreDesignWizardItem,
     smartStartPlaceholder: "e.g., I want to compare oral health outcomes after two different interventions, but haven't started the study yet",
     smartStartButtonLabel: 'Find my design',
+    smartStartResultLabel: 'calculator or guide',
     // "test"/"tests" would otherwise match every calculator whose name
     // merely contains "test" (t-test, z-test, Egger's test, ...) for
     // any query mentioning a diagnostic test — see matchWizardDescription.
