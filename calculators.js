@@ -12023,8 +12023,8 @@ const CALCULATORS = [
     }
   },
 
-  /* ── 108. MINIMAL CLINICALLY IMPORTANT DIFFERENCE (MCID) ───────────────
-     Distribution-based MCID estimates for a patient-reported outcome
+  /* ── 108. MINIMAL IMPORTANT DIFFERENCE (MID) ───────────────────────────
+     Distribution-based MID estimates for a patient-reported outcome
      measure (PROM) — the standard error of measurement (SEM = SD ×
      √(1−reliability)), the "half a standard deviation" rule (0.5 SD),
      and Cohen's small/medium/large effect-size thresholds (0.2/0.5/0.8
@@ -12032,19 +12032,23 @@ const CALCULATORS = [
      score among patients independently classified as "minimally
      improved" on an external anchor, e.g. a global rating of change)
      shown alongside for direct comparison. Deliberately does not
-     collapse these into one "the MCID" number: the whole point, laid
+     collapse these into one "the MID" number: the whole point, laid
      out in the Interpretation row, is that distribution-based and
      anchor-based methods answer different questions and often
      disagree, so current guidance (e.g. Revicki et al., 2008)
      recommends triangulating several methods rather than trusting one.
+     "MID" (Minimal Important Difference) rather than the older "MCID"
+     (Minimal Clinically Important Difference) follows the more recent
+     terminology shift in the PROM literature, dropping "Clinically"
+     since the judgment of what's important need not be a clinician's.
      The reliability coefficient this calculator needs is exactly what
      this site's Cronbach's Alpha and ICC calculators produce.        */
   {
-    id:          'mcid-calculator',
-    name:        'Minimal Clinically Important Difference (MCID)',
+    id:          'mid-calculator',
+    name:        'Minimal Important Difference (MID)',
     hint:        'Distribution-based (0.5 SD, 1 SEM, Cohen\'s d) plus an optional anchor-based estimate',
     category:    'Patient-Reported Outcomes',
-    description: "Estimates a minimal clinically important difference (MCID) for a patient-reported outcome measure using distribution-based methods (standard error of measurement, half a standard deviation, Cohen's d thresholds), alongside an optional anchor-based estimate for comparison.",
+    description: "Estimates a minimal important difference (MID) for a patient-reported outcome measure using distribution-based methods (standard error of measurement, half a standard deviation, Cohen's d thresholds), alongside an optional anchor-based estimate for comparison.",
 
     formulas: [
       {
@@ -12052,8 +12056,8 @@ const CALCULATORS = [
         latex: 'SEM = SD\\sqrt{1-r}'
       },
       {
-        label: 'Distribution-Based MCID Rules',
-        latex: '\\text{MCID}_{SEM} = 1\\times SEM, \\qquad \\text{MCID}_{0.5SD} = 0.5\\times SD'
+        label: 'Distribution-Based MID Rules',
+        latex: '\\text{MID}_{SEM} = 1\\times SEM, \\qquad \\text{MID}_{0.5SD} = 0.5\\times SD'
       },
       {
         label: "Cohen's Effect-Size Thresholds",
@@ -12076,7 +12080,7 @@ const CALCULATORS = [
         return 'Enter a baseline SD and a reliability coefficient (0–1) to see a worked medical example here.';
       const sem = sd * Math.sqrt(1 - reliability);
       const f = v => +v.toFixed(2);
-      return `A quality-of-life questionnaire has a baseline SD of ${f(sd)} points and a test-retest reliability of ${reliability} in a clinically stable population. Its standard error of measurement is SEM = ${f(sd)} × √(1 − ${reliability}) = ${f(sem)} points — meaning a single patient's score can plausibly wobble by about that much from measurement error alone, before any real change has happened. The "half a standard deviation" rule gives a second, independent MCID estimate of ${f(sd * 0.5)} points for comparison.`;
+      return `A quality-of-life questionnaire has a baseline SD of ${f(sd)} points and a test-retest reliability of ${reliability} in a clinically stable population. Its standard error of measurement is SEM = ${f(sd)} × √(1 − ${reliability}) = ${f(sem)} points — meaning a single patient's score can plausibly wobble by about that much from measurement error alone, before any real change has happened. The "half a standard deviation" rule gives a second, independent MID estimate of ${f(sd * 0.5)} points for comparison.`;
     },
 
     calculate(values) {
@@ -12092,8 +12096,8 @@ const CALCULATORS = [
 
       const rows = [
         { label: 'Standard Error of Measurement (SEM)', value: f(sem), ci: null, isRatio: false, highlight: true },
-        { label: 'MCID Estimate — 1 SEM', value: f(sem), ci: null, isRatio: false, highlight: true },
-        { label: 'MCID Estimate — 0.5 SD ("Half-SD Rule")', value: f(halfSD), ci: null, isRatio: false, highlight: true },
+        { label: 'MID Estimate — 1 SEM', value: f(sem), ci: null, isRatio: false, highlight: true },
+        { label: 'MID Estimate — 0.5 SD ("Half-SD Rule")', value: f(halfSD), ci: null, isRatio: false, highlight: true },
         { label: "Cohen's Small Effect (0.2 SD)", value: f(small), ci: null, isRatio: false },
         { label: "Cohen's Medium Effect (0.5 SD)", value: f(medium), ci: null, isRatio: false },
         { label: "Cohen's Large Effect (0.8 SD)", value: f(large), ci: null, isRatio: false },
@@ -12101,18 +12105,18 @@ const CALCULATORS = [
 
       const hasAnchor = anchorChange !== '' && anchorChange != null && isFinite(anchorChange);
       if (hasAnchor) {
-        rows.push({ label: 'Anchor-Based MCID Estimate', value: f(anchorChange), ci: null, isRatio: false, highlight: true });
+        rows.push({ label: 'Anchor-Based MID Estimate', value: f(anchorChange), ci: null, isRatio: false, highlight: true });
         const distEstimates = [sem, halfSD];
         const lo = Math.min(...distEstimates), hi = Math.max(...distEstimates);
         const withinRange = anchorChange >= lo * 0.7 && anchorChange <= hi * 1.3;
         rows.push({ label: 'Note — Comparing Methods', isText: true, ci: null, isRatio: false,
           value: withinRange
-            ? `The anchor-based estimate (${f(anchorChange)}) is reasonably consistent with the distribution-based estimates (SEM = ${f(sem)}, half-SD = ${f(halfSD)}) — convergence across methods that answer different questions is a good sign this instrument's MCID is reasonably well pinned down.`
-            : `The anchor-based estimate (${f(anchorChange)}) diverges noticeably from the distribution-based estimates (SEM = ${f(sem)}, half-SD = ${f(halfSD)}). This is common, not necessarily a red flag — anchor-based and distribution-based methods estimate genuinely different things (a change patients themselves judge as meaningful, versus a change large enough to exceed measurement noise) — but it means picking a single "the MCID" number here needs a stated rationale, not just an average of the two.` });
+            ? `The anchor-based estimate (${f(anchorChange)}) is reasonably consistent with the distribution-based estimates (SEM = ${f(sem)}, half-SD = ${f(halfSD)}) — convergence across methods that answer different questions is a good sign this instrument's MID is reasonably well pinned down.`
+            : `The anchor-based estimate (${f(anchorChange)}) diverges noticeably from the distribution-based estimates (SEM = ${f(sem)}, half-SD = ${f(halfSD)}). This is common, not necessarily a red flag — anchor-based and distribution-based methods estimate genuinely different things (a change patients themselves judge as meaningful, versus a change large enough to exceed measurement noise) — but it means picking a single "the MID" number here needs a stated rationale, not just an average of the two.` });
       }
 
       rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
-        value: `Distribution-based methods (SEM, half-SD, Cohen's thresholds) describe how large a change needs to be relative to measurement noise or the scale's own spread — they say nothing about whether patients themselves find that change meaningful. An anchor-based estimate answers that second question directly, but depends entirely on the quality of the external anchor used to classify "minimally improved" patients. Current guidance (e.g., Revicki et al., 2008) recommends triangulating multiple methods rather than reporting a single MCID value, and treating any MCID as specific to the instrument, population, and condition it was derived in — not a universal constant that transfers automatically to a different patient population or a modified version of the same instrument.` });
+        value: `Distribution-based methods (SEM, half-SD, Cohen's thresholds) describe how large a change needs to be relative to measurement noise or the scale's own spread — they say nothing about whether patients themselves find that change meaningful. An anchor-based estimate answers that second question directly, but depends entirely on the quality of the external anchor used to classify "minimally improved" patients. Current guidance (e.g., Revicki et al., 2008) recommends triangulating multiple methods rather than reporting a single MID value, and treating any MID as specific to the instrument, population, and condition it was derived in — not a universal constant that transfers automatically to a different patient population or a modified version of the same instrument.` });
 
       return rows;
     }
@@ -16522,7 +16526,7 @@ const CALCULATOR_INDEX = [
   { id: 'mendelian-randomization',    name: 'Mendelian Randomization (IVW & MR-Egger)', category: 'Genetics & Genomics', description: "Estimates a modifiable exposure's causal effect on an outcome from genetic instruments (SNPs), using inverse-variance-weighted (IVW) pooling and MR-Egger regression, with instrument-strength (F-statistic) and directional-pleiotropy (Egger intercept) checks.", status: 'available' },
 
   // ── 15. PATIENT-REPORTED OUTCOMES ─────────────────────────────────────
-  { id: 'mcid-calculator', name: 'Minimal Clinically Important Difference (MCID)', category: 'Patient-Reported Outcomes', description: "Estimates a minimal clinically important difference (MCID) for a patient-reported outcome measure using distribution-based methods (standard error of measurement, half a standard deviation, Cohen's d thresholds), alongside an optional anchor-based estimate for comparison.", status: 'available' },
+  { id: 'mid-calculator', name: 'Minimal Important Difference (MID)', category: 'Patient-Reported Outcomes', description: "Estimates a minimal important difference (MID) for a patient-reported outcome measure using distribution-based methods (standard error of measurement, half a standard deviation, Cohen's d thresholds), alongside an optional anchor-based estimate for comparison.", status: 'available' },
 
 ];
 
@@ -17680,7 +17684,7 @@ const SEARCH_KEYWORDS = {
   'hardy-weinberg-equilibrium': ['hardy-weinberg equilibrium', 'hwe test', 'genotype frequencies', 'allele frequency', 'population genetics', 'candidate gene study', 'gwas quality control', 'inbreeding coefficient'],
   'mendelian-randomization':    ['mendelian randomization', 'mr ivw', 'mr-egger', 'instrumental variable', 'genetic instrument', 'snp causal effect', 'weak instrument bias', 'horizontal pleiotropy', 'two-sample mr', 'gwas'],
 
-  'mcid-calculator': ['minimal clinically important difference', 'mcid', 'mid', 'minimal important difference', 'patient-reported outcome', 'prom', 'standard error of measurement', 'sem', 'anchor-based method', 'distribution-based method', 'responsiveness'],
+  'mid-calculator': ['minimal important difference', 'mid', 'minimal clinically important difference', 'mcid', 'patient-reported outcome', 'prom', 'standard error of measurement', 'sem', 'anchor-based method', 'distribution-based method', 'responsiveness'],
 
 };
 
@@ -18816,7 +18820,7 @@ const NOTATION = {
     { symbol: 'F_i', meaning: "Instrument i's F-statistic from the SNP-exposure association, used to check instrument strength (conventionally F < 10 flags a weak instrument)." },
     { symbol: '\\beta_0, \\beta_1', meaning: "MR-Egger's intercept (a directional-pleiotropy test) and slope (the pleiotropy-adjusted causal estimate)." },
   ],
-  'mcid-calculator': [
+  'mid-calculator': [
     { symbol: 'SD', meaning: "The outcome score's baseline standard deviation across the population." },
     { symbol: 'r', meaning: 'Reliability coefficient (e.g., test-retest ICC or Cronbach\'s α) — the fraction of score variance that is not measurement error.' },
     { symbol: 'SEM', meaning: 'Standard error of measurement — the typical amount a single patient\'s score would vary on retesting from measurement error alone.' },
@@ -19798,8 +19802,8 @@ const GUIDES = [
   },
 
   {
-    id: 'reading-instrumental-variables',
-    category: 'Reading and Understanding Graphs',
+    id: 'appraisal-instrumental-variables',
+    category: 'Critical Appraisal of the Literature',
     title: 'How Instrumental Variable Analysis Works (and What Makes a Valid Instrument)',
     blurb: 'An instrumental variable is a stand-in for randomization — but only if it satisfies three assumptions, two of which can never be directly tested from the data at hand.',
     dek: `Instrumental variable (IV) analysis estimates a causal effect from purely observational data by finding something that behaves like a hidden randomizer of the exposure — Mendelian Randomization is the best-known example, using a genetic variant as the instrument, but the same logic underlies IV designs built on distance to a provider, physician prescribing preference, or policy and calendar-time variation. The method is the same regardless of what the instrument is; so are the ways it can quietly fail.`,
@@ -19933,9 +19937,9 @@ const GUIDES = [
   {
     id: 'appraisal-patient-reported-outcomes',
     category: 'Critical Appraisal of the Literature',
-    title: 'Appraising Patient-Reported Outcome Measures (PROMs): Validity, Reliability, Responsiveness, and MCID',
+    title: 'Appraising Patient-Reported Outcome Measures (PROMs): Validity, Reliability, Responsiveness, and MID',
     blurb: 'A PROM can be perfectly reliable and still useless for detecting real change — reliability and responsiveness are different properties, and both have to be checked separately.',
-    dek: `A patient-reported outcome measure (PROM) captures something no lab value or imaging study can: the patient's own report of their symptoms, function, or quality of life, with no external observer standing between the experience and the measurement. That directness is exactly why PROMs need their own, distinct set of appraisal questions &mdash; validity, reliability, responsiveness, floor/ceiling effects, and what a given point change on the scale actually means (its minimal clinically important difference, or MCID) &mdash; before a reported score change can be trusted.`,
+    dek: `A patient-reported outcome measure (PROM) captures something no lab value or imaging study can: the patient's own report of their symptoms, function, or quality of life, with no external observer standing between the experience and the measurement. That directness is exactly why PROMs need their own, distinct set of appraisal questions &mdash; validity, reliability, responsiveness, floor/ceiling effects, and what a given point change on the scale actually means (its minimal important difference, or MID) &mdash; before a reported score change can be trusted.`,
     sections: [
       {
         heading: 'What makes a PRO different from any other outcome',
@@ -19958,8 +19962,8 @@ const GUIDES = [
         html: `<p>A floor or ceiling effect occurs when a large proportion of respondents score at the extreme low or high end of the possible range &mdash; conventionally flagged when roughly 15&ndash;20% or more of a sample scores at the very floor or ceiling. Once a patient is already at the floor, further real deterioration can't be detected (there's no lower score available to report it), and the mirror problem applies at the ceiling for further improvement. This is a design flaw specific to the population being studied, not just the instrument in isolation: a disability scale that performs well in a general population can bottom out badly in a severely disabled population already sitting at its floor, understating any further real decline.</p>`,
       },
       {
-        heading: 'Interpretability: what does a given point change actually mean? (MCID)',
-        html: `<p>A statistically significant change in a PROM score doesn't by itself say anything about whether that change matters to the patient &mdash; that's a separate question of interpretability, usually answered via a minimal clinically important difference (MCID): the smallest change in score that patients (or clinicians) would consider meaningful. Two broad families of method exist. <strong>Distribution-based methods</strong> anchor the MCID to the scale's own statistical properties &mdash; the standard error of measurement (SEM), "half a standard deviation" of the baseline score, or Cohen's effect-size conventions (0.2/0.5/0.8 SD for small/medium/large) &mdash; answering "how big a change exceeds measurement noise or a conventional effect-size threshold." <strong>Anchor-based methods</strong> instead compare score changes against an external, independent judgment &mdash; typically the mean score change among patients who separately rated themselves as "minimally improved" on a global rating of change &mdash; answering "how big a change do patients themselves notice and value." These two families routinely disagree, because they are answering genuinely different questions, not because one of them is wrong; the <a href="#mcid-calculator">MCID calculator</a> on this site computes several distribution-based estimates alongside an optional anchor-based one specifically so that disagreement is visible rather than hidden behind a single reported number. Current guidance favors triangulating multiple methods over trusting any single MCID estimate, and treating an MCID as specific to the instrument, population, and condition it was derived in.</p>`,
+        heading: 'Interpretability: what does a given point change actually mean? (MID)',
+        html: `<p>A statistically significant change in a PROM score doesn't by itself say anything about whether that change matters to the patient &mdash; that's a separate question of interpretability, usually answered via a minimal important difference (MID; the older term "minimal <em>clinically</em> important difference," or MCID, has been giving way to "MID" in more recent literature, since the judgment of what's important need not be a clinician's): the smallest change in score that patients (or clinicians) would consider meaningful. Two broad families of method exist. <strong>Distribution-based methods</strong> anchor the MID to the scale's own statistical properties &mdash; the standard error of measurement (SEM), "half a standard deviation" of the baseline score, or Cohen's effect-size conventions (0.2/0.5/0.8 SD for small/medium/large) &mdash; answering "how big a change exceeds measurement noise or a conventional effect-size threshold." <strong>Anchor-based methods</strong> instead compare score changes against an external, independent judgment &mdash; typically the mean score change among patients who separately rated themselves as "minimally improved" on a global rating of change &mdash; answering "how big a change do patients themselves notice and value." These two families routinely disagree, because they are answering genuinely different questions, not because one of them is wrong; the <a href="#mid-calculator">MID calculator</a> on this site computes several distribution-based estimates alongside an optional anchor-based one specifically so that disagreement is visible rather than hidden behind a single reported number. Current guidance favors triangulating multiple methods over trusting any single MID estimate, and treating an MID as specific to the instrument, population, and condition it was derived in.</p>`,
       },
       {
         heading: 'Missing data: dropout in a PRO trial is rarely random',
@@ -19967,15 +19971,15 @@ const GUIDES = [
       },
       {
         heading: 'Reading tip',
-        html: `<p>When a paper reports "a statistically significant improvement" on a PROM, check specifically whether that change is also described as exceeding a stated MCID for that instrument &mdash; a change can be statistically significant (a large enough sample will detect almost any nonzero difference) while still falling well short of a change patients would notice or value. And check the completion rate and how missing PRO data were handled before trusting the reported average at all, particularly in any trial or study where sicker patients are more likely to have dropped out.</p>`,
+        html: `<p>When a paper reports "a statistically significant improvement" on a PROM, check specifically whether that change is also described as exceeding a stated MID for that instrument &mdash; a change can be statistically significant (a large enough sample will detect almost any nonzero difference) while still falling well short of a change patients would notice or value. And check the completion rate and how missing PRO data were handled before trusting the reported average at all, particularly in any trial or study where sicker patients are more likely to have dropped out.</p>`,
       },
     ],
     related: [
       { id: 'cronbachs-alpha', why: "Computes the internal-consistency reliability coefficient this guide's reliability section covers." },
       { id: 'icc', why: 'Computes the test-retest reliability coefficient this guide distinguishes from internal consistency.' },
-      { id: 'mcid-calculator', why: "Computes the distribution-based and anchor-based MCID estimates this guide's interpretability section covers." },
+      { id: 'mid-calculator', why: "Computes the distribution-based and anchor-based MID estimates this guide's interpretability section covers." },
       { id: 'appraisal-appraising-rcts', why: 'Covers intention-to-treat analysis and missing-outcome handling in general — the same principles this guide applies specifically to PRO dropout.' },
-      { id: 'appraisal-effect-measures', why: 'The same statistical-vs-clinical-significance distinction this guide applies to MCID, covered there for RR/OR/absolute effects.' },
+      { id: 'appraisal-effect-measures', why: 'The same statistical-vs-clinical-significance distinction this guide applies to MID, covered there for RR/OR/absolute effects.' },
     ],
   },
 
@@ -20396,7 +20400,7 @@ const GUIDES = [
     related: [
       { id: 'appraisal-confounding-bias', why: 'The prose treatment of confounding this guide adds formal notation and a worked diagram to.' },
       { id: 'appraisal-ancova', why: "Covers the same mediator-adjustment mistake from the trial-design side — why a covariate must be measured pre-treatment." },
-      { id: 'reading-instrumental-variables', why: 'A DAG-based method for a case this guide\'s "adjust for the confounder" rule can\'t handle — when the confounder itself is unmeasured.' },
+      { id: 'appraisal-instrumental-variables', why: 'A DAG-based method for a case this guide\'s "adjust for the confounder" rule can\'t handle — when the confounder itself is unmeasured.' },
       { id: 'appraisal-appraising-cohort', why: 'Selection bias in cohort assembly is often a collider-bias problem in disguise — this guide gives it a name and a mechanism.' },
       { id: 'multiple-regression', why: 'The tool most adjustment-for-confounders is actually implemented with, once the DAG says which variables belong in the model.' },
     ],
@@ -20471,7 +20475,7 @@ const GUIDES = [
       },
       {
         heading: 'Mendelian Randomization: observational data, but a different route to a causal claim',
-        html: `<p>Mendelian Randomization (MR) doesn't slot onto this ladder at all, and not for the same reason ecological studies don't. MR uses purely observational data &mdash; no investigator ever assigns anyone's exposure &mdash; yet it's built specifically to support a causal claim, the one thing everything below the RCT on this ladder is explicitly unable to do on its own. It manages this by using a genetic variant as an instrumental variable: a stand-in for the randomization an RCT performs directly, exploiting the fact that genotype is assigned effectively at random at conception, independent of the confounders that undermine an ordinary cohort or case-control study of the same exposure.</p><p>That means MR's credibility doesn't come from where it would sit on this ladder &mdash; it isn't "better than a cohort study" the way a cohort study is better than a case-control study for estimating relative risk directly. It rests entirely on a separate set of instrumental-variable assumptions (relevance, independence, and exclusion restriction) that have nothing to do with the confounding-control logic this hierarchy is built around, and that can fail in their own characteristic way (most often via horizontal pleiotropy) even when every design element of a conventional observational study would look impeccable. See <a href="#learn/reading-instrumental-variables">How Instrumental Variable Analysis Works</a> for those assumptions in general, and <a href="#learn/appraisal-genetic-association-studies">Appraising Genetic Association Studies</a> for how they apply specifically when the instrument is a genetic variant.</p>`,
+        html: `<p>Mendelian Randomization (MR) doesn't slot onto this ladder at all, and not for the same reason ecological studies don't. MR uses purely observational data &mdash; no investigator ever assigns anyone's exposure &mdash; yet it's built specifically to support a causal claim, the one thing everything below the RCT on this ladder is explicitly unable to do on its own. It manages this by using a genetic variant as an instrumental variable: a stand-in for the randomization an RCT performs directly, exploiting the fact that genotype is assigned effectively at random at conception, independent of the confounders that undermine an ordinary cohort or case-control study of the same exposure.</p><p>That means MR's credibility doesn't come from where it would sit on this ladder &mdash; it isn't "better than a cohort study" the way a cohort study is better than a case-control study for estimating relative risk directly. It rests entirely on a separate set of instrumental-variable assumptions (relevance, independence, and exclusion restriction) that have nothing to do with the confounding-control logic this hierarchy is built around, and that can fail in their own characteristic way (most often via horizontal pleiotropy) even when every design element of a conventional observational study would look impeccable. See <a href="#learn/appraisal-instrumental-variables">How Instrumental Variable Analysis Works</a> for those assumptions in general, and <a href="#learn/appraisal-genetic-association-studies">Appraising Genetic Association Studies</a> for how they apply specifically when the instrument is a genetic variant.</p>`,
       },
       {
         heading: 'Any design: surrogate outcomes vs. hard clinical outcomes',
@@ -20486,7 +20490,7 @@ const GUIDES = [
       { id: 'appraisal-case-series', why: 'The design at the very bottom of this hierarchy — full guide on what it can and cannot show.' },
       { id: 'appraisal-ecological-studies', why: 'The group-level design that sits outside this individual-level hierarchy altogether.' },
       { id: 'appraisal-ecological-fallacy', why: 'The core concept behind why ecological studies sit outside this hierarchy, explained on its own.' },
-      { id: 'reading-instrumental-variables', why: 'The general instrumental-variable assumptions behind why Mendelian Randomization can make a causal claim this hierarchy otherwise wouldn\'t support.' },
+      { id: 'appraisal-instrumental-variables', why: 'The general instrumental-variable assumptions behind why Mendelian Randomization can make a causal claim this hierarchy otherwise wouldn\'t support.' },
       { id: 'appraisal-genetic-association-studies', why: 'How those instrumental-variable assumptions apply specifically when the instrument is a genetic variant.' },
     ],
   },
