@@ -16603,9 +16603,14 @@ const LEARN_WIZARD_TREE = {
     question: 'What kind of study is it?',
     options: [
       { label: 'Randomized controlled trial', next: 'res_rct' },
+      { label: 'Cluster-randomized trial', next: 'res_cluster_rct' },
+      { label: 'Crossover trial', next: 'res_crossover' },
+      { label: 'Non-inferiority or equivalence trial', next: 'res_noninf' },
       { label: 'Cohort study', next: 'res_cohort' },
       { label: 'Case-control study', next: 'res_cc' },
       { label: 'Cross-sectional study', next: 'res_cs' },
+      { label: 'Ecological study (group/aggregate-level data)', next: 'res_eco' },
+      { label: 'Case series or case report', next: 'res_case_series' },
       { label: 'Systematic review or meta-analysis', next: 'res_sr' },
       { label: 'Scoping review', next: 'res_scoping' },
       { label: 'Diagnostic accuracy study', next: 'res_dx' },
@@ -16619,9 +16624,22 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-appraising-rcts', why: 'Randomization, allocation concealment, blinding, ITT vs. per-protocol, CONSORT, RoB 2.' },
     { id: 'appraisal-confounding-bias', why: 'The mechanism randomization is designed to solve — worth having first.' },
   ]},
+  res_cluster_rct: { results: [
+    { id: 'appraisal-cluster-rct', why: 'Design effect, intraclass correlation, number of clusters, and the CONSORT extension for cluster trials.' },
+    { id: 'icc', why: "Estimates the intraclass correlation this design's precision depends on." },
+  ]},
+  res_crossover: { results: [
+    { id: 'appraisal-crossover-trial', why: 'Carryover effects, washout periods, period effects, and why not every condition fits this design.' },
+  ]},
+  res_noninf: { results: [
+    { id: 'appraisal-non-inferiority-trial', why: 'The non-inferiority margin, assay sensitivity, and why sloppy conduct here biases toward the conclusion being tested for.' },
+    { id: 'reading-equivalence-plots', why: 'The visual companion for reading whether the confidence interval actually falls inside the non-inferiority zone.' },
+  ]},
   res_cohort:    { results: [ { id: 'appraisal-appraising-cohort', why: 'Selection bias, surveillance bias, confounding control, differential attrition, the Newcastle-Ottawa Scale.' } ] },
   res_cc:        { results: [ { id: 'appraisal-appraising-case-control', why: 'Control selection, recall bias, and the retrospective reconstruction of exposure.' } ] },
   res_cs:        { results: [ { id: 'appraisal-appraising-cross-sectional', why: 'Temporal ambiguity — which came first — is the central limitation, and this guide starts there.' } ] },
+  res_eco:       { results: [ { id: 'appraisal-ecological-studies', why: 'The ecological fallacy — why a group-level association can vanish, or even reverse, at the individual level.' } ] },
+  res_case_series: { results: [ { id: 'appraisal-case-series', why: 'No comparison group at all — what a case series can flag versus what it can never actually test.' } ] },
   res_sr: { results: [
     { id: 'appraisal-appraising-systematic-reviews', why: 'Protocol registration, search strategy, risk-of-bias assessment, PRISMA, AMSTAR-2, ROBIS.' },
     { id: 'appraisal-meta-analysis-reading', why: 'The statistical side — heterogeneity, fixed vs. random effects, publication bias.' },
@@ -16714,6 +16732,8 @@ const DESIGN_WIZARD_TREE = {
     question: "What's the main goal of your research?",
     options: [
       { label: 'Test whether an intervention or exposure changes an outcome (a causal question)', next: 'causalGoal' },
+      { label: 'Compare rates or averages across groups or populations (e.g., regions, countries), not individual patients', next: 'ecologicalResult' },
+      { label: 'Describe a small group of patients with a notable presentation or outcome, without a comparison group', next: 'caseSeriesResult' },
       { label: 'Estimate how common a condition or exposure is right now, or look for an association at a single point in time', next: 'prevalenceResult' },
       { label: 'Predict what will happen to patients who already have a condition (prognosis)', next: 'prognosisResult' },
       { label: 'Evaluate how well a test, measurement, or model correctly identifies a condition', next: 'diagGoalDesign' },
@@ -16726,8 +16746,46 @@ const DESIGN_WIZARD_TREE = {
   causalGoal: {
     question: 'Can you ethically and practically assign who receives the exposure or intervention — ideally at random?',
     options: [
-      { label: 'Yes', next: 'rctResult' },
+      { label: 'Yes', next: 'rctGoalKind' },
       { label: 'No — I can only observe who happens to be exposed', next: 'observationalGoal' },
+    ]
+  },
+
+  rctGoalKind: {
+    question: 'What is the trial trying to show?',
+    options: [
+      { label: 'The new treatment is better (superiority)', next: 'rctUnitGoal' },
+      { label: "The new treatment is not meaningfully worse than an existing one (non-inferiority/equivalence)", next: 'nonInferiorityResult' },
+    ]
+  },
+  nonInferiorityResult: {
+    results: [
+      { id: 'appraisal-non-inferiority-trial', why: "You're trying to show the new option isn't meaningfully worse than an existing one, not that it's better — which flips the usual logic: sloppy trial conduct here biases toward the conclusion being tested for, not away from it, the opposite problem a superiority trial has." },
+      { id: 'equivalence-test', why: "Runs the two one-sided tests (TOST) procedure this design's statistical analysis is built on." },
+    ]
+  },
+
+  rctUnitGoal: {
+    question: 'Will you randomize individual patients, or whole groups/clusters (e.g., clinics, schools, villages) at once?',
+    options: [
+      { label: 'Individual patients', next: 'rctDesignGoal' },
+      { label: 'Whole clusters/groups', next: 'clusterRctResult' },
+    ]
+  },
+  clusterRctResult: {
+    results: [
+      { id: 'appraisal-cluster-rct', why: "Randomizing whole groups avoids the intervention leaking between arms within the same clinic or school, but it means patients within a cluster are no longer independent observations — the analysis has to account for that (design effect, ICC) or its reported precision will be overstated." },
+      { id: 'icc', why: "Estimates the intraclass correlation this design's design effect and sample size both depend on." },
+      { id: 'design-effect', why: 'Converts an ordinary sample size into the larger one this design actually needs, using the ICC and cluster size.' },
+      { id: 'sample-size-cluster-rct', why: 'Computes the sample size directly, in clusters and per-cluster N, accounting for the design effect.' },
+    ]
+  },
+
+  rctDesignGoal: {
+    question: 'Will each patient receive only one treatment, or multiple treatments in sequence (crossover)?',
+    options: [
+      { label: 'One treatment only', next: 'rctResult' },
+      { label: 'Multiple treatments in sequence', next: 'crossoverResult' },
     ]
   },
   rctResult: {
@@ -16735,6 +16793,23 @@ const DESIGN_WIZARD_TREE = {
       { id: 'appraisal-appraising-rcts', why: 'You can assign the exposure yourself, ideally at random — the strongest design for a causal claim, since randomization tends to balance both known and unknown confounders between groups.' },
       { id: 'unpaired-t-test', why: "The standard way to compare two randomized arms' outcome means once your data is in." },
       { id: 'ancova', why: "If you also recorded a baseline/pre-treatment measurement, adjusting for it — rather than just comparing raw follow-up scores — is usually the more powerful, less bias-prone analysis for a trial like this." },
+    ]
+  },
+  crossoverResult: {
+    results: [
+      { id: 'appraisal-crossover-trial', why: "Giving each patient every treatment in turn makes them their own control, which needs fewer patients overall — but only works for a stable, recurring condition, and only if enough of the first treatment washes out before the next period starts." },
+      { id: 'paired-t-test', why: "The standard analysis for comparing a patient's own two treatment periods against each other." },
+    ]
+  },
+
+  ecologicalResult: {
+    results: [
+      { id: 'appraisal-ecological-studies', why: "Comparing rates or averages across groups (not individual patients) is efficient when the data or the exposure itself is only available at that level — but an association at the group level doesn't necessarily hold for the individuals inside each group (the ecological fallacy), which is the central thing to watch for." },
+    ]
+  },
+  caseSeriesResult: {
+    results: [
+      { id: 'appraisal-case-series', why: 'With no comparison group at all, this is a description of what happened in these specific patients, not a test of whether an exposure or treatment caused it — useful for flagging something novel or rare, not for estimating how often it actually happens.' },
     ]
   },
 
@@ -19745,6 +19820,9 @@ const GUIDES = [
       { id: 'appraisal-study-design', why: 'Places RCTs within the broader design hierarchy this guide zooms into.' },
       { id: 'appraisal-power-sample-size', why: 'A trial can be well-randomized and still underpowered — this guide covers that separate failure mode.' },
       { id: 'appraisal-pilot-studies', why: 'Covers the smaller-scale study that often precedes a full RCT, and what it can and cannot establish.' },
+      { id: 'appraisal-cluster-rct', why: 'The variant that randomizes whole clinics or schools instead of individual patients — adds its own design-effect and ICC concerns on top of everything here.' },
+      { id: 'appraisal-crossover-trial', why: 'The variant that gives each patient every treatment in turn — adds carryover and washout concerns on top of everything here.' },
+      { id: 'appraisal-non-inferiority-trial', why: 'The variant trying to show a new treatment isn\'t meaningfully worse, rather than better — flips several of this guide\'s usual conservatism assumptions.' },
     ],
   },
 
@@ -19798,6 +19876,7 @@ const GUIDES = [
       { id: 'appraisal-appraising-cross-sectional', why: 'A related observational design that measures exposure and outcome at a single point in time rather than following a cohort forward.' },
       { id: 'appraisal-effect-measures', why: 'Cohort studies can estimate relative risk directly, unlike case-control studies — covered there.' },
       { id: 'appraisal-study-design', why: 'Places cohort studies within the broader design hierarchy.' },
+      { id: 'appraisal-ecological-studies', why: 'Uses group-level rather than individual-level data — a different design for when individual exposure and outcome data isn\'t available.' },
     ],
   },
 
@@ -19847,6 +19926,7 @@ const GUIDES = [
       { id: 'appraisal-appraising-cross-sectional', why: 'A related observational design that measures exposure and outcome simultaneously rather than working backward from outcome to exposure.' },
       { id: 'appraisal-effect-measures', why: 'Case-control studies can only estimate the odds ratio, not relative risk — covered there.' },
       { id: 'appraisal-study-design', why: 'Places case-control studies within the broader design hierarchy.' },
+      { id: 'appraisal-case-series', why: 'The rung below on the evidence hierarchy — a case-control study adds the comparison group a case series lacks.' },
     ],
   },
 
@@ -20245,6 +20325,225 @@ const GUIDES = [
       { id: 'appraisal-grade', why: 'Full explanation of the certainty-vs-strength distinction this guide\'s GRADE section introduces.' },
       { id: 'appraisal-clinical-significance', why: 'Covers the distinction between a statistically significant finding and one large enough to matter — the same distinction a guideline panel has to make when weighing benefit against harm.' },
       { id: 'appraisal-study-design', why: 'Places guidelines within the broader landscape of evidence types this site covers.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-cluster-rct',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Cluster-Randomized Trials',
+    blurb: 'Randomizing clinics, schools, or villages instead of patients solves a practical problem — but it creates a statistical one an ordinary trial never has to deal with.',
+    dek: `A cluster-randomized trial assigns whole groups — clinics, schools, villages — to a study arm, rather than assigning individual patients. That single change is what makes the design practical for many interventions, and it's also exactly what makes its statistical analysis different from an ordinary trial's.`,
+    sections: [
+      {
+        heading: 'What makes this different from an ordinary RCT',
+        html: `<p>Randomization happens at the group (cluster) level here — a hospital, a clinic, a school, a village — with everyone inside a given cluster receiving the same assigned intervention. This is often the only practical choice when the intervention is itself delivered at a group level (training a clinic's entire staff, changing a school's curriculum) or when individually randomizing patients within the same setting would let the intervention "leak" across arms.</p>`,
+      },
+      {
+        heading: 'The design effect: why these trials need more patients than they look like they do',
+        html: `<p>Patients within the same cluster tend to resemble each other more than they resemble patients in a different cluster — they share a clinic's staff, protocols, and local patient population. Treating clustered patients as though they were independent observations understates the true variance of the estimate, making a trial look more precise (and more significant) than it actually is. This site's own <strong>ICC</strong> and <strong>Design Effect</strong> calculators exist specifically to quantify this: a trial analyzed with ordinary, non-clustered statistics, ignoring the intraclass correlation entirely, will report artificially narrow confidence intervals.</p>`,
+      },
+      {
+        heading: 'Contamination: the problem cluster randomization is often solving',
+        html: `<p>When individually randomizing patients who interact within the same setting — patients in the same clinic, students in the same classroom — the intervention can spread informally to the control group, diluting the measured effect. Randomizing an entire clinic or classroom as a single unit prevents this contamination, at the direct cost of the design-effect problem above; appraising a cluster trial means recognizing that trade-off was made deliberately, not treating the clustering itself as a flaw.</p>`,
+      },
+      {
+        heading: 'How many clusters, not just how many patients',
+        html: `<p>The <em>number of clusters</em> — not the total patient count — is what determines how well between-cluster variability can be estimated, and that number drives real statistical power in a way total N alone doesn't capture. A trial randomizing 4 large hospitals is a fundamentally weaker basis for inference than one randomizing 40 smaller clinics, even at an identical total sample size, since a handful of clusters simply can't support a reliable estimate of how much clusters vary from each other. A trial with fewer than roughly 10 clusters per arm deserves particular scrutiny of how its variance was estimated.</p>`,
+      },
+      {
+        heading: 'Baseline imbalance at the cluster level',
+        html: `<p>With only a small number of independently randomized units (clusters, not patients), chance imbalance between arms on cluster-level characteristics — size, location, baseline practice patterns — is common, and harder to guard against than in a trial that individually randomizes hundreds of patients. Worth checking cluster-level baseline characteristics specifically, not just the usual individual-patient baseline table.</p>`,
+      },
+      {
+        heading: 'A structured checklist: the CONSORT extension for cluster trials',
+        html: `<p>An extension of CONSORT built specifically for this design, requiring reporting of the number of clusters randomized, the intracluster correlation (or another basis for the variance estimate), and how the analysis accounted for clustering — items an ordinary CONSORT checklist doesn't ask for at all.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted cluster-randomized trial can support the same strength of causal claim as an ordinary RCT, provided the analysis properly accounts for clustering. A cluster trial analyzed as though it were individually randomized — ignoring the ICC and design effect entirely — will systematically overstate its own precision, and can turn a genuinely null result into a false positive.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Check first whether the reported analysis explicitly accounts for clustering — a mixed-effects model, generalized estimating equations with cluster-robust standard errors, or a sample-size calculation that already incorporated the design effect. A cluster trial that never mentions ICC, design effect, or clustering-aware methods anywhere in its methods section is a strong signal to treat its reported precision with real skepticism.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-rcts', why: 'The parent design — most of an ordinary RCT\'s appraisal concerns (blinding, allocation concealment, ITT) still apply on top of the clustering-specific ones here.' },
+      { id: 'icc', why: "Estimates the intraclass correlation this design's precision and sample size both depend on." },
+      { id: 'design-effect', why: 'Converts an ordinary sample size into the larger one a cluster trial actually needs, using the ICC and average cluster size.' },
+      { id: 'sample-size-cluster-rct', why: 'Computes the sample size directly, in clusters and per-cluster N, accounting for the design effect.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-crossover-trial',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Crossover Trials',
+    blurb: 'Each patient serves as their own control, which is powerful — but only if enough of the first treatment washes out before the second one starts.',
+    dek: `A crossover trial gives every participant every treatment being compared, one after another, and compares each person's response to themselves rather than to a different group of people. That within-person comparison is what makes the design efficient, and also exactly where its central vulnerability — carryover — comes from.`,
+    sections: [
+      {
+        heading: 'What makes this different from a parallel-group trial',
+        html: `<p>Each participant receives multiple treatments in sequence (often two), and a person's response to treatment A is compared against that same person's own response to treatment B — removing between-person variability from the comparison entirely. Because each patient is their own control, a crossover trial often needs meaningfully fewer total participants than an equivalent parallel-group trial to detect the same effect size.</p>`,
+      },
+      {
+        heading: 'Carryover effects: the design\'s central vulnerability',
+        html: `<p>An effect of the <em>first</em> treatment period lingering into the second period contaminates that second period's result, since it's no longer a clean measurement of the second treatment alone. This is precisely why crossover trials are only well suited to stable, recurring conditions and treatments with a well-understood, relatively short duration of action — not to conditions that resolve or change irreversibly over the course of the trial.</p>`,
+      },
+      {
+        heading: 'Washout periods',
+        html: `<p>A deliberate gap inserted between treatment periods, meant to be long enough — based on the treatment's pharmacokinetics or known duration of effect — for the first treatment to fully clear before the second period begins. A trial with too short a washout, or none at all, is exposed to exactly the carryover problem above, and checking the washout's length (and its justification) is one of the first things worth doing when appraising one of these trials.</p>`,
+      },
+      {
+        heading: 'Period effects',
+        html: `<p>The underlying condition can change over calendar time independent of which treatment a patient happens to be on during a given period — a seasonal condition, for instance, where period 1 falls in winter and period 2 in summer. A well-designed crossover trial randomizes the <em>order</em> (sequence) in which treatments are given across participants, so that any period effect is spread evenly across both treatments rather than systematically favoring whichever one tends to fall in a particular period.</p>`,
+      },
+      {
+        heading: 'Not suitable for every condition',
+        html: `<p>Because the design requires the underlying condition to still be present, and comparably severe, at the start of the second period, it fits chronic, stable conditions — hypertension, asthma, chronic pain — far better than acute or curable ones, where successfully treating the condition in period 1 leaves nothing left to measure in period 2. A crossover trial run on a condition that resolves on its own is a mismatch between design and disease, regardless of how well every other part of the trial was conducted.</p>`,
+      },
+      {
+        heading: 'Dropout is a bigger problem here than in a parallel trial',
+        html: `<p>Because the core within-person comparison needs a participant to complete every period, dropping out partway through — after period 1 but before period 2 — loses that participant's data in a way a parallel-group trial's dropout doesn't necessarily do. Worth checking how much attrition occurred between periods, and whether it was handled with an appropriate method rather than a simple complete-case analysis that could bias the result if dropout wasn't random.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted crossover trial can efficiently estimate a treatment effect using meaningfully fewer participants than a parallel design, for stable chronic conditions and short-acting, fully reversible treatments. It cannot be used for conditions that are cured or that change irreversibly over the trial's duration, and its result is only trustworthy if carryover was adequately prevented by washout and controlled for by randomizing treatment order.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Check first whether a washout period was included and its length justified against the treatment's known duration of effect, and second whether the order treatments were given in was randomized across participants. These two checks catch most of what can go wrong in a crossover trial's design.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-rcts', why: 'The parent design — randomization, blinding, and ITT concerns still apply on top of the carryover-specific ones here.' },
+      { id: 'paired-t-test', why: "The standard analysis for comparing a patient's own two treatment periods against each other." },
+    ],
+  },
+
+  {
+    id: 'appraisal-non-inferiority-trial',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Non-Inferiority Trials',
+    blurb: 'A poorly conducted non-inferiority trial is biased toward the very conclusion it\'s trying to prove — the opposite problem a sloppy superiority trial has.',
+    dek: `A non-inferiority trial sets out to show a new treatment isn't meaningfully worse than an existing one, usually because it offers some other advantage worth the trade-off. That flips the usual logic of trial conduct: the sloppiness that normally makes a false positive less likely instead makes one more likely here.`,
+    sections: [
+      {
+        heading: 'What a non-inferiority trial is trying to show',
+        html: `<p>Rather than showing a new treatment is <em>better</em> than an existing one (superiority), a non-inferiority trial aims to show it is not meaningfully <em>worse</em> — usually because the new option offers some other advantage (cheaper, safer, easier to administer, less invasive) that would make it worth choosing even without a bigger effect. The comparator has to already be a proven, active treatment — there is no such thing as a non-inferiority trial against placebo.</p>`,
+      },
+      {
+        heading: 'The non-inferiority margin: the single most important number in the trial',
+        html: `<p>A pre-specified maximum acceptable difference by which the new treatment is allowed to be worse while still being declared "non-inferior." This margin has to be set <em>before</em> the trial, not chosen after seeing the data, and needs both a clinical justification (how much worse would still be an acceptable trade-off, given the new treatment's other advantages) and a statistical one (preserving a meaningful share of the comparator's own proven effect over placebo). A trial that doesn't explain how its margin was chosen, or that picks a conspicuously generous one, deserves real scrutiny — a wide enough margin can make almost any treatment look "non-inferior."</p>`,
+      },
+      {
+        heading: 'Why sloppy conduct here biases toward non-inferiority, not away from it',
+        html: `<p>This is the design's central appraisal trap, and it runs opposite to ordinary intuition. In a superiority trial, poor conduct — measurement error, non-adherence, loss to follow-up — generally biases the result <em>toward</em> the null, making it harder to show a real difference exists, which is a conservative bias against the researchers' own hypothesis. In a non-inferiority trial, the null hypothesis is that the treatments <em>differ</em> — so anything that makes the two arms look more similar (non-adherence, imprecise outcome ascertainment, diluting a true difference) makes it <em>easier</em> to conclude non-inferiority. The same sloppiness that would undermine a superiority trial instead favors the conclusion being tested for here. This is exactly why analyzing both the intention-to-treat and per-protocol populations — and requiring both to agree — is considered essential for a credible non-inferiority trial, unlike a superiority trial, where ITT alone is usually treated as sufficient on its own.</p>`,
+      },
+      {
+        heading: 'Assay sensitivity: could this trial have detected a difference if one existed?',
+        html: `<p>A non-inferiority trial needs indirect evidence that it retains "assay sensitivity" — the ability, under these specific trial conditions, to distinguish an effective treatment from an ineffective one — typically by closely replicating the dosing, population, and endpoints of the trials that originally established the comparator's own effect over placebo. A trial that used a lower comparator dose, a less severely affected population, or a different endpoint than those original trials has weaker assay sensitivity, and a "non-inferior" finding in that setting could simply mean the trial couldn't have detected an important difference even if one were really there — not that the treatments are truly similar.</p>`,
+      },
+      {
+        heading: 'A structured checklist: the CONSORT extension for non-inferiority and equivalence trials',
+        html: `<p>An extension of CONSORT built specifically for this design, requiring explicit reporting and justification of the non-inferiority margin, concordance between the intention-to-treat and per-protocol analyses, and evidence supporting the trial's assay sensitivity — none of which an ordinary superiority-trial CONSORT checklist asks for.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted non-inferiority trial can support choosing a new treatment for a reason other than superior efficacy, provided it isn't meaningfully worse than the existing standard within a pre-specified, justified margin. It cannot establish that the new treatment is effective in an absolute sense — only that it isn't much worse than a comparator already known to work — and, unlike a superiority trial, a "positive" (non-inferior) result here is the more methodologically fragile conclusion, not the more robust one.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before accepting a "non-inferior" conclusion, check three things: was the margin pre-specified and justified rather than chosen after seeing the data; did both the intention-to-treat and per-protocol analyses agree; and does the trial show evidence of assay sensitivity by resembling the trials that established the comparator's own effect. A non-inferiority trial that skips all three is asking the reader to take a great deal on faith.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-rcts', why: 'The parent design — randomization, blinding, and ITT/per-protocol concerns still apply, though this design also requires reporting both analyses rather than favoring one.' },
+      { id: 'equivalence-test', why: 'Runs the two one-sided tests (TOST) procedure this design\'s statistical analysis is built on.' },
+      { id: 'reading-equivalence-plots', why: 'The visual companion for reading whether a confidence interval actually falls inside the non-inferiority zone.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-ecological-studies',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Ecological Studies',
+    blurb: 'Ecological studies compare groups, not individuals — and that shift in the unit of analysis is exactly where the ecological fallacy comes from.',
+    dek: `An ecological study measures exposure and outcome as group- or population-level rates rather than individual patient data. That's often the only data available for a given question, but it means any association found describes the groups being compared, not necessarily the individuals inside them.`,
+    sections: [
+      {
+        heading: 'What an ecological study actually measures',
+        html: `<p>Rather than individual-level data (this specific person's exposure and outcome), an ecological study uses aggregate, group-level data — comparing, say, per-capita fat consumption across countries against each country's breast cancer rate, rather than tracking individual women's diets and disease status. This is often the only way to study an exposure that is inherently a property of a group or place (air pollution levels, a health policy, healthcare spending) rather than something that varies meaningfully within one.</p>`,
+      },
+      {
+        heading: 'The ecological fallacy: the central appraisal concern',
+        html: `<p>An association observed at the group level does not necessarily hold at the individual level — and can even point in the opposite direction. A now-classic illustration (Robinson, 1950) found that, across U.S. states, a higher percentage of foreign-born residents was associated with <em>higher</em> average literacy — yet at the individual level, foreign-born residents were actually less literate than native-born ones. The state-level pattern was really driven by foreign-born immigrants settling disproportionately in states with generally higher literacy, a fact entirely invisible from the aggregate numbers alone. Any ecological finding carries this same risk: the pattern in the aggregate data may not describe the people inside each group at all.</p>`,
+      },
+      {
+        heading: 'Confounding at the group level',
+        html: `<p>Group-level confounders can differ from individual-level ones, and are just as uncontrolled here as in any other observational design — arguably harder to fully specify, since only aggregate summaries (e.g., the percentage of smokers in a region) are available rather than each individual's own exposure status. A group-level association can be driven entirely by a confounder that varies across groups in a way no individual-level adjustment could ever capture from this data alone.</p>`,
+      },
+      {
+        heading: 'When ecological studies are appropriate on their own terms',
+        html: `<p>This design is a legitimate and often necessary choice — not merely a fallback — when the exposure of interest genuinely is a group-level construct that couldn't be meaningfully assigned to individuals anyway (a public health policy, ambient air quality, a health system's structure), when it's being used to generate a hypothesis for a future individual-level study, or when individual-level data collection is infeasible at the scale the question requires (historical or large international comparisons).</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted ecological study can reveal a genuine association between group-level exposure and outcome rates, and can be an efficient way to study exposures that only exist at that level. It cannot, on its own, establish that the same association holds for the individuals within each group — extending a group-level finding to individual patients requires an additional, often unstated and unjustified, assumption.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>For any ecological finding, ask explicitly: is this conclusion being drawn about groups, or is it silently being applied to the individuals inside them? An ecological correlation is a fact about groups; treating it as a fact about individual patients is the ecological fallacy, and it's worth checking whether the paper's own discussion section makes that leap without acknowledging it.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-cross-sectional', why: 'Shares the single-time-point framing, but measures individual-level data rather than group aggregates.' },
+      { id: 'appraisal-confounding-bias', why: 'The same confounding concerns apply here, just estimated from group-level rather than individual-level data.' },
+      { id: 'appraisal-study-design', why: 'Places ecological studies within the broader design hierarchy.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-case-series',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Case Series and Case Reports',
+    blurb: 'The simplest design in the hierarchy — no comparison group at all — which is exactly why a case series can describe but never truly test anything.',
+    dek: `A case series (or a single case report) describes what happened in a small group of patients sharing a condition, exposure, or treatment, without comparing them against anyone else. That absence of a comparison group is the design's defining feature, and the source of almost everything worth checking when appraising one.`,
+    sections: [
+      {
+        heading: 'What a case series actually is',
+        html: `<p>A descriptive account of a group of patients (or, for a case report, a single patient) who share a condition, exposure, or treatment — with no control or comparison group of any kind. There is nothing here to compute a relative risk, an odds ratio, or a meaningful p-value testing an exposure-outcome relationship against, since there's no comparator describing what would have happened otherwise.</p>`,
+      },
+      {
+        heading: 'No control group means no test of association',
+        html: `<p>Because there is nothing to compare the observed patients against, a case series cannot establish that an exposure or treatment caused an outcome — only that the outcome occurred in these particular patients who had that exposure or treatment. Causal-sounding language in a case series write-up ("Drug X caused Y") outruns what the design itself can support; at most, a case series can report a plausible temporal association in the patients described.</p>`,
+      },
+      {
+        heading: 'Selection: how were the reported cases chosen?',
+        html: `<p>This is the design's biggest structural weakness. Cases are typically reported precisely because they are unusual — a novel presentation, a rare complication, a dramatic treatment response — which means the reported cases are, by construction, not a representative sample of anyone. Reporting bias compounds this: a striking or positive outcome is considerably more likely to be written up and published than an unremarkable one, so a stack of published case reports describing a similar outcome can create the appearance of a pattern that a more systematic look at all cases (published and unpublished) wouldn't support.</p>`,
+      },
+      {
+        heading: 'What role case series and reports actually play in evidence generation',
+        html: `<p>Despite these limits, this design has real, historically important value: it is often the first signal that something worth investigating further is happening, particularly for rare diseases or rare adverse effects where a formal comparative study would be infeasible until the signal is strong enough to justify one. The first cluster of AIDS cases (reported as a case series in the CDC's MMWR in 1981) and the initial reports linking thalidomide to birth defects are canonical examples of a case series prompting the more rigorous studies that followed. Read this way, a case series is hypothesis-generating, not hypothesis-confirming.</p>`,
+      },
+      {
+        heading: 'A structured checklist: CARE guidelines',
+        html: `<p>The CARE (CAse REport) guidelines are the standard reporting checklist for case reports, covering what should be documented about the patient, the timeline of presentation and intervention, and the clinical reasoning behind the care provided — the analog of CONSORT for trials or STROBE for observational studies, adapted to a design with no comparison group to describe.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A case series or case report can describe an unusual clinical presentation, illustrate a possible new adverse effect or treatment response, and generate a hypothesis worth testing with a more rigorous design. It cannot estimate how common an outcome actually is, cannot support a comparative claim about a treatment's effect, and cannot establish causation on its own.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Read a case series as "this happened, in these specific patients" rather than "this is what usually happens" — and watch specifically for causal language the design can't support (an outcome that "resulted from" or was "caused by" an exposure) rather than the more defensible "occurred following" or "was temporally associated with."</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-case-control', why: 'The next rung up the evidence hierarchy — adds a comparison group, which is exactly what a case series lacks.' },
+      { id: 'appraisal-confounding-bias', why: 'Covers reverse causation and selection bias in more depth — both relevant to why a case series can\'t support a causal claim on its own.' },
+      { id: 'appraisal-study-design', why: 'Places case series within the broader evidence hierarchy.' },
     ],
   },
 

@@ -882,7 +882,9 @@ function renderLearnHub() {
 // primary guide + "why" text rather than separately written copy, so
 // this page and the wizard's own reasoning can never drift apart.
 const DESIGN_GLANCE_ORDER = [
-  'rctResult', 'cohortResult', 'caseControlResult', 'prevalenceResult',
+  'rctResult', 'clusterRctResult', 'crossoverResult', 'nonInferiorityResult',
+  'cohortResult', 'caseControlResult', 'caseSeriesResult',
+  'prevalenceResult', 'ecologicalResult',
   'diagAccuracyResult', 'aiStudyResult',
   'systematicReviewResult', 'scopingReviewResult',
   'prognosisResult', 'guidelineResult', 'pilotResult',
