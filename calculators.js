@@ -21294,6 +21294,7 @@ const GUIDES = [
       { id: 'reading-forest-plots', why: 'The visual companion for reading the pooled estimate this guide discusses appraising.' },
       { id: 'appraisal-grade', why: 'Full explanation of the certainty-of-evidence rating this guide\'s GRADE section introduces.' },
       { id: 'appraisal-appraising-scoping-reviews', why: 'Covers the related but distinct review type used to map a body of literature rather than pool its effect estimates.' },
+      { id: 'appraisal-appraising-realist-reviews', why: 'Covers the related but distinct review type used to explain why an intervention works, for whom, and under what circumstances, rather than pool a single effect estimate.' },
     ],
   },
 
@@ -21335,7 +21336,55 @@ const GUIDES = [
     ],
     related: [
       { id: 'appraisal-appraising-systematic-reviews', why: 'The related review type built to answer a narrower, effect-focused question — and the one scoping reviews are often confused with.' },
+      { id: 'appraisal-appraising-realist-reviews', why: 'Another review type organized around a purpose other than pooling effect estimates — this one explaining why an intervention works, for whom, and under what circumstances.' },
       { id: 'appraisal-study-design', why: 'Places scoping reviews within the broader landscape of review and study types.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-appraising-realist-reviews',
+    category: 'Appraising Studies by Design',
+    title: 'Appraising Realist Reviews',
+    blurb: 'A realist review asks "what works, for whom, under what circumstances, and why" — not "does it work" — and appraising one means checking whether it explains mechanisms rather than just pooling outcomes.',
+    dek: `Realist reviews are easy to mistake for a qualitative cousin of the systematic review, but they are built around a different unit of analysis entirely — the context-mechanism-outcome configuration — and a different goal: refining a program theory of why an intervention succeeds in some settings and fails in others, rather than producing a single pooled effect estimate.`,
+    sections: [
+      {
+        heading: 'What a realist review is actually for',
+        html: `<p>A realist review explains <em>why</em> a complex intervention or programme produces the outcomes it does, for whom, and under what circumstances &mdash; not whether it works on average across all settings. It is the right tool when an intervention has already shown mixed or inconsistent results across studies or sites, and the practical question has shifted from "does this work" to "why did this work here but not there, and what does that tell us about how to implement it elsewhere." It is the wrong tool &mdash; and a mismatch a reader should flag &mdash; when it is used in place of a systematic review to answer a straightforward question about average effect size.</p>`,
+      },
+      {
+        heading: 'The core analytic unit: context-mechanism-outcome configurations',
+        html: `<p>Rather than extracting a single outcome per study, a realist review extracts and builds <strong>context-mechanism-outcome (CMO) configurations</strong>: the setting or circumstance (context) that triggers or blocks an underlying causal process (mechanism), producing a particular result (outcome). The same intervention can trigger different mechanisms &mdash; or fail to trigger any &mdash; depending on context, which is precisely why a realist review can accommodate the kind of cross-study inconsistency that would look like unexplained heterogeneity in a meta-analysis. Appraisal here means checking whether the CMO configurations are actually built from evidence in the included sources, rather than asserted by the reviewers without a traceable link back to the data.</p>`,
+      },
+      {
+        heading: 'Program theory is refined, not tested for statistical significance',
+        html: `<p>A realist review starts with an initial rough program theory &mdash; the reviewers' working explanation of how the intervention is supposed to produce its effects &mdash; and uses the evidence to refine, elaborate, or discard candidate mechanisms across iterative cycles, arriving at a refined <strong>middle-range theory</strong> that is more general than a single study's finding but more specific than an abstract social-science theory. There is no p-value or pooled estimate marking the endpoint; the appraisal question is whether the final theory is meaningfully more precise and explanatory than the initial one, and whether that refinement is traceable to specific pieces of included evidence rather than reviewer intuition.</p>`,
+      },
+      {
+        heading: 'Why the search is iterative and purposive, not exhaustive',
+        html: `<p>Unlike a systematic review's fixed, pre-registered, exhaustive search, a realist review's search is deliberately iterative: early rounds of reading reshape the program theory, which in turn reshapes what the reviewers go looking for next, including in disciplines or literatures well outside the original topic area if that is where a candidate mechanism is best evidenced. A purposive, theory-driven search is not a shortcut or a lower standard here &mdash; it is the appropriate method for this design &mdash; but it does mean the appraisal question is different from "was every relevant study found." It becomes "was the search's evolving logic documented, and does the final set of sources plausibly cover the mechanisms the review claims to explain."</p>`,
+      },
+      {
+        heading: 'Appraising included sources: relevance and rigor, not a single risk-of-bias score',
+        html: `<p>A realist review deliberately draws on a heterogeneous mix of source types &mdash; quantitative and qualitative primary studies, evaluations, grey literature, and sometimes theoretical or policy documents &mdash; and does not apply one uniform risk-of-bias tool across all of them, because no single tool fits sources this different in design. Instead, each source is judged on two dimensions: <strong>relevance</strong> (does it speak to the program theory being tested) and <strong>rigor</strong> (is the method sound enough that the data it contributes can be trusted for that specific contribution). A source can be low-rigor by conventional standards yet still make a legitimate, explicitly limited contribution to a CMO configuration &mdash; appraisal means checking that the review is transparent about which sources contributed which piece of the explanation, and how much weight that piece can bear.</p>`,
+      },
+      {
+        heading: 'A structured reporting standard: RAMESES II',
+        html: `<p>RAMESES II (Realist And Meta-narrative Evidence Syntheses: Evolving Standards) is the field's publication standard, covering items such as a clear statement of the review's focus on explaining mechanisms rather than estimating effect size, a description of how the initial program theory was developed and subsequently refined, and a transparent account of the iterative search and source-appraisal process. A review that references RAMESES II compliance makes it easier for a reader to check whether the reporting matches what a realist review is supposed to do methodologically, in the same way PRISMA does for systematic reviews &mdash; though, as with PRISMA, meeting a reporting standard certifies transparency, not automatically the quality of the underlying reasoning.</p>`,
+      },
+      {
+        heading: 'What this design can — and cannot — tell you',
+        html: `<p>A well-conducted realist review can explain why a complex intervention succeeds in some contexts and not others, and can produce a portable, generalizable theory of the mechanisms involved that is genuinely useful for adapting an intervention to a new setting. It cannot tell you the average size of an effect, cannot substitute for a systematic review when that is the actual question being asked, and its conclusions are only as trustworthy as the traceability between its final program theory and the specific evidence cited for each CMO configuration &mdash; a review that asserts mechanisms without showing that trail is offering plausible narrative, not a realist synthesis.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before trusting a realist review's conclusions, look for the CMO configurations themselves, not just the final narrative summary &mdash; a rigorous review will show its work, linking each proposed mechanism back to the sources and contexts that support it. A review that offers only a fluent explanatory story without that visible evidentiary trail is harder to distinguish from the authors' prior beliefs about how the intervention "should" work.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-appraising-systematic-reviews', why: 'The related review type built to estimate an average effect size — the question a realist review deliberately does not try to answer.' },
+      { id: 'appraisal-appraising-scoping-reviews', why: 'Another review type organized around a purpose other than pooling effect estimates — useful for placing realist reviews within the wider family of review designs.' },
+      { id: 'appraisal-study-design', why: 'Places realist reviews within the broader landscape of review and study types.' },
     ],
   },
 
