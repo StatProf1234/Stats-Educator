@@ -12023,6 +12023,101 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 108. MINIMAL CLINICALLY IMPORTANT DIFFERENCE (MCID) ───────────────
+     Distribution-based MCID estimates for a patient-reported outcome
+     measure (PROM) — the standard error of measurement (SEM = SD ×
+     √(1−reliability)), the "half a standard deviation" rule (0.5 SD),
+     and Cohen's small/medium/large effect-size thresholds (0.2/0.5/0.8
+     SD) — plus an optional anchor-based estimate (the mean change
+     score among patients independently classified as "minimally
+     improved" on an external anchor, e.g. a global rating of change)
+     shown alongside for direct comparison. Deliberately does not
+     collapse these into one "the MCID" number: the whole point, laid
+     out in the Interpretation row, is that distribution-based and
+     anchor-based methods answer different questions and often
+     disagree, so current guidance (e.g. Revicki et al., 2008)
+     recommends triangulating several methods rather than trusting one.
+     The reliability coefficient this calculator needs is exactly what
+     this site's Cronbach's Alpha and ICC calculators produce.        */
+  {
+    id:          'mcid-calculator',
+    name:        'Minimal Clinically Important Difference (MCID)',
+    hint:        'Distribution-based (0.5 SD, 1 SEM, Cohen\'s d) plus an optional anchor-based estimate',
+    category:    'Patient-Reported Outcomes',
+    description: "Estimates a minimal clinically important difference (MCID) for a patient-reported outcome measure using distribution-based methods (standard error of measurement, half a standard deviation, Cohen's d thresholds), alongside an optional anchor-based estimate for comparison.",
+
+    formulas: [
+      {
+        label: 'Standard Error of Measurement',
+        latex: 'SEM = SD\\sqrt{1-r}'
+      },
+      {
+        label: 'Distribution-Based MCID Rules',
+        latex: '\\text{MCID}_{SEM} = 1\\times SEM, \\qquad \\text{MCID}_{0.5SD} = 0.5\\times SD'
+      },
+      {
+        label: "Cohen's Effect-Size Thresholds",
+        latex: '\\text{Small} = 0.2\\times SD, \\quad \\text{Medium} = 0.5\\times SD, \\quad \\text{Large} = 0.8\\times SD'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'sd', label: 'Baseline SD of the Outcome Score', default: 10 },
+      { id: 'reliability', label: 'Reliability Coefficient (0–1)', default: 0.80,
+        note: 'A test-retest ICC (in a clinically stable population) or Cronbach\'s α for this instrument — see this site\'s ICC and Cronbach\'s Alpha calculators.' },
+      { id: 'anchorChange', label: 'Anchor-Based Mean Change (optional)', default: '',
+        note: 'The mean change score among patients independently classified as "minimally improved" on an external anchor (e.g., a global rating of change) — leave blank if you only want the distribution-based estimates.' },
+    ],
+
+    example(values) {
+      const { sd, reliability } = values;
+      if (!isFinite(sd) || sd <= 0 || !isFinite(reliability) || reliability <= 0 || reliability > 1)
+        return 'Enter a baseline SD and a reliability coefficient (0–1) to see a worked medical example here.';
+      const sem = sd * Math.sqrt(1 - reliability);
+      const f = v => +v.toFixed(2);
+      return `A quality-of-life questionnaire has a baseline SD of ${f(sd)} points and a test-retest reliability of ${reliability} in a clinically stable population. Its standard error of measurement is SEM = ${f(sd)} × √(1 − ${reliability}) = ${f(sem)} points — meaning a single patient's score can plausibly wobble by about that much from measurement error alone, before any real change has happened. The "half a standard deviation" rule gives a second, independent MCID estimate of ${f(sd * 0.5)} points for comparison.`;
+    },
+
+    calculate(values) {
+      const { sd, reliability, anchorChange } = values;
+      if (!isFinite(sd) || sd <= 0) return [err('Baseline SD must be greater than 0')];
+      if (!isFinite(reliability) || reliability <= 0 || reliability > 1)
+        return [err('Reliability Coefficient must be greater than 0 and no more than 1')];
+
+      const f = (v, dp = 2) => +(v.toFixed(dp));
+      const sem = sd * Math.sqrt(1 - reliability);
+      const halfSD = 0.5 * sd;
+      const small = 0.2 * sd, medium = 0.5 * sd, large = 0.8 * sd;
+
+      const rows = [
+        { label: 'Standard Error of Measurement (SEM)', value: f(sem), ci: null, isRatio: false, highlight: true },
+        { label: 'MCID Estimate — 1 SEM', value: f(sem), ci: null, isRatio: false, highlight: true },
+        { label: 'MCID Estimate — 0.5 SD ("Half-SD Rule")', value: f(halfSD), ci: null, isRatio: false, highlight: true },
+        { label: "Cohen's Small Effect (0.2 SD)", value: f(small), ci: null, isRatio: false },
+        { label: "Cohen's Medium Effect (0.5 SD)", value: f(medium), ci: null, isRatio: false },
+        { label: "Cohen's Large Effect (0.8 SD)", value: f(large), ci: null, isRatio: false },
+      ];
+
+      const hasAnchor = anchorChange !== '' && anchorChange != null && isFinite(anchorChange);
+      if (hasAnchor) {
+        rows.push({ label: 'Anchor-Based MCID Estimate', value: f(anchorChange), ci: null, isRatio: false, highlight: true });
+        const distEstimates = [sem, halfSD];
+        const lo = Math.min(...distEstimates), hi = Math.max(...distEstimates);
+        const withinRange = anchorChange >= lo * 0.7 && anchorChange <= hi * 1.3;
+        rows.push({ label: 'Note — Comparing Methods', isText: true, ci: null, isRatio: false,
+          value: withinRange
+            ? `The anchor-based estimate (${f(anchorChange)}) is reasonably consistent with the distribution-based estimates (SEM = ${f(sem)}, half-SD = ${f(halfSD)}) — convergence across methods that answer different questions is a good sign this instrument's MCID is reasonably well pinned down.`
+            : `The anchor-based estimate (${f(anchorChange)}) diverges noticeably from the distribution-based estimates (SEM = ${f(sem)}, half-SD = ${f(halfSD)}). This is common, not necessarily a red flag — anchor-based and distribution-based methods estimate genuinely different things (a change patients themselves judge as meaningful, versus a change large enough to exceed measurement noise) — but it means picking a single "the MCID" number here needs a stated rationale, not just an average of the two.` });
+      }
+
+      rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `Distribution-based methods (SEM, half-SD, Cohen's thresholds) describe how large a change needs to be relative to measurement noise or the scale's own spread — they say nothing about whether patients themselves find that change meaningful. An anchor-based estimate answers that second question directly, but depends entirely on the quality of the external anchor used to classify "minimally improved" patients. Current guidance (e.g., Revicki et al., 2008) recommends triangulating multiple methods rather than reporting a single MCID value, and treating any MCID as specific to the instrument, population, and condition it was derived in — not a universal constant that transfers automatically to a different patient population or a modified version of the same instrument.` });
+
+      return rows;
+    }
+  },
+
 ];
 
 
@@ -16426,6 +16521,9 @@ const CALCULATOR_INDEX = [
   { id: 'hardy-weinberg-equilibrium', name: 'Hardy-Weinberg Equilibrium Test', category: 'Genetics & Genomics', description: 'Tests whether observed genotype counts for a biallelic marker match Hardy-Weinberg equilibrium expectations, and reports allele frequencies and the inbreeding coefficient.', status: 'available' },
   { id: 'mendelian-randomization',    name: 'Mendelian Randomization (IVW & MR-Egger)', category: 'Genetics & Genomics', description: "Estimates a modifiable exposure's causal effect on an outcome from genetic instruments (SNPs), using inverse-variance-weighted (IVW) pooling and MR-Egger regression, with instrument-strength (F-statistic) and directional-pleiotropy (Egger intercept) checks.", status: 'available' },
 
+  // ── 15. PATIENT-REPORTED OUTCOMES ─────────────────────────────────────
+  { id: 'mcid-calculator', name: 'Minimal Clinically Important Difference (MCID)', category: 'Patient-Reported Outcomes', description: "Estimates a minimal clinically important difference (MCID) for a patient-reported outcome measure using distribution-based methods (standard error of measurement, half a standard deviation, Cohen's d thresholds), alongside an optional anchor-based estimate for comparison.", status: 'available' },
+
 ];
 
 /* ── CALCULATOR-SELECTION WIZARD ──────────────────────────────────────────
@@ -17582,6 +17680,8 @@ const SEARCH_KEYWORDS = {
   'hardy-weinberg-equilibrium': ['hardy-weinberg equilibrium', 'hwe test', 'genotype frequencies', 'allele frequency', 'population genetics', 'candidate gene study', 'gwas quality control', 'inbreeding coefficient'],
   'mendelian-randomization':    ['mendelian randomization', 'mr ivw', 'mr-egger', 'instrumental variable', 'genetic instrument', 'snp causal effect', 'weak instrument bias', 'horizontal pleiotropy', 'two-sample mr', 'gwas'],
 
+  'mcid-calculator': ['minimal clinically important difference', 'mcid', 'mid', 'minimal important difference', 'patient-reported outcome', 'prom', 'standard error of measurement', 'sem', 'anchor-based method', 'distribution-based method', 'responsiveness'],
+
 };
 
 /* ── NOTATION GLOSSARY ────────────────────────────────────────────────────
@@ -18716,6 +18816,11 @@ const NOTATION = {
     { symbol: 'F_i', meaning: "Instrument i's F-statistic from the SNP-exposure association, used to check instrument strength (conventionally F < 10 flags a weak instrument)." },
     { symbol: '\\beta_0, \\beta_1', meaning: "MR-Egger's intercept (a directional-pleiotropy test) and slope (the pleiotropy-adjusted causal estimate)." },
   ],
+  'mcid-calculator': [
+    { symbol: 'SD', meaning: "The outcome score's baseline standard deviation across the population." },
+    { symbol: 'r', meaning: 'Reliability coefficient (e.g., test-retest ICC or Cronbach\'s α) — the fraction of score variance that is not measurement error.' },
+    { symbol: 'SEM', meaning: 'Standard error of measurement — the typical amount a single patient\'s score would vary on retesting from measurement error alone.' },
+  ],
 
 };
 
@@ -19526,6 +19631,173 @@ const GUIDES = [
   },
 
   {
+    id: 'reading-fagan-nomogram',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Fagan Nomogram (and Interpret Likelihood Ratios)',
+    blurb: 'A likelihood ratio only ever multiplies odds, never probability directly — the Fagan nomogram is a straightedge that does that multiplication for you, in one line, without a calculator.',
+    dek: `A likelihood ratio (LR) tells you how much a test result should shift your suspicion of disease. The Fagan nomogram turns that shift into a physical straight-line reading: pick your pretest probability, draw a line through the test's LR, and read the posttest probability where the line lands — no arithmetic required, and no approximation either, once you know why the scales are drawn the way they are.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 356" style="width:100%;height:auto;display:block;" role="img" aria-label="Fagan nomogram: three parallel scales for pretest probability, likelihood ratio, and posttest probability, with two example lines showing how a positive and negative test result move a 30% pretest probability">
+  <line x1="110" y1="50" x2="110" y2="310" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="320" y1="50" x2="320" y2="310" stroke="#7B8099" stroke-width="1.5"/>
+  <line x1="530" y1="50" x2="530" y2="310" stroke="#7B8099" stroke-width="1.5"/>
+  <text x="110" y="26" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">Pretest</text>
+  <text x="110" y="40" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">Probability (%)</text>
+  <text x="320" y="26" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">Likelihood</text>
+  <text x="320" y="40" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">Ratio</text>
+  <text x="530" y="26" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">Posttest</text>
+  <text x="530" y="40" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="600" fill="#1A1A2E">Probability (%)</text>
+  <line x1="106" y1="292.9" x2="110" y2="292.9" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="295.7" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">1</text>
+  <line x1="106" y1="275.6" x2="110" y2="275.6" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="278.4" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">2</text>
+  <line x1="106" y1="252.3" x2="110" y2="252.3" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="255.1" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">5</text>
+  <line x1="106" y1="234.0" x2="110" y2="234.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="236.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">10</text>
+  <line x1="106" y1="214.0" x2="110" y2="214.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="216.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">20</text>
+  <line x1="106" y1="200.8" x2="110" y2="200.8" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="203.6" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">30</text>
+  <line x1="106" y1="190.0" x2="110" y2="190.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="192.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">40</text>
+  <line x1="106" y1="180.0" x2="110" y2="180.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="182.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">50</text>
+  <line x1="106" y1="170.0" x2="110" y2="170.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="172.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">60</text>
+  <line x1="106" y1="159.2" x2="110" y2="159.2" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="162.0" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">70</text>
+  <line x1="106" y1="146.0" x2="110" y2="146.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="148.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">80</text>
+  <line x1="106" y1="126.0" x2="110" y2="126.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="128.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">90</text>
+  <line x1="106" y1="107.7" x2="110" y2="107.7" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="110.5" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">95</text>
+  <line x1="106" y1="84.4" x2="110" y2="84.4" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="87.2" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">98</text>
+  <line x1="106" y1="67.1" x2="110" y2="67.1" stroke="#7B8099" stroke-width="1"/>
+  <text x="103" y="69.9" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">99</text>
+  <line x1="530" y1="67.1" x2="534" y2="67.1" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="69.9" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">1</text>
+  <line x1="530" y1="84.4" x2="534" y2="84.4" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="87.2" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">2</text>
+  <line x1="530" y1="107.7" x2="534" y2="107.7" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="110.5" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">5</text>
+  <line x1="530" y1="126.0" x2="534" y2="126.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="128.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">10</text>
+  <line x1="530" y1="146.0" x2="534" y2="146.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="148.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">20</text>
+  <line x1="530" y1="159.2" x2="534" y2="159.2" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="162.0" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">30</text>
+  <line x1="530" y1="170.0" x2="534" y2="170.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="172.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">40</text>
+  <line x1="530" y1="180.0" x2="534" y2="180.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="182.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">50</text>
+  <line x1="530" y1="190.0" x2="534" y2="190.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="192.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">60</text>
+  <line x1="530" y1="200.8" x2="534" y2="200.8" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="203.6" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">70</text>
+  <line x1="530" y1="214.0" x2="534" y2="214.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="216.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">80</text>
+  <line x1="530" y1="234.0" x2="534" y2="234.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="236.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">90</text>
+  <line x1="530" y1="252.3" x2="534" y2="252.3" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="255.1" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">95</text>
+  <line x1="530" y1="275.6" x2="534" y2="275.6" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="278.4" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">98</text>
+  <line x1="530" y1="292.9" x2="534" y2="292.9" stroke="#7B8099" stroke-width="1"/>
+  <text x="537" y="295.7" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">99</text>
+  <line x1="320" y1="123.5" x2="324" y2="123.5" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="126.3" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">0.01</text>
+  <line x1="320" y1="132.0" x2="324" y2="132.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="134.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">0.02</text>
+  <line x1="320" y1="143.2" x2="324" y2="143.2" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="146.0" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">0.05</text>
+  <line x1="320" y1="151.7" x2="324" y2="151.7" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="154.5" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">0.1</text>
+  <line x1="320" y1="160.2" x2="324" y2="160.2" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="163.0" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">0.2</text>
+  <line x1="320" y1="171.5" x2="324" y2="171.5" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="174.3" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">0.5</text>
+  <line x1="320" y1="180.0" x2="324" y2="180.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="182.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">1</text>
+  <line x1="320" y1="188.5" x2="324" y2="188.5" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="191.3" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">2</text>
+  <line x1="320" y1="199.8" x2="324" y2="199.8" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="202.6" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">5</text>
+  <line x1="320" y1="208.3" x2="324" y2="208.3" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="211.1" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">10</text>
+  <line x1="320" y1="216.8" x2="324" y2="216.8" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="219.6" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">20</text>
+  <line x1="320" y1="228.0" x2="324" y2="228.0" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="230.8" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">50</text>
+  <line x1="320" y1="236.5" x2="324" y2="236.5" stroke="#7B8099" stroke-width="1"/>
+  <text x="327" y="239.3" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#4A4E6B">100</text>
+  <line x1="110" y1="200.8" x2="530" y2="210.3" stroke="#4E6EDB" stroke-width="1.75"/>
+  <circle cx="320" cy="205.5" r="3" fill="#4E6EDB"/>
+  <circle cx="530" cy="210.3" r="3" fill="#4E6EDB"/>
+  <text x="300" y="198.1" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="600" fill="#4E6EDB">LR+ = 8</text>
+  <text x="425" y="200.9" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="600" fill="#4E6EDB">&#8594; 77%</text>
+  <line x1="110" y1="200.8" x2="530" y2="119.7" stroke="#E07B2C" stroke-width="1.75"/>
+  <circle cx="320" cy="160.2" r="3" fill="#E07B2C"/>
+  <circle cx="530" cy="119.7" r="3" fill="#E07B2C"/>
+  <text x="300" y="176.1" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="600" fill="#E07B2C">LR− = 0.2</text>
+  <text x="425" y="152.0" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="600" fill="#E07B2C">&#8594; 8%</text>
+  <circle cx="110" cy="200.8" r="3.5" fill="#1A1A2E"/>
+  <text x="101" y="192.8" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="600" fill="#1A1A2E">30%</text>
+</svg>`,
+    figureCaption: `A patient with a 30% pretest probability gets a test with LR+ = 8 (positive result) or LR− = 0.2 (negative result). The same straight-line construction carries 30% to 77% on a positive result, or down to 8% on a negative one — read directly off the nomogram, no arithmetic needed. Notice both outer scales are labeled with the identical percentages but run in opposite directions (high near the top on the left, high near the bottom on the right) — that reversal, plus the compressed middle scale, is exactly what makes a straight line mathematically exact here rather than a rough visual approximation.`,
+    legendColumns: [
+      [
+        { colLabel: 'The three scales', swatchClass: 'is-line', swatchStyle: 'background:#7B8099', text: `Pretest Probability (left) and Posttest Probability (right): the same 0-100% scale, but <strong>logit-transformed</strong> (spaced by log-odds, not raw percent) and running in <em>opposite</em> visual directions.` },
+        { swatchClass: 'is-line', swatchStyle: 'background:#7B8099', text: `Likelihood Ratio (middle): a <strong>log scale</strong> running from well below 1 (evidence against disease) to well above 1 (evidence for it), compressed to half the physical spread of the outer scales.` },
+      ],
+      [
+        { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB', text: `Blue line: a <strong>positive</strong> test result (LR+ = 8) — pulls probability up, from 30% to 77%.` },
+        { swatchClass: 'is-square', swatchStyle: 'background:#E07B2C', text: `Amber line: a <strong>negative</strong> test result (LR&minus; = 0.2) — pulls probability down, from 30% to 8%.` },
+        { swatchClass: 'is-square', swatchStyle: 'background:#1A1A2E', text: `Dark dot: the shared <strong>starting point</strong> — the pretest probability both example lines begin from.` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'What a likelihood ratio actually means',
+        html: `<p>A positive likelihood ratio (LR+) is the probability of a positive test result in someone <em>with</em> the disease, divided by the probability of a positive result in someone <em>without</em> it: LR+ = sensitivity / (1 &minus; specificity). A negative likelihood ratio (LR&minus;) runs the same comparison for a negative result: LR&minus; = (1 &minus; sensitivity) / specificity. An LR of exactly 1 means the result carries no information at all &mdash; it's exactly as likely in diseased and non-diseased people, and shouldn't move your suspicion either way.</p><p>A commonly cited rough interpretation scale (Jaeschke et al., 1994): LR+ above 10 or LR&minus; below 0.1 produces a large, often decisive shift in probability; LR+ of 5&ndash;10 or LR&minus; of 0.1&ndash;0.2 a moderate shift; LR+ of 2&ndash;5 or LR&minus; of 0.2&ndash;0.5 a small shift; and an LR between 0.5 and 2 is small enough to rarely be worth acting on by itself.</p>`,
+      },
+      {
+        heading: 'From pretest odds to posttest odds: why LR works by multiplying, not adding',
+        html: `<p>The relationship a Fagan nomogram encodes is: posttest odds = pretest odds &times; LR. This is exactly why the calculation has to go through <strong>odds</strong>, not probability directly &mdash; there's no equivalent rule of the form "posttest probability = pretest probability &times; LR," because probability doesn't multiply that way (a 60% pretest probability can't become 480% just because LR = 8). Odds can, since they run from 0 to infinity rather than being capped at 1. Convert to odds, multiply by LR, convert back to probability &mdash; that's the whole calculation, and it's exactly what the <a href="#post-test-probability">Post-Test Probability</a> calculator on this site does directly, without needing a straightedge.</p><p>This is the same odds-vs-probability distinction that <a href="#learn/appraisal-effect-measures">Understanding Effect Measures</a> covers for the odds ratio (OR): both LR and OR are creatures of odds, not risk, for a related reason. In fact, build a 2&times;2 table of test result (positive/negative) by disease status (present/absent) &mdash; the same table shape used throughout this site's diagnostic-testing calculators &mdash; and the ordinary odds ratio computed from <em>that</em> table is called the diagnostic odds ratio (DOR), and it equals exactly LR+ / LR&minus;. A likelihood ratio is, in a very concrete sense, an odds ratio wearing different clothes.</p>`,
+      },
+      {
+        heading: 'The nomogram: three scales, one straight line',
+        html: `<p>The construction above has three parallel vertical scales &mdash; Pretest Probability, Likelihood Ratio, Posttest Probability &mdash; and a straight line connecting a point on the first to a point on the second crosses the third at the mathematically correct answer. That only works because of two deliberate choices in how the scales are drawn: both probability scales are <strong>logit-transformed</strong> (position corresponds to log-odds, not raw percent) rather than linear, and the LR scale sits exactly halfway between them at half their physical scale. Together, those choices turn "multiply the odds by the LR" into "these three points fall on one line" &mdash; a straight ruler does the multiplication for you, exactly, not approximately.</p><p>One consequence worth noticing directly from the figure: the Posttest scale runs in the <em>opposite</em> visual direction from the Pretest scale (high percentages near the top on the left, high percentages near the bottom on the right). That's not a stylistic choice or an error &mdash; it's mathematically required for the straight-line construction to work with the Likelihood Ratio scale sitting in the middle. Reading the printed percentage at wherever your line lands is all that matters; the direction it runs doesn't need to be intuitive to use correctly.</p>`,
+      },
+      {
+        heading: 'Reading the worked example',
+        html: `<p>Both lines in the figure start from the same 30% pretest probability (the dark dot). The blue line uses LR+ = 8: it crosses the Likelihood Ratio scale at 8, and lands on the Posttest scale at 77% &mdash; a large, clinically decisive shift, consistent with LR+ = 8 falling in the "moderate-to-large" range above. The amber line uses LR&minus; = 0.2 (the same test's negative-result likelihood ratio): it crosses the middle scale at 0.2 and lands at 8% &mdash; also a substantial shift, but in the opposite direction and by a different absolute amount, which is the subject of the next section.</p>`,
+      },
+      {
+        heading: 'Why a positive and a negative result don\'t swing probability by "the same amount"',
+        html: `<p>It's tempting to expect that a test's positive and negative results should move probability by symmetric amounts in opposite directions &mdash; they don't, and the nomogram makes this visible rather than hiding it in arithmetic. Because the underlying operation is multiplying <em>odds</em>, not adding or subtracting percentage points, the size of the swing in probability terms depends on where you started. A 30% pretest probability sits closer to 0% than to 100% on the probability scale but is much closer to the <em>middle</em> of the logit-transformed scale the nomogram actually uses &mdash; which is exactly why, in the worked example, the swing down to 8% (a 22-point drop) and the swing up to 77% (a 47-point rise) look so different in raw percentage-point terms despite coming from likelihood ratios that are, on the log scale, roughly comparable distances from 1 (8 and 0.2, i.e. 1/5). Extreme pretest probabilities (very close to 0% or 100%) compress this effect further still &mdash; a test result can shift the log-odds substantially while barely moving the percentage at all, simply because there's so little room left on that end of the scale.</p>`,
+      },
+      {
+        heading: 'What likelihood ratios are good for — and what they still need from you',
+        html: `<p>Unlike positive and negative predictive value (PPV/NPV), likelihood ratios are constant properties of the test itself (built only from sensitivity and specificity) and don't mechanically shift with disease prevalence the way PPV/NPV do &mdash; see <a href="#learn/appraisal-diagnostic-tests-prevalence">Diagnostic Tests Depend on Prevalence</a> for that separate, equally important effect. That stability is exactly why LRs travel well across different clinical settings while PPV/NPV don't.</p><p>What an LR-based calculation still can't supply on its own is the <strong>pretest probability</strong> itself &mdash; that has to come from somewhere else: local disease prevalence, a validated clinical prediction rule, or clinical judgment from the history and exam, each carrying its own uncertainty that the nomogram doesn't display. And the LR you're plugging in is only as trustworthy as the study it came from &mdash; see <a href="#learn/appraisal-appraising-diagnostic-studies">Appraising Diagnostic Accuracy Studies</a> for the reference-standard, spectrum-bias, and verification-bias checks worth applying before trusting a published sensitivity/specificity (and therefore LR) at face value.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports "LR+ = X, LR&minus; = Y" without a posttest probability, plug your own best estimate of pretest probability into either the nomogram above or the <a href="#post-test-probability">Post-Test Probability</a> calculator directly &mdash; the reported LRs alone don't tell you how much a specific patient's probability actually moves until you supply that starting point.</p>`,
+      },
+    ],
+    related: [
+      { id: 'post-test-probability', why: 'Computes exactly what this nomogram reads graphically — pretest probability and an LR in, posttest probability out.' },
+      { id: 'sensitivity-specificity', why: 'Computes LR+ and LR− directly from a 2×2 table, the inputs this whole guide is built around.' },
+      { id: 'diagnostic-accuracy', why: 'The fuller diagnostic-testing calculator — Se, Sp, PPV, NPV, and both likelihood ratios from one 2×2 table.' },
+      { id: 'appraisal-effect-measures', why: 'Explains the odds-vs-risk distinction this guide\'s LR/DOR connection builds directly on.' },
+      { id: 'appraisal-diagnostic-tests-prevalence', why: 'The complementary PPV/NPV story — why those measures, unlike LR, shift mechanically with prevalence.' },
+      { id: 'appraisal-appraising-diagnostic-studies', why: 'What to check in the source study before trusting a reported sensitivity/specificity (and therefore LR) at all.' },
+    ],
+  },
+
+  {
     id: 'appraisal-effect-measures',
     category: 'Critical Appraisal of the Literature',
     title: 'Understanding Effect Measures: Relative Risk, Odds Ratio, and Absolute Effects',
@@ -19538,7 +19810,7 @@ const GUIDES = [
       },
       {
         heading: 'Odds ratio (OR): the ratio of two odds',
-        html: `<p>Odds ratio (OR) is the odds of an outcome in the exposed group, divided by the odds of that same outcome in the unexposed group, where odds is defined as risk divided by (1 minus risk). The odds ratio is the natural output of logistic regression, and is the standard effect measure reported in case-control studies. This is because a case-control study samples participants based on their outcome status (a fixed number of "cases" and "controls" are recruited), which means absolute risks &mdash; and therefore relative risk &mdash; cannot be estimated directly from the sampled data. The odds ratio remains estimable under this design regardless.</p>`,
+        html: `<p>Odds ratio (OR) is the odds of an outcome in the exposed group, divided by the odds of that same outcome in the unexposed group, where odds is defined as risk divided by (1 minus risk). The odds ratio is the natural output of logistic regression, and is the standard effect measure reported in case-control studies. This is because a case-control study samples participants based on their outcome status (a fixed number of "cases" and "controls" are recruited), which means absolute risks &mdash; and therefore relative risk &mdash; cannot be estimated directly from the sampled data. The odds ratio remains estimable under this design regardless.</p><p>The same odds-only logic shows up in diagnostic testing: a likelihood ratio (LR) only works by multiplying <em>odds</em> (pretest odds &times; LR = posttest odds), never probability directly, for exactly the reason an OR &mdash; not an RR &mdash; is what a case-control design can estimate. Build a 2&times;2 table of test result by disease status and the ordinary odds ratio from that table, the diagnostic odds ratio, equals LR+ / LR&minus; &mdash; see <a href="#learn/reading-fagan-nomogram">How to Read a Fagan Nomogram</a> for that connection in full.</p>`,
       },
       {
         heading: 'Worked example: where relative risk and odds ratio diverge',
@@ -19565,6 +19837,56 @@ const GUIDES = [
       { id: 'measures-of-association', why: 'Calculates RR, OR, and related measures of association directly from a 2×2 table.' },
       { id: 'or-to-nnt-nnh', why: 'Converts an odds ratio into NNT/NNH using a stated control event rate.' },
       { id: 'or-to-rr', why: 'Converts between odds ratio and relative risk given a baseline risk — useful for checking how much they diverge.' },
+      { id: 'reading-fagan-nomogram', why: 'The diagnostic-testing analog of this guide\'s odds-vs-risk distinction — likelihood ratios, and why the diagnostic odds ratio equals LR+/LR−.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-patient-reported-outcomes',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Appraising Patient-Reported Outcome Measures (PROMs): Validity, Reliability, Responsiveness, and MCID',
+    blurb: 'A PROM can be perfectly reliable and still useless for detecting real change — reliability and responsiveness are different properties, and both have to be checked separately.',
+    dek: `A patient-reported outcome measure (PROM) captures something no lab value or imaging study can: the patient's own report of their symptoms, function, or quality of life, with no external observer standing between the experience and the measurement. That directness is exactly why PROMs need their own, distinct set of appraisal questions &mdash; validity, reliability, responsiveness, floor/ceiling effects, and what a given point change on the scale actually means (its minimal clinically important difference, or MCID) &mdash; before a reported score change can be trusted.`,
+    sections: [
+      {
+        heading: 'What makes a PRO different from any other outcome',
+        html: `<p>A patient-reported outcome (PRO) is any outcome reported directly by the patient, without interpretation by a clinician or observer &mdash; a symptom severity score, a function or quality-of-life questionnaire, a pain scale. A PROM (patient-reported outcome <em>measure</em>) is the specific instrument used to collect it. That directness is the whole point: some things (pain, fatigue, how a symptom affects daily function) genuinely can't be measured any other way, and a clinician's estimate of a patient's pain is a well-documented poor proxy for the patient's own report. But it also means a PROM can't be externally verified the way a lab value can be checked against a reference method &mdash; which is exactly why validity, reliability, and responsiveness have to be established through the specific psychometric methods below, rather than assumed.</p>`,
+      },
+      {
+        heading: 'Validity: is the instrument measuring what it claims to?',
+        html: `<p>Content validity asks whether the instrument's items actually cover the domain it claims to measure &mdash; ideally established by involving patients directly in item development and review, not just clinicians' assumptions about what matters to patients. Construct validity asks whether the instrument correlates as expected with other measures of related constructs (convergent validity) and fails to correlate with unrelated ones (discriminant validity) &mdash; a fatigue scale should correlate with a related quality-of-life measure but not strongly with, say, a measure of visual acuity. Criterion validity, where a true gold standard exists, compares the PROM directly against it &mdash; but for most PROs (pain, fatigue, subjective function) no external gold standard exists at all, which is precisely why content and construct validity carry so much of the weight for this class of instrument.</p>`,
+      },
+      {
+        heading: 'Reliability: internal consistency vs. test-retest — two different questions',
+        html: `<p>Internal consistency (typically <a href="#cronbachs-alpha">Cronbach's alpha</a>) asks whether the items within a multi-item scale hang together, measuring the same underlying construct rather than several unrelated things bundled into one score. Test-retest reliability (typically an <a href="#icc">intraclass correlation, ICC</a>) asks a completely different question: does the instrument give a stable score when administered twice to the <em>same, clinically unchanged</em> patients? A low test-retest reliability is only informative if the population was genuinely stable between administrations &mdash; measuring "reliability" in a population expected to be changing conflates instability with real, detected change, and will make a perfectly good instrument look unreliable.</p>`,
+      },
+      {
+        heading: 'Responsiveness: reliability and responsiveness are not the same property',
+        html: `<p>Responsiveness is an instrument's ability to detect real, clinically meaningful change over time in patients who have actually changed &mdash; and it is a separate property from reliability, not a consequence of it. An instrument can be highly reliable (very stable scores in stable patients) while being poorly responsive (its scores barely move even in patients who have genuinely, substantially improved or worsened) &mdash; a scale with excellent test-retest reliability built from very coarse, widely-spaced response categories is a common way this happens in practice. Both properties have to be established separately; neither implies the other.</p>`,
+      },
+      {
+        heading: 'Floor and ceiling effects',
+        html: `<p>A floor or ceiling effect occurs when a large proportion of respondents score at the extreme low or high end of the possible range &mdash; conventionally flagged when roughly 15&ndash;20% or more of a sample scores at the very floor or ceiling. Once a patient is already at the floor, further real deterioration can't be detected (there's no lower score available to report it), and the mirror problem applies at the ceiling for further improvement. This is a design flaw specific to the population being studied, not just the instrument in isolation: a disability scale that performs well in a general population can bottom out badly in a severely disabled population already sitting at its floor, understating any further real decline.</p>`,
+      },
+      {
+        heading: 'Interpretability: what does a given point change actually mean? (MCID)',
+        html: `<p>A statistically significant change in a PROM score doesn't by itself say anything about whether that change matters to the patient &mdash; that's a separate question of interpretability, usually answered via a minimal clinically important difference (MCID): the smallest change in score that patients (or clinicians) would consider meaningful. Two broad families of method exist. <strong>Distribution-based methods</strong> anchor the MCID to the scale's own statistical properties &mdash; the standard error of measurement (SEM), "half a standard deviation" of the baseline score, or Cohen's effect-size conventions (0.2/0.5/0.8 SD for small/medium/large) &mdash; answering "how big a change exceeds measurement noise or a conventional effect-size threshold." <strong>Anchor-based methods</strong> instead compare score changes against an external, independent judgment &mdash; typically the mean score change among patients who separately rated themselves as "minimally improved" on a global rating of change &mdash; answering "how big a change do patients themselves notice and value." These two families routinely disagree, because they are answering genuinely different questions, not because one of them is wrong; the <a href="#mcid-calculator">MCID calculator</a> on this site computes several distribution-based estimates alongside an optional anchor-based one specifically so that disagreement is visible rather than hidden behind a single reported number. Current guidance favors triangulating multiple methods over trusting any single MCID estimate, and treating an MCID as specific to the instrument, population, and condition it was derived in.</p>`,
+      },
+      {
+        heading: 'Missing data: dropout in a PRO trial is rarely random',
+        html: `<p>Patients who are doing poorly are frequently less likely to complete a symptom or quality-of-life questionnaire than patients who are doing well &mdash; too sick, too fatigued, or, in a terminal or severe-disease population, no longer alive to report at all. Missing PRO data of this kind is <em>informative</em> missingness, not missing at random, and simply averaging the scores of those who did respond will tend to overstate how well the overall treated (or study) population is actually doing. Regulatory guidance for PRO endpoints in clinical trials (FDA, EMA) requires a pre-specified plan for handling this kind of dropout precisely because of how easily it biases the reported result if left unaddressed.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports "a statistically significant improvement" on a PROM, check specifically whether that change is also described as exceeding a stated MCID for that instrument &mdash; a change can be statistically significant (a large enough sample will detect almost any nonzero difference) while still falling well short of a change patients would notice or value. And check the completion rate and how missing PRO data were handled before trusting the reported average at all, particularly in any trial or study where sicker patients are more likely to have dropped out.</p>`,
+      },
+    ],
+    related: [
+      { id: 'cronbachs-alpha', why: "Computes the internal-consistency reliability coefficient this guide's reliability section covers." },
+      { id: 'icc', why: 'Computes the test-retest reliability coefficient this guide distinguishes from internal consistency.' },
+      { id: 'mcid-calculator', why: "Computes the distribution-based and anchor-based MCID estimates this guide's interpretability section covers." },
+      { id: 'appraisal-appraising-rcts', why: 'Covers intention-to-treat analysis and missing-outcome handling in general — the same principles this guide applies specifically to PRO dropout.' },
+      { id: 'appraisal-effect-measures', why: 'The same statistical-vs-clinical-significance distinction this guide applies to MCID, covered there for RR/OR/absolute effects.' },
     ],
   },
 
