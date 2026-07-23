@@ -17228,6 +17228,7 @@ const LEARN_WIZARD_TREE = {
       { label: 'Case series or case report', next: 'res_case_series' },
       { label: 'Systematic review or meta-analysis', next: 'res_sr' },
       { label: 'Scoping review', next: 'res_scoping' },
+      { label: 'Realist review', next: 'res_realist' },
       { label: 'Diagnostic accuracy study', next: 'res_dx' },
       { label: 'AI/ML diagnostic or prediction model study', next: 'res_ai' },
       { label: 'Pilot or feasibility study', next: 'res_pilot' },
@@ -17261,6 +17262,7 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-grade', why: 'How much confidence the pooled result actually deserves.' },
   ]},
   res_scoping:   { results: [ { id: 'appraisal-appraising-scoping-reviews', why: 'A different purpose from a systematic review — mapping a literature, not pooling an effect.' } ] },
+  res_realist:   { results: [ { id: 'appraisal-appraising-realist-reviews', why: 'A different unit of analysis from a systematic review — context-mechanism-outcome configurations explaining why an intervention works, for whom, and under what circumstances.' } ] },
   res_dx:        { results: [ { id: 'appraisal-appraising-diagnostic-studies', why: 'Reference standard adequacy, spectrum bias, verification bias, QUADAS-2.' } ] },
   res_ai:        { results: [ { id: 'appraisal-appraising-ai-studies', why: 'Data leakage, internal vs. external validation, class imbalance, TRIPOD-AI/PROBAST-AI.' } ] },
   res_pilot:     { results: [ { id: 'appraisal-pilot-studies', why: 'What a small feasibility study can — and specifically cannot — tell you about whether a treatment works.' } ] },
@@ -17483,10 +17485,11 @@ const DESIGN_WIZARD_TREE = {
   },
 
   reviewGoal: {
-    question: 'Is your question focused enough to pool a specific effect estimate across existing studies, or are you mapping a broader or still-emerging body of literature?',
+    question: 'What is the goal of your review of the existing literature?',
     options: [
       { label: 'Focused — I want a pooled effect estimate', next: 'systematicReviewResult' },
       { label: 'Broad/emerging — I want to map what exists and find the gaps', next: 'scopingReviewResult' },
+      { label: 'Explanatory — I want to know why/how it works, for whom, and under what circumstances', next: 'realistReviewResult' },
     ]
   },
   systematicReviewResult: {
@@ -17500,6 +17503,11 @@ const DESIGN_WIZARD_TREE = {
     results: [
       { id: 'appraisal-appraising-scoping-reviews', why: "Since you're mapping what exists rather than pooling a specific effect, this design skips formal risk-of-bias grading and instead charts the extent, range, and gaps in the literature — a common precursor to a future systematic review once the question narrows." },
       { id: 'appraisal-appraising-systematic-reviews', why: 'If your question later narrows enough to pool a specific effect estimate, this is the design (and guide) to switch to.' },
+    ]
+  },
+  realistReviewResult: {
+    results: [
+      { id: 'appraisal-appraising-realist-reviews', why: "Since you're explaining why an intervention works rather than pooling a single effect estimate, this design centers on building context-mechanism-outcome configurations through an iterative, purposive search — not a fixed, exhaustive one." },
     ]
   },
 

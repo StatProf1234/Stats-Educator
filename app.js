@@ -958,7 +958,7 @@ const DESIGN_GLANCE_CATEGORIES = [
   { category: 'Observational — Comparative', keys: ['cohortResult', 'caseControlResult'] },
   { category: 'Observational — Descriptive', keys: ['caseSeriesResult', 'prevalenceResult', 'ecologicalResult'] },
   { category: 'Diagnostic & Prognostic', keys: ['diagAccuracyResult', 'aiStudyResult', 'prognosisResult'] },
-  { category: 'Evidence Synthesis & Planning', keys: ['systematicReviewResult', 'scopingReviewResult', 'guidelineResult', 'pilotResult'] },
+  { category: 'Evidence Synthesis & Planning', keys: ['systematicReviewResult', 'scopingReviewResult', 'realistReviewResult', 'guidelineResult', 'pilotResult'] },
 ];
 
 // Tracks which Designs hub categories the user has explicitly opened
