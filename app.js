@@ -108,6 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!target) return;
     e.preventDefault();
 
+    // Every guide section renders as a native <details> element,
+    // closed by default (see renderGuide's guide-accordion-item) — its
+    // content isn't part of the page layout at all until opened, so a
+    // row inside a still-closed section has no meaningful position to
+    // scroll to yet. Force it open first.
+    const details = target.closest('details');
+    if (details && !details.open) details.open = true;
+
     const wrap = target.closest('.ref-table-wrap');
     const prevMaxHeight = wrap ? wrap.style.maxHeight : null;
     const prevOverflowY = wrap ? wrap.style.overflowY : null;
