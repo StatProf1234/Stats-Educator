@@ -20301,6 +20301,104 @@ const GUIDES = [
       { id: 'ipw-ate', why: 'Uses inverse probability weighting to adjust for measured confounders in an observational analysis.' },
       { id: 'assoc-pred-intervals', why: 'Prediction intervals for measures of association, useful when communicating uncertainty beyond a single confidence interval.' },
       { id: 'appraisal-ancova', why: "Applies the same 'don't adjust for a variable on the causal pathway' rule to choosing a covariate in a baseline-adjusted trial analysis." },
+      { id: 'reading-dag', why: 'Puts formal notation and a worked diagram to the confounder/mediator distinction this guide introduces in prose — plus the collider bias case this guide doesn\'t cover.' },
+    ],
+  },
+
+  {
+    id: 'reading-dag',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Directed Acyclic Graph (DAG)',
+    blurb: 'A DAG makes your assumptions about what causes what explicit and arguable — and exposes a rule that catches even experienced researchers off guard: adjusting for the wrong variable can create bias out of nothing.',
+    dek: `A directed acyclic graph (DAG) draws out, as arrows, exactly what an analysis assumes causes what. That explicitness is the entire benefit: once causal assumptions are on paper instead of implicit, the graph itself tells you which variables belong in an adjustment set, which don't, and — the part that surprises people — which variables actively create bias if you adjust for them.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 340" style="width:100%;height:auto;display:block;" role="img" aria-label="Example DAG: statin use affects heart attack risk both directly and through LDL cholesterol (a mediator); age confounds statin use and heart attack risk; hospitalization is a collider caused by both statin side effects and heart attack">
+  <line x1="289.8" y1="62.9" x2="110.3" y2="177.1" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="110,177 121,173 118,184" fill="#1A1A2E"/>
+  <line x1="330.3" y1="62.9" x2="509.8" y2="177.1" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="510,177 499,173 502,184" fill="#1A1A2E"/>
+  <line x1="114" y1="190" x2="286" y2="190" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="286,190 276,185 276,195" fill="#1A1A2E"/>
+  <line x1="334" y1="190" x2="506" y2="190" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="506,190 496,185 496,195" fill="#1A1A2E"/>
+  <path d="M 114,205 Q 310,262 506,205" fill="none" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="506,205 496,201 497,211" fill="#1A1A2E"/>
+  <line x1="111.5" y1="200.7" x2="288.5" y2="289.3" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="288,289 278,286 283,297" fill="#1A1A2E"/>
+  <line x1="508.5" y1="200.7" x2="331.5" y2="289.3" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="331,289 341,286 336,297" fill="#1A1A2E"/>
+  <circle cx="310" cy="50" r="26" fill="none" stroke="#4E6EDB" stroke-width="2" stroke-dasharray="3,3"/>
+  <circle cx="310" cy="50" r="24" fill="#4E6EDB"/>
+  <text x="310" y="55" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10.5" font-weight="700" fill="#fff">Age</text>
+  <text x="310" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="600" fill="#4E6EDB">CONFOUNDER</text>
+  <text x="310" y="97" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#4E6EDB">&#10003; adjust for this</text>
+  <circle cx="90" cy="190" r="24" fill="#1A1A2E"/>
+  <text x="90" y="195" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="700" fill="#fff">Statin</text>
+  <text x="90" y="228" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#7B8099">Exposure</text>
+  <circle cx="530" cy="190" r="24" fill="#1A1A2E"/>
+  <text x="530" y="188" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#fff">Heart</text>
+  <text x="530" y="199" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#fff">Attack</text>
+  <text x="530" y="228" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#7B8099">Outcome</text>
+  <circle cx="310" cy="190" r="26" fill="none" stroke="#E07B2C" stroke-width="2" stroke-dasharray="3,3"/>
+  <circle cx="310" cy="190" r="24" fill="#E07B2C"/>
+  <text x="310" y="188" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#fff">LDL</text>
+  <text x="310" y="199" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" font-weight="700" fill="#fff">chol.</text>
+  <text x="310" y="150" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="600" fill="#E07B2C">MEDIATOR</text>
+  <text x="310" y="240" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E07B2C">&#10007; don't adjust — removes</text>
+  <text x="310" y="250" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E07B2C">part of the true effect</text>
+  <circle cx="310" cy="300" r="26" fill="none" stroke="#E0527C" stroke-width="2" stroke-dasharray="3,3"/>
+  <circle cx="310" cy="300" r="24" fill="#E0527C"/>
+  <text x="310" y="298" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="700" fill="#fff">Hospital-</text>
+  <text x="310" y="308" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="700" fill="#fff">ization</text>
+  <text x="310" y="332" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" font-weight="600" fill="#E0527C">COLLIDER — don't adjust or restrict on this: creates bias out of nothing</text>
+</svg>`,
+    figureCaption: `Statins reduce heart attack risk partly by lowering LDL cholesterol (the mediator path, Statin&rarr;LDL&rarr;Heart Attack) and partly through other mechanisms (the direct curved arrow). Age confounds the relationship (older patients are both more likely to be prescribed statins and more likely to have a heart attack), so it belongs in the adjustment set. Hospitalization is a collider &mdash; caused by both statin side effects and heart attacks &mdash; and adjusting for it, or even just restricting a study sample to hospitalized patients, can manufacture a statin&ndash;heart-attack association that doesn't exist in the wider population.`,
+    legendColumns: [
+      [
+        { colLabel: 'Node roles', swatchClass: 'is-square', swatchStyle: 'background:#1A1A2E;border-radius:50%;', text: `Dark node: exposure or outcome — the two variables the causal question is about.` },
+        { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Blue node: a <strong>confounder</strong> — a common cause of both exposure and outcome. Belongs in the adjustment set.` },
+        { swatchClass: 'is-square', swatchStyle: 'background:#E07B2C;border-radius:50%;', text: `Amber node: a <strong>mediator</strong> — sits on the causal pathway between exposure and outcome. Adjusting for it removes part of the effect being estimated.` },
+      ],
+      [
+        { swatchClass: 'is-square', swatchStyle: 'background:#E0527C;border-radius:50%;', text: `Red node: a <strong>collider</strong> — a common <em>effect</em> of two other variables. Adjusting for it (or selecting a sample based on it) can create a spurious association between its causes.` },
+        { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Arrow: an assumed direct causal effect, pointing from cause to effect.` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'What a DAG actually represents',
+        html: `<p>A directed acyclic graph is a set of nodes (variables) connected by directed edges (arrows), where an arrow from A to B represents the analyst's assumption that A causally affects B &mdash; not merely that A and B are correlated. "Acyclic" means no path can loop back on itself (nothing causes its own cause, which would be paradoxical). The entire value of drawing one is that it forces causal assumptions out into the open, where they can be inspected and debated, instead of remaining implicit in a regression model's list of covariates &mdash; two analysts can disagree about whether an arrow belongs in the diagram, but at least they're now disagreeing about something explicit.</p>`,
+      },
+      {
+        heading: 'Reading the example: statins, LDL, age, and heart attacks',
+        html: `<p>The figure above encodes several specific causal assumptions at once. Age affects both statin prescribing and heart attack risk directly (the two arrows out of Age), making it a classic confounder. Statins affect heart attack risk two ways: indirectly, by lowering LDL cholesterol, which itself affects heart attack risk (the Statin&rarr;LDL&rarr;Heart Attack chain) &mdash; and directly, through some other mechanism not mediated by LDL (the curved arrow bypassing LDL). Both statin side effects and an actual heart attack can lead to hospitalization, making Hospitalization a collider: a node with two incoming arrows from otherwise-unconnected causes.</p>`,
+      },
+      {
+        heading: 'Confounders: they create a backdoor path — block it by adjusting',
+        html: `<p>A confounder creates what's formally called a backdoor path: a route connecting exposure and outcome that runs backward through a shared cause, rather than forward along the causal arrow the analysis actually cares about (Statin &larr; Age &rarr; Heart Attack, in the figure). A backdoor path left open lets a non-causal association leak into the analysis, masquerading as evidence about the exposure's effect. Adjusting for the confounder &mdash; via stratification, regression, matching, or propensity scores &mdash; blocks that backdoor path, which is precisely why confounders belong in the adjustment set.</p>`,
+      },
+      {
+        heading: 'Mediators: on the pathway itself — adjusting removes part of the true effect',
+        html: `<p>A mediator sits directly on the causal pathway between exposure and outcome (LDL, in the figure). Adjusting for a mediator doesn't remove bias &mdash; it removes part of the very effect the analysis is trying to measure, since it blocks the Statin&rarr;LDL&rarr;Heart Attack route along with any bias. The result is no longer an estimate of statins' total effect on heart attack risk; it's an estimate of only the portion not explained by LDL &mdash; a different, narrower question, valid only when that's the question actually being asked (as in a deliberate mediation analysis). Adjusting for a post-treatment variable without realizing it has become a mediator is a common, often unintentional source of this exact mistake &mdash; the same failure mode covered from the trial-design side in <a href="#learn/appraisal-ancova">How to Interpret an ANCOVA-Adjusted Result</a>.</p>`,
+      },
+      {
+        heading: 'Colliders: adjusting can manufacture bias that wasn\'t there to begin with',
+        html: `<p>A collider is a node with two incoming arrows from otherwise-unrelated variables (Hospitalization, caused independently by statin side effects and by heart attacks, in the figure). Adjusting for a collider &mdash; or, just as consequentially, simply restricting a study sample to only those with a particular value of it &mdash; can create an artificial association between its two causes, even when no such association exists in the full population. This is collider stratification bias (also called Berkson's bias, after its original description in hospital-admission data): if a statin study only enrolled hospitalized patients, patients hospitalized for a heart attack would be systematically less likely to also be there for a statin side effect (since one admission reason tends to substitute for another), inducing a spurious negative association between statins and heart attacks that has nothing to do with the drug's real effect.</p>`,
+      },
+      {
+        heading: 'The general rule, stated once',
+        html: `<p>Trace every path connecting exposure and outcome in the diagram. Block every backdoor path by adjusting for the confounder(s) that create it. Leave every mediator alone unless the total effect is deliberately being decomposed. And never adjust for, or select a sample based on, a collider &mdash; doing so opens a path that was previously, correctly, closed. A DAG's entire practical payoff is turning "which variables should I put in my model" from a statistical guessing game into a question with a determinable answer, once the causal structure is drawn out.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper lists its adjustment variables, check each one against these three roles rather than assuming "more adjustment is always safer." A variable is worth asking about specifically if it was measured after the exposure (a mediator candidate) or if it plausibly shares two separate causes with no direct connection to each other (a collider candidate) &mdash; either one, added to a model without this check, can move an estimate in a direction more adjustment was supposed to prevent.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-confounding-bias', why: 'The prose treatment of confounding this guide adds formal notation and a worked diagram to.' },
+      { id: 'appraisal-ancova', why: "Covers the same mediator-adjustment mistake from the trial-design side — why a covariate must be measured pre-treatment." },
+      { id: 'reading-instrumental-variables', why: 'A DAG-based method for a case this guide\'s "adjust for the confounder" rule can\'t handle — when the confounder itself is unmeasured.' },
+      { id: 'appraisal-appraising-cohort', why: 'Selection bias in cohort assembly is often a collider-bias problem in disguise — this guide gives it a name and a mechanism.' },
+      { id: 'multiple-regression', why: 'The tool most adjustment-for-confounders is actually implemented with, once the DAG says which variables belong in the model.' },
     ],
   },
 
