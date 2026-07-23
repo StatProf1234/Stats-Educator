@@ -85,13 +85,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // normal hash navigation (whatever that does) if the target isn't in
   // the current DOM, e.g. a stale/bookmarked link on a cold page load.
   //
-  // Plain scrollIntoView() isn't reliable here because the target row
-  // sits behind TWO independent scroll containers, not one: #app is a
-  // fixed-height shell (overflow: hidden), so the page itself scrolls
-  // inside #main rather than window/body — and each glossary table is
-  // additionally wrapped in a .ref-table-wrap with its own max-height/
-  // overflow-y for tall tables. Computed manually instead of trusting
-  // the browser to walk both nested contexts on its own.
+  // Plain scrollIntoView() isn't reliable here for two separate
+  // reasons: (1) the target is a <tr> — several browsers have long-
+  // standing quirks scrolling table rows specifically, since a row's
+  // layout box doesn't behave like an ordinary block element; and (2)
+  // even a working scrollIntoView would have to walk TWO nested scroll
+  // containers, not one: #app is a fixed-height shell (overflow:
+  // hidden), so the page itself scrolls inside #main rather than
+  // window/body, and each glossary table is additionally wrapped in a
+  // .ref-table-wrap with its own max-height/overflow-y for tall
+  // tables. Rather than reimplementing that math by hand (fragile —
+  // an earlier version of this fix overshot to the bottom of the
+  // page), the wrap's own scrollbox is neutralized for the moment of
+  // scrolling, reducing it back down to the single-container case
+  // scrollIntoView already handles correctly, and the scroll targets a
+  // <td> inside the row rather than the <tr> itself.
   document.addEventListener('click', e => {
     const link = e.target.closest('a[href^="#gloss-"]');
     if (!link) return;
@@ -101,18 +109,19 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
 
     const wrap = target.closest('.ref-table-wrap');
+    const prevMaxHeight = wrap ? wrap.style.maxHeight : null;
+    const prevOverflowY = wrap ? wrap.style.overflowY : null;
     if (wrap) {
-      const wrapRect = wrap.getBoundingClientRect();
-      const rowRect = target.getBoundingClientRect();
-      const delta = (rowRect.top - wrapRect.top) - wrap.clientHeight / 2 + rowRect.height / 2;
-      wrap.scrollTo({ top: wrap.scrollTop + delta, behavior: 'smooth' });
+      wrap.style.maxHeight = 'none';
+      wrap.style.overflowY = 'visible';
     }
-    const main = document.getElementById('main');
-    if (main) {
-      const mainRect = main.getBoundingClientRect();
-      const elRect = (wrap || target).getBoundingClientRect();
-      const delta = (elRect.top - mainRect.top) - 24;
-      main.scrollTo({ top: main.scrollTop + delta, behavior: 'smooth' });
+    const scrollAnchor = target.querySelector('td') || target;
+    scrollAnchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (wrap) {
+      setTimeout(() => {
+        wrap.style.maxHeight = prevMaxHeight;
+        wrap.style.overflowY = prevOverflowY;
+      }, 700);
     }
     history.replaceState(null, '', '#' + id);
   });
