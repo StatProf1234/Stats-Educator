@@ -16700,6 +16700,7 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-regression-to-mean', why: 'Why a before/after study with no control group will almost always look like "improvement."' },
     { id: 'appraisal-subgroup-interaction', why: '"Worked in women but not men" is usually not what the data actually show.' },
     { id: 'appraisal-monte-carlo-pvalues', why: '"p < 0.001" from a simulated/permutation test can just mean the simulation budget ran out, not that the true p-value is tiny.' },
+    { id: 'appraisal-ecological-fallacy', why: 'A group-level pattern (a country, a school, a hospital) can vanish, or even reverse, at the individual level.' },
   ]},
 
   // ── QUICK REFERENCE ───────────────────────────────────────────────
@@ -19407,6 +19408,10 @@ const GUIDES = [
         html: `<p>Loss to follow-up, and whether it was balanced between the treatment arms &mdash; large or unequal dropout between groups can undo the balance that randomization created.</p><p>Intention-to-treat (ITT) analysis versus per-protocol analysis: ITT analyzes patients according to the group they were originally randomized to, regardless of whether they fully adhered to treatment, which preserves the benefit of randomization. Per-protocol analysis, which excludes patients who did not adhere, can reintroduce the very confounding that randomization was designed to prevent.</p><p>The adequacy and actual success of blinding, and the funding source, including any role the sponsor played in the analysis or reporting of results.</p>`,
       },
       {
+        heading: 'RCT variants: cluster, crossover, and non-inferiority trials',
+        html: `<p>A cluster-randomized trial, a crossover trial, and a non-inferiority trial are all still randomized controlled trials, and inherit the same basic strength of causal claim as any other RCT on this hierarchy &mdash; but each layers its own additional failure point on top. A cluster trial's reported precision is only trustworthy if the analysis actually accounts for within-cluster correlation (design effect, ICC); a crossover trial's comparison is only fair if carryover was prevented by an adequate washout; and a non-inferiority trial's "positive" result is the more fragile conclusion methodologically, not the more robust one, since poor conduct there biases toward the conclusion being tested for rather than away from it. See each design's own guide for the specific checks.</p>`,
+      },
+      {
         heading: 'Cohort studies — what to check',
         html: `<p>Confounding, both measured and unmeasured; whether the exposed and unexposed groups were truly comparable at baseline; and whether loss to follow-up differed meaningfully between the two groups.</p>`,
       },
@@ -19415,12 +19420,26 @@ const GUIDES = [
         html: `<p>Recall bias (see the confounding and bias guide above), and how the control group was selected &mdash; specifically, whether controls are truly representative of the broader population that produced the cases.</p>`,
       },
       {
+        heading: 'Case series and case reports — the floor of the hierarchy',
+        html: `<p>With no comparison group of any kind, a case series (or a single case report) sits below even a case-control study on this ladder &mdash; it can describe an unusual presentation or flag a possible new adverse effect, but it cannot test whether an exposure caused an outcome, since there's nothing to compare the observed cases against. Its proper role is hypothesis generation: prompting the case-control or cohort study that can actually test the hypothesis a case series raises, not standing in as evidence of a causal claim on its own.</p>`,
+      },
+      {
+        heading: 'Ecological studies sit outside this hierarchy entirely',
+        html: `<p>This ladder ranks designs that make claims about individual patients. An ecological study, which compares rates or averages across groups rather than individuals, is answering a different kind of question and shouldn't be slotted onto the same rung as a cohort or case-control study &mdash; a group-level association doesn't necessarily hold for the individuals inside each group (the ecological fallacy), a distinct, and often more severe, limitation than anything the individual-level hierarchy above has to deal with.</p>`,
+      },
+      {
         heading: 'Any design: surrogate outcomes vs. hard clinical outcomes',
         html: `<p>A surrogate outcome &mdash; a biomarker, an imaging finding, or a laboratory value &mdash; improving does not guarantee that a hard clinical outcome, such as death, disability, or a symptomatic event, also improves. Several well-known treatments have improved a surrogate marker while showing no benefit &mdash; or even causing harm &mdash; on hard clinical outcomes in later, larger trials.</p>`,
       },
     ],
     related: [
       { id: 'measures-of-association', why: 'Common output measure across RCTs, cohort studies, and case-control studies alike.' },
+      { id: 'appraisal-cluster-rct', why: 'The RCT variant that randomizes whole groups instead of individual patients.' },
+      { id: 'appraisal-crossover-trial', why: 'The RCT variant where each patient receives every treatment in turn.' },
+      { id: 'appraisal-non-inferiority-trial', why: "The RCT variant trying to show a new option isn't meaningfully worse, rather than better." },
+      { id: 'appraisal-case-series', why: 'The design at the very bottom of this hierarchy — full guide on what it can and cannot show.' },
+      { id: 'appraisal-ecological-studies', why: 'The group-level design that sits outside this individual-level hierarchy altogether.' },
+      { id: 'appraisal-ecological-fallacy', why: 'The core concept behind why ecological studies sit outside this hierarchy, explained on its own.' },
     ],
   },
 
@@ -19696,6 +19715,41 @@ const GUIDES = [
       { id: 'monte-carlo-exact-test', why: 'Computes exactly this kind of p-value, using the same Laplace +1/+1 adjustment and reporting a confidence interval on the simulated p-value discussed here.' },
       { id: 'fishers-exact', why: 'The exact combinatorial method Monte Carlo simulation approximates once direct enumeration becomes computationally infeasible.' },
       { id: 'appraisal-p-values', why: 'The general definition of a p-value this guide assumes as background.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-ecological-fallacy',
+    category: 'Common Statistical Pitfalls',
+    title: 'The Ecological Fallacy',
+    blurb: 'A country, school, or hospital can show one pattern in its aggregate numbers while every individual inside it shows the opposite — and confusing the two is one of the most common, and most avoidable, misreadings in the literature.',
+    dek: `Any time a group-level statistic — a national average, a school's ranking, a hospital's mortality rate — gets used to say something about the individuals inside that group, it's worth checking whether that step is actually justified. Often it isn't, and the group-level pattern can even run in the opposite direction from the individual-level one.`,
+    sections: [
+      {
+        heading: 'The mechanism',
+        html: `<p>A statistic computed at the group level describes the groups being compared — it does not automatically describe the individuals inside them. Whatever else differs between the groups (their composition, their local confounders) can drive the group-level pattern even when no such relationship exists among individuals, or even when the individual-level relationship runs in the opposite direction entirely. Treating a group-level association as though it were an individual-level one, without checking, is the ecological fallacy.</p>`,
+      },
+      {
+        heading: 'The classic illustration',
+        html: `<p>A widely cited example (Robinson, 1950): across U.S. states, a higher percentage of foreign-born residents was associated with <em>higher</em> average literacy. Read naively, this suggests immigrants were more literate than native-born Americans. But individual-level data showed the opposite — foreign-born residents were, on average, <em>less</em> literate than native-born ones. The state-level pattern was actually driven by where immigrants tended to settle: more heavily in states that already had higher literacy for reasons unrelated to immigration status (more urbanized, generally better-resourced states). The aggregate correlation and the individual-level relationship didn't just differ in size — they pointed in opposite directions.</p>`,
+      },
+      {
+        heading: 'Where this shows up outside formal "ecological studies"',
+        html: `<p>This isn't a niche concern confined to studies that formally call themselves ecological. A hospital's aggregate mortality rate reflects its casemix and referral patterns as much as the quality of care it provides — a hospital that treats sicker, higher-risk patients on average can show a <em>higher</em> raw mortality rate than a lower-quality hospital that mostly sees healthy patients, which is exactly why risk-adjusted mortality, not raw mortality, is the appropriate way to compare hospitals or individual physicians. A school's average test score conflates its enrolled population's starting point with the quality of instruction it actually provides. Even a tongue-in-cheek finding like "countries that consume more chocolate per capita produce more Nobel laureates" is a group-level correlation almost certainly driven by a shared confounder (national wealth) rather than anything true about individual chocolate-eaters — a useful reminder that a plausible-sounding aggregate correlation is not evidence about individuals until that link is actually established.</p>`,
+      },
+      {
+        heading: 'The reverse error: the atomistic fallacy',
+        html: `<p>The mirror-image mistake also exists, if less commonly discussed: assuming a relationship that holds at the individual level must automatically hold in aggregate too. It's sometimes called the atomistic (or individualistic) fallacy, and it's worth a brief mention alongside the more common ecological fallacy, since both are versions of the same underlying error — assuming that whatever level a relationship was actually measured at, it must transfer cleanly to the other level too.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Whenever a group-level or aggregate statistic is presented, ask directly: is the claim actually being made about groups, or has it quietly shifted to apply to the individuals inside them? Check specifically whether a paper's discussion or conclusion section extends a group-level finding into individual-level advice or implications without acknowledging that extra, often unjustified, step.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-ecological-studies', why: 'The full design-appraisal guide for studies built entirely around this concept.' },
+      { id: 'appraisal-confounding-bias', why: 'The general confounding mechanism this fallacy is a specific, group-level instance of.' },
+      { id: 'appraisal-table2-fallacy', why: 'A companion pitfall in the same spirit — looking closer at what a reported number can and cannot actually claim to show.' },
     ],
   },
 
@@ -20373,6 +20427,7 @@ const GUIDES = [
       { id: 'icc', why: "Estimates the intraclass correlation this design's precision and sample size both depend on." },
       { id: 'design-effect', why: 'Converts an ordinary sample size into the larger one a cluster trial actually needs, using the ICC and average cluster size.' },
       { id: 'sample-size-cluster-rct', why: 'Computes the sample size directly, in clusters and per-cluster N, accounting for the design effect.' },
+      { id: 'appraisal-study-design', why: 'Places this RCT variant within the broader design hierarchy.' },
     ],
   },
 
@@ -20419,6 +20474,7 @@ const GUIDES = [
     related: [
       { id: 'appraisal-appraising-rcts', why: 'The parent design — randomization, blinding, and ITT concerns still apply on top of the carryover-specific ones here.' },
       { id: 'paired-t-test', why: "The standard analysis for comparing a patient's own two treatment periods against each other." },
+      { id: 'appraisal-study-design', why: 'Places this RCT variant within the broader design hierarchy.' },
     ],
   },
 
@@ -20462,6 +20518,7 @@ const GUIDES = [
       { id: 'appraisal-appraising-rcts', why: 'The parent design — randomization, blinding, and ITT/per-protocol concerns still apply, though this design also requires reporting both analyses rather than favoring one.' },
       { id: 'equivalence-test', why: 'Runs the two one-sided tests (TOST) procedure this design\'s statistical analysis is built on.' },
       { id: 'reading-equivalence-plots', why: 'The visual companion for reading whether a confidence interval actually falls inside the non-inferiority zone.' },
+      { id: 'appraisal-study-design', why: 'Places this RCT variant within the broader design hierarchy.' },
     ],
   },
 
@@ -20501,6 +20558,7 @@ const GUIDES = [
       { id: 'appraisal-appraising-cross-sectional', why: 'Shares the single-time-point framing, but measures individual-level data rather than group aggregates.' },
       { id: 'appraisal-confounding-bias', why: 'The same confounding concerns apply here, just estimated from group-level rather than individual-level data.' },
       { id: 'appraisal-study-design', why: 'Places ecological studies within the broader design hierarchy.' },
+      { id: 'appraisal-ecological-fallacy', why: 'The full explanation of the core concept this design guide is built around, including where it shows up outside formal ecological studies.' },
     ],
   },
 
