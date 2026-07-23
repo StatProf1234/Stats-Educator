@@ -822,6 +822,10 @@ body {
   display: none;
 }
 
+.home-section.collapsed .design-grid {
+  display: none;
+}
+
 /* ── CALCULATOR-SELECTION WIZARD ───────────────────── */
 
 .wizard-breadcrumb {

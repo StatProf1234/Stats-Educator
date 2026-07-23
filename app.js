@@ -876,36 +876,62 @@ function renderLearnHub() {
   document.getElementById('main').scrollTop = 0;
 }
 
-// The 11 design leaves of DESIGN_WIZARD_TREE, in a sensible browsing
-// order for this page's grid (causal → observational → diagnostic →
-// evidence-synthesis → other). Each card reuses that leaf's own
-// primary guide + "why" text rather than separately written copy, so
-// this page and the wizard's own reasoning can never drift apart.
-const DESIGN_GLANCE_ORDER = [
-  'rctResult', 'clusterRctResult', 'crossoverResult', 'nonInferiorityResult',
-  'cohortResult', 'caseControlResult', 'caseSeriesResult',
-  'prevalenceResult', 'ecologicalResult',
-  'diagAccuracyResult', 'aiStudyResult',
-  'systematicReviewResult', 'scopingReviewResult',
-  'prognosisResult', 'guidelineResult', 'pilotResult',
+// The 16 design leaves of DESIGN_WIZARD_TREE, grouped for the hub's
+// collapsible category sections — grouping mirrors how these designs
+// are actually taught: experimental vs. observational (split further
+// into comparative, which tests an exposure-outcome association, vs.
+// descriptive, which doesn't) vs. diagnostic/prognostic vs. evidence
+// synthesis and planning. Each card reuses its leaf's own primary
+// guide + "why" text rather than separately written copy, so this
+// page and the wizard's own reasoning can never drift apart.
+const DESIGN_GLANCE_CATEGORIES = [
+  { category: 'Experimental Trials', keys: ['rctResult', 'clusterRctResult', 'crossoverResult', 'nonInferiorityResult'] },
+  { category: 'Observational — Comparative', keys: ['cohortResult', 'caseControlResult'] },
+  { category: 'Observational — Descriptive', keys: ['caseSeriesResult', 'prevalenceResult', 'ecologicalResult'] },
+  { category: 'Diagnostic & Prognostic', keys: ['diagAccuracyResult', 'aiStudyResult', 'prognosisResult'] },
+  { category: 'Evidence Synthesis & Planning', keys: ['systematicReviewResult', 'scopingReviewResult', 'guidelineResult', 'pilotResult'] },
 ];
+
+// Tracks which Designs hub categories the user has explicitly opened
+// — same pattern as expandedHomeCategories/expandedLearnCategories,
+// defaults CLOSED.
+const expandedDesignCategories = new Set();
 
 // Dedicated landing page for "planning research, not analyzing it
 // yet" — the counterpart to the Calculator home page and Learn hub
 // that DESIGN_WIZARD_TREE's own leaves never had until now (they only
 // had the wizard, reachable by no other path). Same
-// banner-into-its-own-wizard pattern as the other two hubs.
+// banner-into-its-own-wizard pattern as the other two hubs, and now
+// the same collapsible-category accordion too (single-column, like
+// Learn's own — several of these category names are too long for a
+// half-width column).
 function renderDesignsHub() {
-  const cards = DESIGN_GLANCE_ORDER.map(key => {
-    const leaf = DESIGN_WIZARD_TREE[key];
-    const primary = leaf.results[0];
-    const guide = GUIDES.find(g => g.id === primary.id);
-    if (!guide) return '';
+  const sections = DESIGN_GLANCE_CATEGORIES.map(({ category, keys }) => {
+    const cards = keys.map(key => {
+      const leaf = DESIGN_WIZARD_TREE[key];
+      const primary = leaf.results[0];
+      const guide = GUIDES.find(g => g.id === primary.id);
+      if (!guide) return '';
+      return `
+        <a class="design-card" href="#learn/${guide.id}">
+          <div class="design-card-name">${esc(guide.title.replace(/^Appraising /, ''))}</div>
+          <div class="design-card-use">${esc(primary.why)}</div>
+        </a>`;
+    }).join('');
+
+    const isOpen = expandedDesignCategories.has(category);
+
     return `
-      <a class="design-card" href="#learn/${guide.id}">
-        <div class="design-card-name">${esc(guide.title.replace(/^Appraising /, ''))}</div>
-        <div class="design-card-use">${esc(primary.why)}</div>
-      </a>`;
+      <div class="home-section${isOpen ? '' : ' collapsed'}" data-cat="${esc(category)}">
+        <h2 class="home-section-heading">
+          <button type="button" class="home-section-header${isOpen ? ' open' : ''}" aria-expanded="${isOpen}">
+            <span class="home-section-chevron">▸</span>
+            <span class="home-section-title">${esc(category)}</span>
+            <span class="home-section-count">${keys.length} design${keys.length === 1 ? '' : 's'}</span>
+          </button>
+        </h2>
+        <div class="design-grid">${cards}</div>
+      </div>`;
   }).join('');
 
   view().innerHTML = `
@@ -923,8 +949,21 @@ function renderDesignsHub() {
       <span class="wizard-banner-text">Each design below links to its own in-depth critical-appraisal guide, under Learn.</span>
       <span class="wizard-banner-arrow">→</span>
     </a>
-    <div class="design-grid">${cards}</div>
+    ${sections}
   `;
+
+  document.querySelectorAll('.home-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const section = header.closest('.home-section');
+      const cat = section.dataset.cat;
+      const nowOpen = !header.classList.contains('open');
+      nowOpen ? expandedDesignCategories.add(cat) : expandedDesignCategories.delete(cat);
+      header.classList.toggle('open', nowOpen);
+      header.setAttribute('aria-expanded', String(nowOpen));
+      section.classList.toggle('collapsed', !nowOpen);
+    });
+  });
+
   document.getElementById('main').scrollTop = 0;
 }
 
