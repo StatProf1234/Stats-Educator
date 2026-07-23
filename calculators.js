@@ -17316,6 +17316,8 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-subgroup-interaction', why: '"Worked in women but not men" is usually not what the data actually show.' },
     { id: 'appraisal-monte-carlo-pvalues', why: '"p < 0.001" from a simulated/permutation test can just mean the simulation budget ran out, not that the true p-value is tiny.' },
     { id: 'appraisal-ecological-fallacy', why: 'A group-level pattern (a country, a school, a hospital) can vanish, or even reverse, at the individual level.' },
+    { id: 'appraisal-sensitivity-vs-subgroup', why: '"We ran a sensitivity analysis" and "we checked a subgroup" sound like the same reassurance — they are not.' },
+    { id: 'appraisal-too-good-to-be-true', why: 'A checklist for spotting overinterpreted results — conflicted framing, implausibly large effects, and one-sided harms reporting.' },
   ]},
 
   // ── QUICK REFERENCE ───────────────────────────────────────────────
@@ -19439,6 +19441,7 @@ const GUIDES = [
       { id: 'meta-analysis', why: 'If a Baujat plot flags a study, rerun this calculator with that study excluded as a leave-one-out sensitivity check to see whether the pooled estimate or its significance actually changes.' },
       { id: 'reading-forest-plots', why: "Companion chart-reading guide — covers the Q, τ², I² heterogeneity captions that a Baujat plot's x-axis is built from." },
       { id: 'reading-funnel-plots', why: 'A different meta-analysis diagnostic — checks for small-study/publication-bias asymmetry, rather than which studies are both heterogeneous and influential.' },
+      { id: 'appraisal-sensitivity-vs-subgroup', why: "Places this leave-one-out check within the broader distinction between sensitivity analysis and subgroup analysis." },
     ],
   },
 
@@ -20138,6 +20141,7 @@ const GUIDES = [
     related: [
       { id: 'single-sample-ci', why: 'Builds a confidence interval for a single sample mean.' },
       { id: 'confidence-interval-proportion', why: 'Same idea for a single sample proportion.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'Uses interval width as the direct evidence that a striking effect size is still imprecisely estimated.' },
     ],
   },
 
@@ -20286,6 +20290,7 @@ const GUIDES = [
       { id: 'sample-size-2mean', why: 'Calculates the sample size needed to detect a given effect size — directly relevant to whether a "significant" result was ever a fair test.' },
       { id: 'posthoc-power', why: 'Estimates the power an already-completed study had to detect a given effect.' },
       { id: 'power-ppv-fpp', why: 'Explores how power interacts with the false positive proportion of significant findings.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'Places this significance-vs-magnitude confusion within a broader checklist of ways a result gets overinterpreted.' },
     ],
   },
 
@@ -20319,6 +20324,7 @@ const GUIDES = [
       { id: 'posthoc-power', why: 'Estimates the power a completed study had, given its actual sample size and observed effect.' },
       { id: 'type1-type2-errors', why: 'Interactive explorer for the Type I/Type II error trade-off described in this guide.' },
       { id: 'power-vs-es-alpha', why: 'Shows how power shifts as effect size and alpha change, holding sample size fixed.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'Places this "no significant difference isn\'t no difference" trap within a broader checklist of ways a result gets overinterpreted.' },
     ],
   },
 
@@ -20782,6 +20788,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'paired-t-test', why: 'The most common test applied to before/after data — pairing controls for individual differences, but not for regression to the mean.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'Places this specific inflation mechanism within a broader checklist of ways a result gets overinterpreted, including why a striking effect from one small trial still needs replication.' },
     ],
   },
 
@@ -20889,6 +20896,96 @@ const GUIDES = [
       { id: 'anova-2way', why: 'Tests main effects and their interaction directly, for two-factor designs.' },
       { id: 'measures-of-association', why: 'Produces the subgroup-level effect estimates and confidence intervals discussed in the worked example.' },
       { id: 'meta-analysis', why: 'Subgroup/heterogeneity testing in a pooled-effects context is the same underlying idea.' },
+      { id: 'appraisal-sensitivity-vs-subgroup', why: "Draws the line between this and sensitivity analysis — a different robustness check that's commonly confused with this one." },
+      { id: 'appraisal-too-good-to-be-true', why: 'Places this specific overinterpretation pattern within a broader checklist of ways a result gets overinterpreted.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-sensitivity-vs-subgroup',
+    category: 'Common Statistical Pitfalls',
+    title: 'Sensitivity Analysis vs. Subgroup Analysis',
+    blurb: '"We checked robustness" can describe two very different exercises — and mixing them up hides two very different risks.',
+    dek: `Sensitivity analysis and subgroup analysis both get invoked as evidence that a result is trustworthy, and both involve rerunning an analysis to see whether the answer changes. But they ask different questions of different things, and each carries its own way of misleading a reader who doesn't separate them. This guide draws the line between the two.`,
+    sections: [
+      {
+        heading: 'Same instinct, two different questions',
+        html: `<p>A subgroup analysis asks: <em>does the effect differ across a subset of patients or studies</em> &mdash; older vs. younger, men vs. women, high baseline severity vs. low? It re-slices the same dataset by a patient or study characteristic and re-estimates the effect within each slice.</p><p>A sensitivity analysis asks something else entirely: <em>does the conclusion survive a different analytic choice</em> &mdash; a different way of handling missing data, a different exposure definition, an outlier study removed, per-protocol instead of intention-to-treat? It keeps the same population intact and instead varies an assumption or a method.</p><p>Both are, in a loose sense, "checking whether the result holds up." That surface similarity is exactly why the two get blurred in casual descriptions of a study's rigor &mdash; but they interrogate completely different sources of fragility.</p>`,
+      },
+      {
+        heading: 'Subgroup analysis: does the effect vary by who (or what) is being measured',
+        html: `<p>Subgroup analysis partitions the same sample into smaller groups defined by a baseline characteristic, then compares the effect estimate across those partitions. The central pitfall is comparing each subgroup's own significance rather than formally testing whether the subgroups actually differ from each other &mdash; two effect estimates with overlapping confidence intervals can land on either side of p = 0.05 without there being any real difference between them. See <a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests</a> for the full treatment, including the interaction test that actually answers this and the ISIS-2 astrological-sign example of what unrestrained subgroup hunting can produce.</p>`,
+      },
+      {
+        heading: 'Sensitivity analysis: does the conclusion survive a different analytic choice',
+        html: `<p>Sensitivity analysis reruns the identical research question on the identical population, varying only a methodological decision that could reasonably have gone another way. Common examples: re-analyzing a trial per-protocol instead of by intention-to-treat; imputing missing outcomes under a worst-case assumption instead of multiple imputation; excluding one influential study from a meta-analysis (a leave-one-out check &mdash; see the <a href="#learn/reading-baujat-plots">Baujat plot guide</a>); or, in Mendelian Randomization, checking whether an IVW estimate agrees with MR-Egger and the weighted-median estimator once pleiotropy is allowed for (see the <a href="#learn/appraisal-genetic-association-studies">genetic association studies guide</a>).</p><p>A conclusion is robust when it points the same direction and roughly the same magnitude across these reasonable alternatives. It is fragile &mdash; regardless of how the primary analysis was reported &mdash; when a defensible alternative choice flips significance or reverses the effect.</p>`,
+      },
+      {
+        heading: 'The risks run in opposite directions',
+        html: `<p>Subgroup analysis's characteristic failure is overclaiming: finding a "significant" effect in one slice of the data and reporting it as a real, differential finding, when it's really one comparison among many that was bound to cross a p &lt; 0.05 threshold somewhere by chance (the multiplicity problem &mdash; see <a href="#learn/appraisal-tails-and-multiplicity">Tails and Multiplicity</a>).</p><p>Sensitivity analysis's characteristic failure runs the other way: false reassurance. If a paper reports only the sensitivity analyses that happen to agree with the primary result, and stays quiet about ones that were run and disagreed, "the result was robust to sensitivity analysis" can be just as selectively reported as a cherry-picked subgroup finding &mdash; it just points toward unwarranted confidence instead of an unwarranted subgroup claim.</p>`,
+      },
+      {
+        heading: 'A worked contrast',
+        html: `<p>Take a trial of a new antihypertensive. <strong>Subgroup question:</strong> did the drug lower blood pressure more in patients over 65 than in patients under 65? That's a new comparison, sliced by age, and needs its own interaction test to say anything about a real difference between the age groups. <strong>Sensitivity question:</strong> if 8% of patients had a missing final blood-pressure reading, does the treatment effect still hold if those readings are imputed under a worst-case assumption instead of carried forward or multiply imputed? That's the same overall comparison, rerun under a different assumption about the data that weren't collected. The two checks could point to entirely different conclusions about the very same trial without contradicting each other at all.</p>`,
+      },
+      {
+        heading: "A quick way to tell which one you're reading",
+        html: `<p>Ask what changed between the reported analysis and its "check." If the population was split into smaller pieces by a characteristic (age, sex, severity, region), it's a subgroup analysis. If the population stayed exactly the same and a method, definition, or assumption changed instead, it's a sensitivity analysis. A paper that calls the first one a "sensitivity analysis" (or vice versa) is using the terms loosely rather than incorrectly stating what was actually done &mdash; but the interpretive rules above still apply based on which one it actually is, not on which label was used.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>For a subgroup claim: look for a formal interaction test, not just two separate p-values, and check whether the subgroup was pre-specified. For a sensitivity-analysis claim: check how many sensitivity analyses were run versus reported, and whether every reported one agrees in direction with the primary result &mdash; a suspiciously perfect record across many varied assumptions is itself worth a second look.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-subgroup-interaction', why: 'The full treatment of subgroup analysis and the interaction test that actually tests whether an effect differs between subgroups.' },
+      { id: 'appraisal-tails-and-multiplicity', why: 'The multiplicity mechanism behind why unrestrained subgroup hunting manufactures false positives.' },
+      { id: 'appraisal-appraising-rcts', why: "Intention-to-treat vs. per-protocol and missing-outcome handling — a trial's most common sensitivity analyses." },
+      { id: 'reading-baujat-plots', why: 'The leave-one-out sensitivity check for a meta-analysis, and how to tell which studies are worth rerunning without.' },
+      { id: 'appraisal-genetic-association-studies', why: 'MR-Egger and the weighted median estimator as sensitivity checks against horizontal pleiotropy in Mendelian Randomization.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'A broader checklist of ways a result gets overinterpreted, including two patterns — implausibly large early-trial effects and one-sided harms reporting — that neither this guide nor the subgroup guide covers.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-too-good-to-be-true',
+    category: 'Common Statistical Pitfalls',
+    title: 'Too Good to Be True: Recognizing Overinterpreted Study Results',
+    blurb: '"Significant" and "groundbreaking" are two different claims — and a paper\'s discussion section is where they\'re most often blurred together.',
+    dek: `Every clinical paper reports data, and then tells a story about what that data means. The gap between what a study actually showed and what a reader walks away believing usually opens up in that second part. This guide covers three of the most common ways that gap appears, and points to the guides on this site that cover a few others.`,
+    sections: [
+      {
+        heading: 'Why conclusions run ahead of the data',
+        html: `<p>A paper's methods and results describe what was actually done and observed. Its introduction, discussion, and conclusion describe what the authors want a reader to take from it &mdash; and those are not always the same thing. Career incentives reward novel, positive findings, and research funded by an interested sponsor, or conducted by authors with a financial conflict of interest, has repeatedly been found to reach more favorable conclusions than independently funded research addressing the same question, even when the underlying data look similar (Als-Nielsen et al., <em>JAMA</em> 2003; Bekelman et al., <em>JAMA</em> 2003). None of this requires bad faith &mdash; a researcher genuinely convinced their own intervention works can honestly overstate what a modest result actually supports.</p>`,
+      },
+      {
+        heading: 'A practical habit: read the methods and results before the discussion',
+        html: `<p>Forming an impression of what a study found, from its own methods and results, before reading how its authors frame that finding is a simple and effective defense against overinterpretation. If the conclusion you'd draw from the numbers differs from the conclusion the authors state, that gap is itself useful information about how much to trust the framing &mdash; independent of whether the authors are even aware of the difference. Pre-appraised secondary sources (evidence-based-practice journals and databases that pair an independent commentary with a summary of the original study) exist specifically to supply that second, less conflicted read when time doesn't allow doing it yourself.</p>`,
+      },
+      {
+        heading: 'Beware of effects too large to be real',
+        html: `<p>Small early trials, especially ones with few observed events, systematically tend to report larger effects than the same intervention shows once a larger or independent trial tests it &mdash; a pattern documented across medicine broadly (Pereira, Horwitz, and Ioannidis, <em>JAMA</em> 2012; Ioannidis, <em>PLoS Medicine</em> 2005). Most treatments address only one or two of the many mechanisms behind a disease, so a single small trial reporting a dramatic, one-sided benefit is more often a sign of a noisy, underpowered estimate than of a genuinely transformative effect. The right response to a striking early result isn't to dismiss it, but to withhold full confidence in its magnitude until an independent, adequately powered study confirms it.</p>`,
+      },
+      {
+        heading: 'Check whether harms got the same scrutiny as benefits',
+        html: `<p>A trial can report its efficacy outcome with real rigor &mdash; a clear definition, complete follow-up, an appropriate test &mdash; while handling its harms outcomes far more loosely: no prespecified definition, incomplete reporting, or no mention of adverse events at all. Asymmetric effort produces an asymmetric picture, even when nothing about the reported benefit is wrong on its own terms. When a paper's results section says a great deal about benefit and very little about harm, that imbalance is itself worth noting as a limitation, not filled in with an assumption that harms were absent or negligible.</p>`,
+      },
+      {
+        heading: 'Where the rest of this problem is covered',
+        html: `<p>Two of the most common overinterpretation patterns get their own dedicated treatment elsewhere on this site: mistaking one subgroup's "significant" result for a real, differential effect (see <a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests</a>), and mistaking a small p-value for a large or clinically important effect, or a "non-significant" result for proof of no difference (see <a href="#learn/appraisal-clinical-significance">Statistical vs. Clinical Significance</a> and <a href="#learn/appraisal-power-sample-size">Power and Sample Size</a>). Taken together with the three patterns above, these guides cover most of how a technically accurate set of results can still end up supporting a conclusion the data don't actually warrant.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before accepting a paper's own framing of its result, ask three questions: would the conclusion survive reading only the methods and results sections; does the effect size look plausible next to what similar interventions have achieved; and did harms get measured and reported with the same care as benefits. A study report that struggles on any of these is worth a second, more skeptical read of its discussion section.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-subgroup-interaction', why: 'The specific overinterpretation pattern this guide sets aside for its own full treatment — mistaking a "significant" subgroup result for a real differential effect.' },
+      { id: 'appraisal-clinical-significance', why: 'The specific pattern of mistaking a small p-value for a large or important effect, covered in full there.' },
+      { id: 'appraisal-power-sample-size', why: 'Why an underpowered trial finding "no significant difference" is not the same claim as "no difference exists."' },
+      { id: 'appraisal-confidence-intervals', why: 'A wide confidence interval is the direct evidence that a striking effect size is still imprecisely estimated.' },
+      { id: 'appraisal-regression-to-mean', why: 'A related but distinct pitfall — a real result inflated by chance rather than by a missing control group still needs replication before its magnitude can be trusted.' },
+      { id: 'appraisal-appraising-rcts', why: 'Covers the trial-conduct side of this same problem — early stopping for benefit and incomplete harms reporting, as CONSORT and RoB 2 both check for.' },
     ],
   },
 
@@ -20979,6 +21076,8 @@ const GUIDES = [
       { id: 'appraisal-cluster-rct', why: 'The variant that randomizes whole clinics or schools instead of individual patients — adds its own design-effect and ICC concerns on top of everything here.' },
       { id: 'appraisal-crossover-trial', why: 'The variant that gives each patient every treatment in turn — adds carryover and washout concerns on top of everything here.' },
       { id: 'appraisal-non-inferiority-trial', why: 'The variant trying to show a new treatment isn\'t meaningfully worse, rather than better — flips several of this guide\'s usual conservatism assumptions.' },
+      { id: 'appraisal-sensitivity-vs-subgroup', why: "ITT vs. per-protocol and missing-outcome handling, generalized as one instance of the broader sensitivity-analysis category this guide distinguishes from subgroup analysis." },
+      { id: 'appraisal-too-good-to-be-true', why: 'Generalizes early stopping and incomplete harms reporting — both covered here as trial-conduct issues — into a broader checklist for spotting an overinterpreted result.' },
     ],
   },
 
@@ -21760,6 +21859,7 @@ const GUIDES = [
       { id: 'meta-analysis', why: 'The inverse-variance pooling method GWAS meta-analyses and two-sample MR\'s IVW estimator both build on directly.' },
       { id: 'logistic-regression', why: 'The standard model for a candidate gene or GWAS case-control analysis, typically with genetic principal components added as covariates to control population stratification.' },
       { id: 'hardy-weinberg-equilibrium', why: 'The routine genotyping quality-control check this guide\'s population-stratification section recommends running on the control group.' },
+      { id: 'appraisal-sensitivity-vs-subgroup', why: "Places MR-Egger and the weighted median estimator within the broader idea of a sensitivity analysis, and distinguishes that from subgroup analysis." },
       { id: 'mendelian-randomization', why: 'Runs the IVW and MR-Egger analysis this guide describes directly on your own genetic instruments.' },
     ],
   },
