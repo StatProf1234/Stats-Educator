@@ -19798,6 +19798,95 @@ const GUIDES = [
   },
 
   {
+    id: 'reading-instrumental-variables',
+    category: 'Reading and Understanding Graphs',
+    title: 'How Instrumental Variable Analysis Works (and What Makes a Valid Instrument)',
+    blurb: 'An instrumental variable is a stand-in for randomization — but only if it satisfies three assumptions, two of which can never be directly tested from the data at hand.',
+    dek: `Instrumental variable (IV) analysis estimates a causal effect from purely observational data by finding something that behaves like a hidden randomizer of the exposure — Mendelian Randomization is the best-known example, using a genetic variant as the instrument, but the same logic underlies IV designs built on distance to a provider, physician prescribing preference, or policy and calendar-time variation. The method is the same regardless of what the instrument is; so are the ways it can quietly fail.`,
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 300" style="width:100%;height:auto;display:block;" role="img" aria-label="Directed acyclic graph showing a valid instrumental variable Z affecting exposure X, which affects outcome Y, with an unmeasured confounder U affecting both X and Y — plus two forbidden paths shown dashed: Z affecting U, and Z affecting Y directly without going through X">
+  <line x1="94" y1="190" x2="246" y2="190" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="246,190 236,185 236,195" fill="#1A1A2E"/>
+  <line x1="294" y1="190" x2="446" y2="190" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="446,190 436,185 436,195" fill="#1A1A2E"/>
+  <text x="370" y="178" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#4A4E6B">causal effect of interest</text>
+  <line x1="355" y1="79" x2="285" y2="171" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="285,171 294,166 289,175" fill="#1A1A2E"/>
+  <line x1="385" y1="79" x2="455" y2="171" stroke="#1A1A2E" stroke-width="1.75"/>
+  <polygon points="455,171 446,175 451,166" fill="#1A1A2E"/>
+  <line x1="92" y1="180" x2="348" y2="70" stroke="#E0527C" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <line x1="212" y1="118" x2="222" y2="128" stroke="#E0527C" stroke-width="2"/>
+  <line x1="222" y1="118" x2="212" y2="128" stroke="#E0527C" stroke-width="2"/>
+  <text x="150" y="108" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E0527C">must not exist</text>
+  <text x="150" y="118" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E0527C">(independence)</text>
+  <polyline points="70,208 270,255 470,208" fill="none" stroke="#E0527C" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <line x1="265" y1="250" x2="275" y2="260" stroke="#E0527C" stroke-width="2"/>
+  <line x1="275" y1="250" x2="265" y2="260" stroke="#E0527C" stroke-width="2"/>
+  <text x="270" y="278" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E0527C">must not exist except through X</text>
+  <text x="270" y="288" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#E0527C">(exclusion restriction)</text>
+  <circle cx="70" cy="190" r="24" fill="#4E6EDB"/>
+  <text x="70" y="195" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="13" font-weight="700" fill="#fff">Z</text>
+  <text x="70" y="228" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Instrument</text>
+  <circle cx="270" cy="190" r="24" fill="#4E6EDB"/>
+  <text x="270" y="195" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="13" font-weight="700" fill="#fff">X</text>
+  <text x="270" y="228" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Exposure</text>
+  <circle cx="470" cy="190" r="24" fill="#4E6EDB"/>
+  <text x="470" y="195" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="13" font-weight="700" fill="#fff">Y</text>
+  <text x="470" y="228" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#1A1A2E">Outcome</text>
+  <circle cx="370" cy="60" r="24" fill="none" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="370" y="65" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="13" font-weight="700" fill="#7B8099">U</text>
+  <text x="370" y="26" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9.5" font-weight="600" fill="#7B8099">Unmeasured confounder</text>
+</svg>`,
+    figureCaption: `The solid arrows are the causal structure a valid instrument requires: Z relevant to X, X causing Y, and an unmeasured confounder U (dashed circle) affecting both X and Y — the exact confounding an ordinary observational study of X and Y can't rule out. The dashed red paths are what must NOT exist: Z connected to U (independence) and Z affecting Y through any route other than X (exclusion restriction). Neither forbidden path can be directly tested from the data, since U is by definition unmeasured — that's what makes them assumptions, not findings.`,
+    legendColumns: [
+      [
+        { colLabel: 'The required structure', swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;border-radius:50%;', text: `Blue node: an observed variable — the instrument (Z), exposure (X), or outcome (Y).` },
+        { swatchClass: 'is-square', swatchStyle: 'background:transparent;border:1.5px dashed #7B8099;border-radius:50%;', text: `Dashed node: the unmeasured confounder (U) — by construction, never directly observed or adjusted for.` },
+        { swatchClass: 'is-line', swatchStyle: 'background:#1A1A2E', text: `Solid arrow: a causal path that <strong>must</strong> exist — Z&rarr;X (relevance) and X&rarr;Y (the effect being estimated).` },
+      ],
+      [
+        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#E0527C" stroke-width="1.5" stroke-dasharray="4,3"/></svg>`, text: `Dashed red path: a causal path that must <strong>not</strong> exist for the instrument to be valid — Z&rarr;U (independence) or a direct Z&rarr;Y route bypassing X (exclusion restriction).` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'The problem instrumental variables were built to solve',
+        html: `<p>An ordinary observational study of whether X (the exposure) causes Y (the outcome) is vulnerable to any unmeasured confounder U that affects both &mdash; the diagram above, minus the instrument Z, is exactly the structure that makes an association between X and Y ambiguous: is it X causing Y, U driving both, or some mixture of the two? Instrumental variable (IV) analysis sidesteps the need to measure U at all, by finding a variable Z that moves X around for reasons that have nothing to do with U &mdash; effectively a "found" or "natural" randomizer, standing in for the randomization an RCT would perform directly.</p>`,
+      },
+      {
+        heading: 'The three assumptions, in general — not just for genetic instruments',
+        html: `<p><strong>Relevance</strong> &mdash; Z must be robustly associated with X (the solid Z&rarr;X arrow above). This is the one assumption that actually shows up in the data and can be checked directly, typically via the strength of Z's association with X in a first-stage regression (see the F-statistic discussion below).</p><p><strong>Independence</strong> &mdash; Z must not be associated with U, the unmeasured confounders of the X-Y relationship (no Z&rarr;U path). Practically, this asks whether whatever assigns a person's value of Z is itself independent of everything else that affects the outcome.</p><p><strong>Exclusion restriction</strong> &mdash; Z must affect Y <em>only</em> through X, never through any other route (no direct Z&rarr;Y arrow). This is the assumption most often violated in practice, because it requires ruling out every alternative pathway from Z to Y, not just the ones a researcher happens to think of.</p><p>Independence and exclusion restriction are the two dashed paths in the figure above, and neither can be directly tested from the data at hand &mdash; both concern a path running through (or around) U, which is by definition unmeasured. They have to be argued for on subject-matter grounds, not verified statistically, which is exactly why instrument choice is the most heavily scrutinized part of any IV analysis.</p>`,
+      },
+      {
+        heading: 'Non-genetic instruments: the same logic, different Z',
+        html: `<p>Mendelian Randomization uses a genetic variant as Z, but the identical three-assumption logic underlies IV designs built on entirely different instruments. <strong>Physician-preference instruments</strong> use the fact that different physicians (or hospitals) systematically favor different treatments for the same condition, largely for idiosyncratic reasons of training or habit &mdash; a patient's physician's typical prescribing pattern can instrument for which treatment that patient actually receives. <strong>Distance-based instruments</strong> use a patient's proximity to a specialist, a particular hospital, or a treatment facility, on the logic that distance affects access to a treatment without independently affecting the outcome through any other route. <strong>Policy or calendar-time instruments</strong> use a sudden change in guidelines, reimbursement, or availability that shifts exposure rates at a specific point in time, largely independent of individual patient characteristics. Every one of these carries the same three assumptions above, and every one is vulnerable in its own characteristic way &mdash; a physician-preference instrument fails exclusion restriction if physicians who prefer one treatment also happen to manage every other aspect of care differently, for instance.</p>`,
+      },
+      {
+        heading: 'Weak instruments: when relevance is only barely satisfied',
+        html: `<p>Even when relevance technically holds, a Z that is only weakly associated with X produces a weak instrument, and weak instruments cause a specific, well-documented problem: the resulting causal estimate is biased toward the confounded, ordinary-observational-study estimate (in a two-sample design) and its variance is inflated, sometimes severely. Instrument strength is conventionally checked via the F-statistic from the first-stage regression of X on Z, with F below 10 flagged as a common rule-of-thumb threshold for a weak instrument &mdash; the same check this site's <a href="#mendelian-randomization">Mendelian Randomization</a> calculator reports for each genetic instrument it's given.</p>`,
+      },
+      {
+        heading: 'Two-stage least squares (2SLS): the general estimation method',
+        html: `<p>The classic general-purpose IV estimator is two-stage least squares (2SLS). Stage one regresses the exposure X on the instrument Z (and any covariates), producing a predicted value of X for each subject that, by construction, reflects only the variation in X driven by Z. Stage two regresses the outcome Y on that predicted X (instead of the actual, observed X). Because the predicted X carries none of the variation in X that came from the confounder U, the stage-two coefficient estimates the causal effect of X on Y, freed from confounding by U &mdash; provided the three assumptions above actually hold. Mendelian Randomization's inverse-variance-weighted (IVW) estimator, built from per-instrument Wald ratios (each instrument's Y-effect divided by its X-effect), is mathematically a special case of this same logic, adapted to the common situation where only summary-level GWAS statistics &mdash; not individual-level data &mdash; are available for each instrument.</p>`,
+      },
+      {
+        heading: 'What a valid instrument still can and cannot tell you',
+        html: `<p>When all three assumptions hold, IV analysis can support a genuine causal claim from purely observational data &mdash; a real advantage when randomizing the exposure directly is infeasible or unethical. But the causal effect it estimates is technically a <em>local</em> effect: specifically, the effect among the subset of people whose exposure would actually be changed by the instrument (in the IV literature, "compliers"), which is not necessarily the same as the average causal effect across everyone. And because independence and exclusion restriction are assumptions rather than measured findings, an IV analysis is only as credible as the subject-matter argument for why its particular Z couldn't plausibly violate them &mdash; a weaker, more assumption-dependent form of evidence than a well-conducted RCT, even when it succeeds at what an ordinary observational study cannot.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports an IV analysis, look specifically for how it defends independence and exclusion restriction for its chosen instrument &mdash; a paper that only reports the first-stage F-statistic (relevance) and says nothing about why the instrument couldn't plausibly affect the outcome through some other route has only checked the one assumption that data alone can verify, and left the other two simply asserted.</p>`,
+      },
+    ],
+    related: [
+      { id: 'mendelian-randomization', why: 'Applies exactly this instrumental-variable logic with a genetic variant as the instrument — IVW pooling, MR-Egger, and per-instrument F-statistics.' },
+      { id: 'appraisal-genetic-association-studies', why: 'The genetics-specific version of this guide\'s three assumptions, plus winner\'s curse and population stratification as they apply to genetic instruments.' },
+      { id: 'appraisal-study-design', why: 'Places instrumental variable analysis relative to the RCT-to-case-series hierarchy it doesn\'t fit onto.' },
+      { id: 'appraisal-confounding-bias', why: 'The unmeasured-confounding problem instrumental variables are specifically built to sidestep.' },
+      { id: 'simple-regression', why: 'The ordinary regression that two-stage least squares runs twice, once at each stage.' },
+    ],
+  },
+
+  {
     id: 'appraisal-effect-measures',
     category: 'Critical Appraisal of the Literature',
     title: 'Understanding Effect Measures: Relative Risk, Odds Ratio, and Absolute Effects',
@@ -20283,6 +20372,10 @@ const GUIDES = [
         html: `<p>This ladder ranks designs that make claims about individual patients. An ecological study, which compares rates or averages across groups rather than individuals, is answering a different kind of question and shouldn't be slotted onto the same rung as a cohort or case-control study &mdash; a group-level association doesn't necessarily hold for the individuals inside each group (the ecological fallacy), a distinct, and often more severe, limitation than anything the individual-level hierarchy above has to deal with.</p>`,
       },
       {
+        heading: 'Mendelian Randomization: observational data, but a different route to a causal claim',
+        html: `<p>Mendelian Randomization (MR) doesn't slot onto this ladder at all, and not for the same reason ecological studies don't. MR uses purely observational data &mdash; no investigator ever assigns anyone's exposure &mdash; yet it's built specifically to support a causal claim, the one thing everything below the RCT on this ladder is explicitly unable to do on its own. It manages this by using a genetic variant as an instrumental variable: a stand-in for the randomization an RCT performs directly, exploiting the fact that genotype is assigned effectively at random at conception, independent of the confounders that undermine an ordinary cohort or case-control study of the same exposure.</p><p>That means MR's credibility doesn't come from where it would sit on this ladder &mdash; it isn't "better than a cohort study" the way a cohort study is better than a case-control study for estimating relative risk directly. It rests entirely on a separate set of instrumental-variable assumptions (relevance, independence, and exclusion restriction) that have nothing to do with the confounding-control logic this hierarchy is built around, and that can fail in their own characteristic way (most often via horizontal pleiotropy) even when every design element of a conventional observational study would look impeccable. See <a href="#learn/reading-instrumental-variables">How Instrumental Variable Analysis Works</a> for those assumptions in general, and <a href="#learn/appraisal-genetic-association-studies">Appraising Genetic Association Studies</a> for how they apply specifically when the instrument is a genetic variant.</p>`,
+      },
+      {
         heading: 'Any design: surrogate outcomes vs. hard clinical outcomes',
         html: `<p>A surrogate outcome &mdash; a biomarker, an imaging finding, or a laboratory value &mdash; improving does not guarantee that a hard clinical outcome, such as death, disability, or a symptomatic event, also improves. Several well-known treatments have improved a surrogate marker while showing no benefit &mdash; or even causing harm &mdash; on hard clinical outcomes in later, larger trials.</p>`,
       },
@@ -20295,7 +20388,8 @@ const GUIDES = [
       { id: 'appraisal-case-series', why: 'The design at the very bottom of this hierarchy — full guide on what it can and cannot show.' },
       { id: 'appraisal-ecological-studies', why: 'The group-level design that sits outside this individual-level hierarchy altogether.' },
       { id: 'appraisal-ecological-fallacy', why: 'The core concept behind why ecological studies sit outside this hierarchy, explained on its own.' },
-      { id: 'appraisal-genetic-association-studies', why: 'Mendelian Randomization is observational data used to support a causal claim — a third category this ladder doesn\'t quite have a rung for.' },
+      { id: 'reading-instrumental-variables', why: 'The general instrumental-variable assumptions behind why Mendelian Randomization can make a causal claim this hierarchy otherwise wouldn\'t support.' },
+      { id: 'appraisal-genetic-association-studies', why: 'How those instrumental-variable assumptions apply specifically when the instrument is a genetic variant.' },
     ],
   },
 
