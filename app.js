@@ -123,14 +123,27 @@ document.addEventListener('DOMContentLoaded', () => {
       wrap.style.maxHeight = 'none';
       wrap.style.overflowY = 'visible';
     }
-    const scrollAnchor = target.querySelector('td') || target;
-    scrollAnchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (wrap) {
-      setTimeout(() => {
-        wrap.style.maxHeight = prevMaxHeight;
-        wrap.style.overflowY = prevOverflowY;
-      }, 700);
-    }
+
+    // Two things wait for a settled layout before scrolling: opening a
+    // <details> and clearing the wrap's max-height both change the
+    // page's total scrollable height, and a row near the END of a
+    // freshly-revealed section — with block: 'center' — needs the
+    // browser to already know about content that comes after it to
+    // center correctly; measuring against a stale (pre-reflow) layout
+    // under-counts that space. A double rAF guarantees at least one
+    // full layout+paint cycle has completed first. block: 'start'
+    // (rather than 'center') also sidesteps the case entirely for a
+    // row with little or nothing below it to center against.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const scrollAnchor = target.querySelector('td') || target;
+      scrollAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (wrap) {
+        setTimeout(() => {
+          wrap.style.maxHeight = prevMaxHeight;
+          wrap.style.overflowY = prevOverflowY;
+        }, 700);
+      }
+    }));
     history.replaceState(null, '', '#' + id);
   });
 
