@@ -17202,7 +17202,10 @@ const LEARN_WIZARD_TREE = {
     ]
   },
   res_nominal:    { results: [ { id: 'data-nominal', why: 'Unordered categories — the starting point for choosing a chi-square, Fisher\'s exact, or a 2×2-based measure of association.' } ] },
-  res_ordinal:    { results: [ { id: 'data-ordinal', why: 'Ordered categories with unequal gaps — rules out an ordinary mean/SD as the natural summary.' } ] },
+  res_ordinal:    { results: [
+    { id: 'data-ordinal', why: 'Ordered categories with unequal gaps — rules out an ordinary mean/SD as the natural summary.' },
+    { id: 'data-likert-scales', why: 'If this is a Likert-type item, whether it should be analyzed alone (ordinal) or summed with others into a composite score (conventionally continuous).' },
+  ] },
   res_binary:     { results: [ { id: 'data-binary', why: 'Two possible outcomes — the data shape behind proportions, risk ratios, odds ratios, and logistic regression.' } ] },
   res_count:      { results: [ { id: 'data-discrete-count', why: 'Event counts — usually modeled with Poisson or negative binomial regression rather than an ordinary linear model.' } ] },
   res_continuous: { results: [ { id: 'data-continuous', why: 'The data shape behind t-tests, ANOVA, correlation, and linear regression.' } ] },
@@ -17291,6 +17294,7 @@ const LEARN_WIZARD_TREE = {
   res_survey: { results: [
     { id: 'appraisal-survey-research', why: 'Response biases, non-response as a selection problem, and matching the analysis to the response format (nominal vs. ordinal).' },
     { id: 'appraisal-patient-reported-outcomes', why: 'The companion guide specifically for validated clinical instruments (PROMs), rather than a general self-report questionnaire.' },
+    { id: 'data-likert-scales', why: 'If the survey uses Likert-type items, whether to analyze one alone (ordinal) or sum several into a composite score (conventionally continuous).' },
   ]},
 
   // ── CONCEPTS & TERMS ──────────────────────────────────────────────
@@ -18938,6 +18942,48 @@ const GUIDES = [
       { id: 'kruskal-wallis', why: 'Extends the same idea to three or more independent groups.' },
       { id: 'spearman-rho', why: "Measures monotonic association between two ranked/ordinal variables." },
       { id: 'weighted-kappa', why: 'Inter-rater agreement for ordinal ratings, penalizing large disagreements more than near-misses.' },
+      { id: 'data-likert-scales', why: 'The common special case where several ordinal items are summed into one composite score — and when that composite may be treated as continuous instead.' },
+    ],
+  },
+
+  {
+    id: 'data-likert-scales',
+    category: 'Data Types',
+    title: 'Likert Scales: Single Item vs. Summated Scale',
+    blurb: 'A single Likert-type item and a multi-item Likert scale look alike but call for entirely different analyses — one is ordinal, the other is conventionally treated as continuous.',
+    dek: `"Likert scale" gets used loosely enough that a single pain or satisfaction question and a ten-item validated questionnaire both get called by the same name, even though one is squarely ordinal data and the other is routinely analyzed as if it were continuous. Telling the two apart &mdash; and knowing what has to be true before the second treatment is justified &mdash; matters more than memorizing either rule on its own.`,
+    sections: [
+      {
+        heading: 'What "Likert scale" actually means',
+        html: `<p>Strictly, a Likert scale is the summed or averaged score across several related items, each answered on the same ordered response format (Strongly Disagree to Strongly Agree, for instance) &mdash; a single such question is more precisely a Likert-type item or Likert item. In practice the two terms get used interchangeably, and that looseness is exactly where confusion about "how do I analyze Likert data" comes from: a single item and a multi-item composite call for genuinely different tools, even though both look like the same kind of question on the page.</p>`,
+      },
+      {
+        heading: 'A single Likert item is ordinal data',
+        html: `<p>One Likert-type question &mdash; a 5-point pain rating, a 7-point satisfaction item &mdash; is <a href="#learn/data-ordinal">ordinal data</a>: the response options have a real order, but the gap between "Agree" and "Strongly Agree" isn't guaranteed to equal the gap between "Neutral" and "Agree." The right descriptive summary is the median and IQR, via the <a href="#interquartile-range">Interquartile Range (IQR)</a> calculator, not a mean and SD. Group comparisons use rank-based tests: the <a href="#mann-whitney">Mann-Whitney U Test</a> for two independent groups, the <a href="#kruskal-wallis">Kruskal-Wallis Test</a> for three or more independent groups, and the <a href="#wilcoxon-signed-rank">Wilcoxon Signed-Rank Test</a> for paired or repeated measurements on the same respondents.</p>`,
+      },
+      {
+        heading: 'A summated Likert scale is conventionally treated as continuous',
+        html: `<p>Once several items measuring the same underlying construct are combined &mdash; summed or averaged into one composite score, the way most validated questionnaires and PROMs actually report their results &mdash; that composite is widely, and defensibly, analyzed as though it were continuous data: means and SDs, t-tests, ANOVA, linear regression. The justification isn't that the underlying construct suddenly acquired equal intervals; it's that a sum across several ordinal items has far more possible values than any one item alone and tends to behave much more like a continuum, and that parametric methods are reasonably robust to the residual non-normality this leaves behind, especially at typical questionnaire sample sizes. This is standard, well-established practice in health services and psychometric research, not a shortcut &mdash; but it rests on a precondition, not on the item count alone.</p>`,
+      },
+      {
+        heading: 'The precondition: check unidimensionality first',
+        html: `<p>Summing items only makes sense if they're actually measuring the same thing &mdash; a ten-item questionnaire that quietly mixes a pain domain with a mobility domain produces a composite score that doesn't cleanly represent either construct, no matter how continuous the resulting number looks. <a href="#cronbachs-alpha">Cronbach's alpha</a> is the standard first check (conventionally, roughly 0.70 or higher supports treating the items as one internally consistent scale), and any reverse-worded items need to be re-scored in the same direction as the rest of the scale before summing, or they'll cancel out the very construct the scale is meant to measure. A validated instrument's published psychometric work has typically already established this; an ad hoc set of items assembled for a single study hasn't, and that step shouldn't be skipped just because the items look similar.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports "Likert scale" results, check which case is actually being analyzed before judging whether the statistics fit. A single item analyzed with a mean and SD, or a t-test, is a genuine misuse of ordinal data &mdash; worth flagging the same way an unordered "Yes/No/Don't Know" item averaged into a number would be (see <a href="#learn/appraisal-survey-research">Appraising Questionnaire and Survey Research</a>) &mdash; but the identical mean-and-SD treatment applied to a summed, validated multi-item scale is standard practice, not a mistake. The item count, and whether internal consistency was reported, are usually enough to tell which situation is in front of you.</p>`,
+      },
+    ],
+    related: [
+      { id: 'data-ordinal', why: 'The general case this guide specializes — ordered categories with unequal gaps, and the rank-based tools built for a single ordinal item.' },
+      { id: 'interquartile-range', why: 'Computes the median, Q1, and Q3 — the right descriptive summary for a single Likert item.' },
+      { id: 'mann-whitney', why: 'Compares a single Likert item between two independent groups.' },
+      { id: 'kruskal-wallis', why: 'Extends the same comparison to three or more independent groups.' },
+      { id: 'wilcoxon-signed-rank', why: 'Compares a single Likert item across paired or repeated measurements on the same respondents.' },
+      { id: 'cronbachs-alpha', why: 'Checks the internal consistency that justifies summing several items into one composite score.' },
+      { id: 'unpaired-t-test', why: 'Compares a summated, validated Likert-scale composite score between two independent groups, once unidimensionality is established.' },
+      { id: 'appraisal-survey-research', why: 'The broader survey-design and response-bias issues that apply to any self-report questionnaire, Likert-based or not.' },
+      { id: 'appraisal-patient-reported-outcomes', why: 'Most validated PROMs are summated Likert scales — this guide covers their full validity/reliability/responsiveness appraisal.' },
     ],
   },
 
@@ -20017,6 +20063,7 @@ const GUIDES = [
       { id: 'appraisal-appraising-rcts', why: 'Covers intention-to-treat analysis and missing-outcome handling in general — the same principles this guide applies specifically to PRO dropout.' },
       { id: 'appraisal-effect-measures', why: 'The same statistical-vs-clinical-significance distinction this guide applies to MID, covered there for RR/OR/absolute effects.' },
       { id: 'appraisal-survey-research', why: 'The broader response-bias and question-design issues that apply to any self-report questionnaire, not just validated PROMs.' },
+      { id: 'data-likert-scales', why: 'Most PROMs are summated Likert scales — covers exactly when that composite score may be treated as continuous, and what has to be checked first.' },
     ],
   },
 
@@ -20067,6 +20114,7 @@ const GUIDES = [
       { id: 'mann-whitney', why: 'Compares an ordinal survey item between two independent groups.' },
       { id: 'kruskal-wallis', why: 'Extends the same comparison to three or more independent groups.' },
       { id: 'wilcoxon-signed-rank', why: 'Compares an ordinal survey item across paired or repeated measurements on the same respondents.' },
+      { id: 'data-likert-scales', why: 'The item-vs-summated-scale distinction behind whether a Likert-based survey question is analyzed as a single ordinal item or as a continuous composite score.' },
       { id: 'appraisal-confounding-bias', why: 'Covers recall bias in general — one specific instance of the question-wording problems this guide details.' },
       { id: 'appraisal-patient-reported-outcomes', why: 'The companion guide for validated clinical instruments specifically — this guide\'s scope is broader, covering any self-report questionnaire.' },
     ],
