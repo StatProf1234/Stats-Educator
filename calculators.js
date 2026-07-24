@@ -16633,7 +16633,7 @@ const WIZARD_TREE = {
     question: "What type is the outcome (dependent) variable you're comparing?",
     options: [
       { label: 'Continuous / numeric (e.g., blood pressure, weight, score)',              next: 'continuousGoal' },
-      { label: 'Categorical (e.g., yes/no, disease present/absent)',                       next: 'categoricalGoal' },
+      { label: 'Categorical (e.g., yes/no, disease present/absent)',                       next: 'categoricalTypeGoal' },
       { label: 'Relationship between two continuous variables (correlation/regression)',  next: 'corrGoal' },
       { label: 'Time-to-event (survival)',                                                 next: 'survivalGoal' },
     ]
@@ -16790,6 +16790,25 @@ const WIZARD_TREE = {
   rmAnovaResult:  { results: [ { id: 'repeated-measures-anova', why: 'ANOVA for the same subjects measured under 3+ conditions.' } ] },
   friedmanResult: { results: [ { id: 'friedman-test', why: 'Non-parametric repeated-measures test across 3+ related conditions.' } ] },
   cochranResult:  { results: [ { id: 'cochrans-q', why: 'Tests for differences among 3+ matched binary (yes/no) measurements.' } ] },
+
+  categoricalTypeGoal: {
+    question: 'Are the categories ordered (e.g., a Likert scale, pain severity) or unordered (e.g., yes/no/don\'t know, blood type)?',
+    options: [
+      { label: 'Ordered — a genuine low-to-high scale',            next: 'ordinalGoal' },
+      { label: "Unordered — categories with no natural order",     next: 'categoricalGoal' },
+    ]
+  },
+
+  ordinalGoal: {
+    question: 'How many samples, and are they paired?',
+    options: [
+      { label: 'Just describe/summarize one ordinal variable (no group comparison)', next: 'iqrResult' },
+      { label: 'Two independent samples/groups',                            next: 'mannWhitneyResult' },
+      { label: 'Two paired/matched samples (e.g., before vs. after)',       next: 'wilcoxonResult' },
+      { label: 'Three or more independent groups',                          next: 'kruskalResult' },
+    ]
+  },
+  iqrResult: { results: [ { id: 'interquartile-range', why: 'Computes the median, Q1, and Q3 — the appropriate descriptive summary for ordinal data, instead of a mean and SD.' } ] },
 
   categoricalGoal: {
     question: 'How many samples, and are they paired?',
@@ -17234,6 +17253,7 @@ const LEARN_WIZARD_TREE = {
       { label: 'Pilot or feasibility study', next: 'res_pilot' },
       { label: 'Prognostic study', next: 'res_prog' },
       { label: 'Clinical practice guideline', next: 'res_guideline' },
+      { label: 'Survey or questionnaire study', next: 'res_survey' },
     ]
   },
   res_rct: { results: [
@@ -17268,6 +17288,10 @@ const LEARN_WIZARD_TREE = {
   res_pilot:     { results: [ { id: 'appraisal-pilot-studies', why: 'What a small feasibility study can — and specifically cannot — tell you about whether a treatment works.' } ] },
   res_prog:      { results: [ { id: 'appraisal-appraising-prognostic-studies', why: 'Inception cohorts, prognostic-risk homogeneity, censoring, the QUIPS tool.' } ] },
   res_guideline: { results: [ { id: 'appraisal-appraising-guidelines', why: 'Patient groups considered, evidence grounding, values and preferences, AGREE II.' } ] },
+  res_survey: { results: [
+    { id: 'appraisal-survey-research', why: 'Response biases, non-response as a selection problem, and matching the analysis to the response format (nominal vs. ordinal).' },
+    { id: 'appraisal-patient-reported-outcomes', why: 'The companion guide specifically for validated clinical instruments (PROMs), rather than a general self-report questionnaire.' },
+  ]},
 
   // ── CONCEPTS & TERMS ──────────────────────────────────────────────
   conceptKind: {
