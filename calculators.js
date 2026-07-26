@@ -9386,7 +9386,10 @@ const CALCULATORS = [
      see manovaStats() above) rather than needing a general numerical
      eigensolver this app has no other use for. Reports Wilks' Lambda
      with its EXACT F-transform at p=2 (Rao 1951) and Pillai's Trace
-     with the standard F-approximation (Olson 1976).                 */
+     with the standard F-approximation (Olson 1976), plus each group's
+     Mahalanobis D² from the grand centroid — the same pooled-
+     covariance distance metric Wilks'/Pillai's are themselves built
+     from, reported per group rather than as one omnibus number.     */
   {
     id:          'manova',
     name:        'MANOVA (2 Outcomes)',
@@ -9410,6 +9413,10 @@ const CALCULATORS = [
       {
         label: "Pillai's Trace",
         latex: 'V = \\dfrac{\\lambda_1}{1+\\lambda_1}+\\dfrac{\\lambda_2}{1+\\lambda_2}, \\quad \\lambda_1,\\lambda_2 = \\text{eigenvalues of } E^{-1}H'
+      },
+      {
+        label: "Mahalanobis D² (Group i from the Grand Centroid)",
+        latex: 'D_i^2 = df_E\\,(\\bar y_i-\\bar y)^{\\top} E^{-1} (\\bar y_i-\\bar y)'
       }
     ],
 
@@ -9480,8 +9487,10 @@ const CALCULATORS = [
           value: isSignificant
             ? "Reject H₀ — the groups differ significantly on Y₁ and Y₂ considered jointly (Wilks' Λ). Follow up with univariate ANOVAs on each outcome, or discriminant analysis, to see which outcome(s) drive the difference."
             : "Fail to reject H₀ — no significant joint difference across Y₁ and Y₂ detected." },
+        { label: 'Mahalanobis D² — Each Group\'s Centroid from the Grand Centroid', isText: true, ci: null, isRatio: false,
+          value: stats.groupDistances.map(gd => `${gd.label}: ${f(gd.d2, 2)}`).join('; ') },
         { label: 'Method', isText: true, ci: null, isRatio: false,
-          value: "Scoped to exactly 2 outcome variables, so E⁻¹H's eigenvalues are exact (closed-form), and Wilks' Λ uses its exact F-transform for p = 2 (Rao 1951) rather than an approximation. Pillai's Trace is generally more robust than Wilks' Λ when the groups' covariance matrices or normality are in doubt — Hotelling-Lawley Trace and Roy's Largest Root are two further MANOVA statistics not computed here." },
+          value: "Scoped to exactly 2 outcome variables, so E⁻¹H's eigenvalues are exact (closed-form), and Wilks' Λ uses its exact F-transform for p = 2 (Rao 1951) rather than an approximation. Pillai's Trace is generally more robust than Wilks' Λ when the groups' covariance matrices or normality are in doubt — Hotelling-Lawley Trace and Roy's Largest Root are two further MANOVA statistics not computed here. Mahalanobis D² above uses the pooled within-group covariance matrix (Σ = E/df_E) — the same distance metric Hotelling's T² and Wilks' Λ are themselves built from, reported per group instead of as a single omnibus statistic." },
       ];
     }
   },
@@ -11797,8 +11806,12 @@ const CALCULATORS = [
      classical sums-of-squares route (Huitema, "The Analysis of
      Covariance"): a pooled within-group slope adjusts the between-
      groups sum of squares, rather than fitting the equivalent GLM via
-     matrix regression. Also reports a homogeneity-of-regression-
-     slopes check, the assumption a common-slope ANCOVA depends on.  */
+     matrix regression. The homogeneity-of-regression-slopes check —
+     the assumption a common-slope ANCOVA depends on — is deliberately
+     surfaced FIRST, with a prominent isError warning if it's violated,
+     rather than appended as an easy-to-miss note after the main
+     adjusted-difference result (which still computes regardless, but
+     shouldn't be trusted as the trial's summary comparison if so).   */
   {
     id:          'ancova',
     name:        'ANCOVA (2-Group, One Covariate)',
@@ -11873,6 +11886,7 @@ const CALCULATORS = [
       const tCrit = jStat.studentt.inv(0.975, r.dfE);
       const diffCI = [r.adjDiff - tCrit * r.seDiff, r.adjDiff + tCrit * r.seDiff];
       const pSlopes = r.dfSep > 0 ? 1 - jStat.centralF.cdf(r.Fslopes, 1, r.dfSep) : null;
+      const slopesViolated = pSlopes !== null && pSlopes < 0.05;
 
       const isSignificant = pF < 0.05;
       const f = (v, dp = 4) => +(v.toFixed(dp));
@@ -11881,6 +11895,27 @@ const CALCULATORS = [
         { label: 'Group Sizes (n₁, n₂)', value: `${r.n1}, ${r.n2}`, ci: null, isRatio: false },
         { label: 'Group 1 — Raw Mean Baseline / Outcome', value: `${f(r.x1m, 2)} / ${f(r.y1m, 2)}`, ci: null, isRatio: false },
         { label: 'Group 2 — Raw Mean Baseline / Outcome', value: `${f(r.x2m, 2)} / ${f(r.y2m, 2)}`, ci: null, isRatio: false },
+      ];
+
+      // Checked FIRST and surfaced prominently — a common-slope ANCOVA's
+      // adjusted difference below isn't a valid summary at all if this
+      // fails, so it shouldn't be discoverable only after scrolling past
+      // that result. Mirrors how e.g. Chi-Square 2×2 flags an invalid RR
+      // for a case-control design: isError on the specific row, not a
+      // blocking error for the whole calculator.
+      if (pSlopes !== null) {
+        rows.push({ label: 'Homogeneity of Regression Slopes — F-Statistic & p-value', isText: true, ci: null, isRatio: false,
+          value: `F(1,${r.dfSep}) = ${f(r.Fslopes)}, ${formatPText(pSlopes)}` });
+        if (slopesViolated) {
+          rows.push({ label: 'Assumption Violated — Common-Slope ANCOVA Is Questionable', isText: true, ci: null, isRatio: false, isError: true,
+            value: "The two groups' own covariate-outcome slopes differ significantly — the relationship between baseline and outcome itself depends on group, which a single common adjusted difference can't capture. The adjusted mean difference below is still computed, but shouldn't be trusted as this trial's summary comparison; consider reporting group-specific slopes instead, or a model that allows a group × covariate interaction term." });
+        } else {
+          rows.push({ label: 'Homogeneity of Regression Slopes', isText: true, ci: null, isRatio: false,
+            value: "No significant difference between the two groups' own slopes — supports the common-slope assumption the ANCOVA below relies on." });
+        }
+      }
+
+      rows.push(
         { label: 'Common Slope (b) — Covariate → Outcome', value: f(r.b), ci: null, isRatio: false },
         { label: 't-Statistic (slope) & p-value', isText: true, ci: null, isRatio: false,
           value: `t = ${f(r.tB)}, ${formatPText(pB)}` },
@@ -11894,15 +11929,7 @@ const CALCULATORS = [
           value: isSignificant
             ? 'Reject H₀ — the groups differ significantly on the outcome after adjusting for the covariate.'
             : 'Fail to reject H₀ — no significant group difference once the covariate is accounted for.' },
-      ];
-
-      if (pSlopes !== null) {
-        rows.push({ label: 'Homogeneity of Regression Slopes — F-Statistic', value: f(r.Fslopes), ci: null, isRatio: false });
-        rows.push({ label: 'Homogeneity of Regression Slopes — p-value', isText: true, ci: null, isRatio: false,
-          value: `F(1,${r.dfSep}) = ${f(r.Fslopes)}, ${formatPText(pSlopes)} — ${pSlopes < 0.05
-            ? 'the two groups\' own slopes differ significantly, so the common-slope ANCOVA above is questionable; the covariate-outcome relationship itself may depend on group, which a common adjusted difference can\'t capture'
-            : 'no significant difference between the two groups\' own slopes, supporting the common-slope assumption this ANCOVA relies on'}` });
-      }
+      );
 
       rows.push({ label: 'Scatter Plot with Adjusted Regression Lines', isSVG: true,
         svg: ancovaScatterSVG(X1, Y1, X2, Y2, r.b, r.y1m - r.b * r.x1m, r.y2m - r.b * r.x2m, r.xGrand) });
@@ -14384,6 +14411,18 @@ function manovaStats(groups) {
   const M21 = invE12 * H11 + invE22 * H12;
   const M22 = invE12 * H12 + invE22 * H22;
 
+  // Squared Mahalanobis distance of each group's own centroid from the
+  // grand centroid, using the pooled within-group covariance matrix
+  // Σ = E/dfE (so Σ⁻¹ = dfE·E⁻¹) — the same "how far apart, accounting
+  // for the outcomes' own variance and correlation" idea Wilks' Λ and
+  // Pillai's V are themselves built from, just reported per group
+  // rather than as a single omnibus statistic.
+  const groupDistances = groups.map(g => {
+    const d1 = g.mean1 - grandMean1, d2 = g.mean2 - grandMean2;
+    const d2sq = dfE * (invE11 * d1 * d1 + 2 * invE12 * d1 * d2 + invE22 * d2 * d2);
+    return { label: g.label, d2: Math.max(d2sq, 0) };
+  });
+
   const traceM = M11 + M22;
   const detM = M11 * M22 - M12 * M21;
   const disc = Math.max(traceM * traceM - 4 * detM, 0);
@@ -14406,7 +14445,7 @@ function manovaStats(groups) {
 
   return {
     k, N, dfH, dfE, H11, H22, H12, E11, E22, E12,
-    lambda1, lambda2,
+    lambda1, lambda2, groupDistances,
     wilksLambda, wilksF, wilksDf1, wilksDf2,
     pillaiV, pillaiF, pillaiDf1, pillaiDf2,
   };
@@ -18666,6 +18705,7 @@ const NOTATION = {
     { symbol: '\\Lambda', meaning: "Wilks' Lambda — the proportion of total variance NOT explained by group differences (closer to 0 means groups differ more; 1 means no difference)." },
     { symbol: 'V', meaning: "Pillai's Trace — an alternative multivariate test statistic, generally more robust than Wilks' Λ when the groups' covariance matrices or normality are in doubt." },
     { symbol: 'df_H, df_E', meaning: 'Hypothesis and error degrees of freedom — k−1 and N−k respectively, the same quantities a univariate ANOVA uses.' },
+    { symbol: 'D_i^2', meaning: "Squared Mahalanobis distance of group i's own centroid from the grand centroid, using the pooled within-group covariance matrix — how far that group sits from the overall center once Y₁/Y₂'s own variances and correlation are accounted for." },
   ],
   'tukeys-hsd': [
     { symbol: 'HSD_{ij}', meaning: 'Honestly Significant Difference — the minimum mean gap between group i and group j needed to call them significantly different.' },
@@ -22673,11 +22713,11 @@ const GUIDES = [
     sections: [
       {
         heading: 'How These Terms Cluster',
-        html: `<p>Most terms below fall into one of four families. <strong>Role words</strong> describe the job a variable is playing in a specific analysis (independent variable, covariate, confounder) — the same variable can even change role between studies. <strong>Relationship words</strong> describe how two variables, or two samples, relate to each other (related vs. independent samples, concordant vs. discordant). <strong>Assumption words</strong> describe a condition a parametric method depends on (normality, linearity, homoscedastic vs. heteroscedastic). <strong>Design/shape words</strong> describe the structure of a study or the shape of a distribution (factor, level, skewness, bimodal). Knowing which bucket a word falls into is usually enough to guess roughly what it means before even reading the definition.</p>`,
+        html: `<p>Most terms below fall into one of four families. <strong>Role words</strong> describe the job a variable is playing in a specific analysis (independent variable, covariate, confounder) — the same variable can even change role between studies. <strong>Relationship words</strong> describe how two variables, or two samples, relate to each other (related vs. independent samples, concordant vs. discordant). <strong>Assumption words</strong> describe a condition a parametric method depends on (normality, linearity, homoscedastic vs. heteroscedastic). <strong>Design/shape words</strong> describe the structure of a study or the shape of a distribution (factor, level, skewness, bimodal). Knowing which bucket a word falls into is usually enough to guess roughly what it means before even reading the definition. A final pair — Cauchy and Mahalanobis — don't fit any of those buckets; they're specifically-named concepts (a distribution, a distance measure) worth knowing on their own rather than as an example of a broader family.</p>`,
       },
       {
         heading: 'Quick Index (A–Z)',
-        html: `<p>Every term on this page, alphabetically &mdash; click one to jump straight to its entry below.</p><p class="ref-quick-index"><a href="#gloss-bimodal">Bimodal / Unimodal</a> &middot; <a href="#gloss-bivariate">Bivariate</a> &middot; <a href="#gloss-concordant">Concordant Pair</a> &middot; <a href="#gloss-confounder">Confounder</a> &middot; <a href="#gloss-covariate">Covariate</a> &middot; <a href="#gloss-dependent-var">Dependent Variable / Outcome / Response</a> &middot; <a href="#gloss-discordant">Discordant Pair</a> &middot; <a href="#gloss-factor">Factor</a> &middot; <a href="#gloss-heteroscedasticity">Heteroscedasticity</a> &middot; <a href="#gloss-homoscedasticity">Homoscedasticity</a> &middot; <a href="#gloss-independent-samples">Independent Samples</a> &middot; <a href="#gloss-independent-var">Independent Variable / Predictor / Exposure</a> &middot; <a href="#gloss-interaction-effect">Interaction Effect</a> &middot; <a href="#gloss-kurtosis">Kurtosis</a> &middot; <a href="#gloss-level">Level</a> &middot; <a href="#gloss-linearity">Linearity</a> &middot; <a href="#gloss-main-effect">Main Effect</a> &middot; <a href="#gloss-mediator">Mediator</a> &middot; <a href="#gloss-moderator">Moderator / Effect Modifier</a> &middot; <a href="#gloss-multivariate">Multivariate / Multivariable</a> &middot; <a href="#gloss-normality">Normality</a> &middot; <a href="#gloss-outlier">Outlier</a> &middot; <a href="#gloss-parameter">Parameter</a> &middot; <a href="#gloss-population">Population</a> &middot; <a href="#gloss-related-samples">Related / Paired / Matched Samples</a> &middot; <a href="#gloss-sample">Sample</a> &middot; <a href="#gloss-skewness">Skewness</a> &middot; <a href="#gloss-statistic">Statistic</a> &middot; <a href="#gloss-univariate">Univariate</a> &middot; <a href="#gloss-variable">Variable</a> &middot; <a href="#gloss-variate">Variate</a></p>`,
+        html: `<p>Every term on this page, alphabetically &mdash; click one to jump straight to its entry below.</p><p class="ref-quick-index"><a href="#gloss-bimodal">Bimodal / Unimodal</a> &middot; <a href="#gloss-bivariate">Bivariate</a> &middot; <a href="#gloss-cauchy">Cauchy Distribution</a> &middot; <a href="#gloss-concordant">Concordant Pair</a> &middot; <a href="#gloss-confounder">Confounder</a> &middot; <a href="#gloss-covariate">Covariate</a> &middot; <a href="#gloss-dependent-var">Dependent Variable / Outcome / Response</a> &middot; <a href="#gloss-discordant">Discordant Pair</a> &middot; <a href="#gloss-factor">Factor</a> &middot; <a href="#gloss-heteroscedasticity">Heteroscedasticity</a> &middot; <a href="#gloss-homoscedasticity">Homoscedasticity</a> &middot; <a href="#gloss-independent-samples">Independent Samples</a> &middot; <a href="#gloss-independent-var">Independent Variable / Predictor / Exposure</a> &middot; <a href="#gloss-interaction-effect">Interaction Effect</a> &middot; <a href="#gloss-kurtosis">Kurtosis</a> &middot; <a href="#gloss-level">Level</a> &middot; <a href="#gloss-linearity">Linearity</a> &middot; <a href="#gloss-mahalanobis">Mahalanobis Distance</a> &middot; <a href="#gloss-main-effect">Main Effect</a> &middot; <a href="#gloss-mediator">Mediator</a> &middot; <a href="#gloss-moderator">Moderator / Effect Modifier</a> &middot; <a href="#gloss-multivariate">Multivariate / Multivariable</a> &middot; <a href="#gloss-normality">Normality</a> &middot; <a href="#gloss-outlier">Outlier</a> &middot; <a href="#gloss-parameter">Parameter</a> &middot; <a href="#gloss-population">Population</a> &middot; <a href="#gloss-related-samples">Related / Paired / Matched Samples</a> &middot; <a href="#gloss-sample">Sample</a> &middot; <a href="#gloss-skewness">Skewness</a> &middot; <a href="#gloss-statistic">Statistic</a> &middot; <a href="#gloss-univariate">Univariate</a> &middot; <a href="#gloss-variable">Variable</a> &middot; <a href="#gloss-variate">Variate</a></p>`,
       },
       {
         heading: 'Variable Roles: What Job Is a Variable Playing?',
@@ -22745,6 +22785,13 @@ const GUIDES = [
           <tr><td><span id="gloss-bimodal"></span>Bimodal / Unimodal</td><td style="text-align:left;">A distribution with two distinct peaks (bimodal) rather than one (unimodal) — often a sign the sample actually mixes two different underlying subgroups, which a single mean and SD would misrepresent.</td><td style="text-align:left;">&mdash;</td></tr>
         </tbody></table></div>`,
       },
+      {
+        heading: 'Named Distributions & Distances: Cauchy, Mahalanobis',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-cauchy"></span>Cauchy Distribution</td><td style="text-align:left;">A symmetric, bell-shaped-looking probability distribution whose mean and variance are both mathematically undefined — its tails are so heavy that averaging more observations doesn't narrow the estimate at all; the average of n Cauchy-distributed values has the exact same spread as a single value, no matter how large n gets. The standard textbook counterexample to "the Central Limit Theorem always applies" and to "more data always helps."</td><td style="text-align:left;"><a href="#clt-simulator">Central Limit Theorem Simulator</a></td></tr>
+          <tr><td><span id="gloss-mahalanobis"></span>Mahalanobis Distance</td><td style="text-align:left;">A distance measure between a point and a distribution's center (or between two groups' centroids) that accounts for the variables' own variances and correlations, unlike ordinary (Euclidean) distance, which treats every direction as equally spread out. The basis of Hotelling's T&sup2; and MANOVA's group-separation tests, and the standard tool for flagging multivariate outliers — a point unremarkable on each variable alone can still be a clear outlier once their correlation is accounted for.</td><td style="text-align:left;"><a href="#manova">MANOVA (2 Outcomes)</a></td></tr>
+        </tbody></table></div>`,
+      },
     ],
     related: [
       { id: 'appraisal-confounding-bias', why: 'Full explanation of confounding and why randomization controls for it — the concept behind the confounder row above.' },
@@ -22754,6 +22801,8 @@ const GUIDES = [
       { id: 'data-paired-independent', why: 'Full explanation of related vs. independent samples, with worked examples of each.' },
       { id: 'mcnemars-test', why: 'Computes a result directly from concordant/discordant pair counts, the terms defined above.' },
       { id: 'shapiro-wilk-test', why: 'Tests the normality assumption defined above directly, on your own data.' },
+      { id: 'clt-simulator', why: 'Watch the Central Limit Theorem hold for ordinary skewed/bimodal populations — the Cauchy row above is the classic counterexample where it fails.' },
+      { id: 'manova', why: 'Computes Mahalanobis-distance-based group separation directly, via Wilks\' Lambda and Pillai\'s Trace.' },
       { id: 'reference-glossary-abbreviations', why: 'The companion glossary for abbreviations and mathematical notation, rather than plain-English concept words.' },
     ],
   },

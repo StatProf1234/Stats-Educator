@@ -429,6 +429,19 @@ function calculatorCountSummary() {
   return { total, available, categories, availLabel, plainLabel };
 }
 
+// Same idea as calculatorCountSummary(), for GUIDES — shared by the
+// Learn hub's own header and the calculator home page's cross-link
+// banner, so neither hardcodes a count that drifts out of sync as
+// guides are added. Unlike calculators, every guide in GUIDES is
+// already written (there's no "planned" status to report), so this
+// is just a total/category count, not an available-vs-coming-soon
+// split.
+function guideCountSummary() {
+  const total      = GUIDES.length;
+  const categories = new Set(GUIDES.map(g => g.category)).size;
+  return { total, categories };
+}
+
 // Shared 3-way toggle at the top of each hub page (Calculator home,
 // Learn hub, Designs hub) — `active` marks which one is current.
 function hubToggleHtml(active) {
@@ -449,6 +462,7 @@ function renderHome() {
   }
 
   const { total, availLabel } = calculatorCountSummary();
+  const { total: guideTotal, categories: guideCategories } = guideCountSummary();
 
   const sections = Object.entries(groups).map(([cat, entries]) => {
     const cards = entries.map(entry => {
@@ -514,7 +528,7 @@ function renderHome() {
     </a>
     <a class="wizard-banner alt-banner" href="#learn">
       <span class="wizard-banner-icon">L</span>
-      <span class="wizard-banner-text">Critical appraisal guides, reporting-guideline checklists, and a notation glossary — all under Learn.</span>
+      <span class="wizard-banner-text">${guideTotal} critical appraisal guides, reporting-guideline checklists, and reference pages across ${guideCategories} categories — all under Learn.</span>
       <span class="wizard-banner-arrow">→</span>
     </a>
     <div class="home-sections-grid">${sections}</div>
@@ -937,6 +951,7 @@ function renderLearnHub() {
   }
 
   const { total: calcTotal, categories: calcCategories, plainLabel: calcAvailLabel } = calculatorCountSummary();
+  const { total: guideTotal, categories: guideCategories } = guideCountSummary();
 
   const catEntries = Object.entries(groups);
 
@@ -981,7 +996,12 @@ function renderLearnHub() {
     ${hubToggleHtml('learn')}
     <div class="home-eyebrow">Critical Appraisal &amp; Reference</div>
     <h1 class="home-title">Learn</h1>
-    <p class="home-desc">Reference guides for using this site well — how to recognize the kind of data you're working with, how to read the charts these calculators produce, and how to critically appraise the studies you're applying them to. Looking for a specific calculator instead? See the Calculator Index.</p>
+    <p class="home-desc">
+      ${guideTotal} guides across ${guideCategories} categories — reference for using this site well:
+      how to recognize the kind of data you're working with, how to read the charts these calculators
+      produce, and how to critically appraise the studies you're applying them to. Looking for a
+      specific calculator instead? See the Calculator Index.
+    </p>
     <a class="wizard-banner" href="#learnwizard">
       <span class="wizard-banner-icon">?</span>
       <span class="wizard-banner-text">Not sure where to start? Answer a few quick questions to find the right guide.</span>
