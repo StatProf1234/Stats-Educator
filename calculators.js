@@ -17563,12 +17563,14 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-monte-carlo-pvalues', why: '"p < 0.001" from a simulated/permutation test can just mean the simulation budget ran out, not that the true p-value is tiny.' },
     { id: 'appraisal-ecological-fallacy', why: 'A group-level pattern (a country, a school, a hospital) can vanish, or even reverse, at the individual level.' },
     { id: 'appraisal-sensitivity-vs-subgroup', why: '"We ran a sensitivity analysis" and "we checked a subgroup" sound like the same reassurance — they are not.' },
+    { id: 'appraisal-post-hoc', why: '"Post hoc" describes a rigorous correction procedure, a circular power calculation, and a red flag — and a paper rarely says which one it means.' },
     { id: 'appraisal-too-good-to-be-true', why: 'A checklist for spotting overinterpreted results — conflicted framing, implausibly large effects, and one-sided harms reporting.' },
   ]},
 
   // ── QUICK REFERENCE ───────────────────────────────────────────────
   quickRefResult: { results: [
     { id: 'reference-glossary-abbreviations', why: 'Grouped by topic, with links to the fuller guide or calculator where one exists.' },
+    { id: 'reference-glossary-concepts', why: 'The plain-English companion to the abbreviations glossary — variable, covariate, confounder, concordant/discordant, and more.' },
     { id: 'reference-appraisal-worksheets', why: 'Six fill-in-the-blank worksheets, one per clinical question type.' },
     { id: 'reference-visual-tradeoff-tools', why: 'An index of every interactive chart on this site that shows a quantity trading off against another as you move a parameter.' },
     { id: 'reference-live-simulators', why: 'An index of every calculator that runs a live random simulation in your browser — coin flips, repeated samples, repeated confidence intervals.' },
@@ -20424,6 +20426,7 @@ const GUIDES = [
       { id: 'appraisal-frequentist-bayesian', why: 'Covers the Bayesian adaptive-design alternative to the alpha-spending approach described here for repeated interim looks.' },
       { id: 'appraisal-subgroup-interaction', why: 'Applies the same multiplicity problem specifically to subgroup analyses, with the ISIS-2 astrological-sign example.' },
       { id: 'holm-sidak-test', why: 'Computes the step-down Holm-Šídák correction described here directly.' },
+      { id: 'appraisal-post-hoc', why: 'Distinguishes the corrected, expected use of "post hoc" (pairwise comparisons) from the uncorrected, after-the-fact kind this multiplicity problem applies to.' },
     ],
   },
 
@@ -21274,6 +21277,7 @@ const GUIDES = [
       { id: 'measures-of-association', why: 'Produces the subgroup-level effect estimates and confidence intervals discussed in the worked example.' },
       { id: 'meta-analysis', why: 'Subgroup/heterogeneity testing in a pooled-effects context is the same underlying idea.' },
       { id: 'appraisal-sensitivity-vs-subgroup', why: "Draws the line between this and sensitivity analysis — a different robustness check that's commonly confused with this one." },
+      { id: 'appraisal-post-hoc', why: 'Places "post hoc subgroup" within the broader family of things "post hoc" can mean — some legitimate, some not.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Places this specific overinterpretation pattern within a broader checklist of ways a result gets overinterpreted.' },
     ],
   },
@@ -21321,6 +21325,7 @@ const GUIDES = [
       { id: 'reading-baujat-plots', why: 'The leave-one-out sensitivity check for a meta-analysis, and how to tell which studies are worth rerunning without.' },
       { id: 'appraisal-genetic-association-studies', why: 'MR-Egger and the weighted median estimator as sensitivity checks against horizontal pleiotropy in Mendelian Randomization.' },
       { id: 'appraisal-too-good-to-be-true', why: 'A broader checklist of ways a result gets overinterpreted, including two patterns — implausibly large early-trial effects and one-sided harms reporting — that neither this guide nor the subgroup guide covers.' },
+      { id: 'appraisal-post-hoc', why: '"Post hoc" is the other word that gets stretched to cover both a legitimate correction procedure and this exact after-the-fact subgroup problem.' },
     ],
   },
 
@@ -21363,6 +21368,55 @@ const GUIDES = [
       { id: 'appraisal-confidence-intervals', why: 'A wide confidence interval is the direct evidence that a striking effect size is still imprecisely estimated.' },
       { id: 'appraisal-regression-to-mean', why: 'A related but distinct pitfall — a real result inflated by chance rather than by a missing control group still needs replication before its magnitude can be trusted.' },
       { id: 'appraisal-appraising-rcts', why: 'Covers the trial-conduct side of this same problem — early stopping for benefit and incomplete harms reporting, as CONSORT and RoB 2 both check for.' },
+      { id: 'appraisal-post-hoc', why: 'The specific overinterpretation pattern of presenting a chance, after-the-fact finding as though it were planned — one of three unrelated things "post hoc" can mean.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-post-hoc',
+    category: 'Common Statistical Pitfalls',
+    title: '"Post Hoc" Test, Power, or Analysis? Three Different Things Sharing One Name',
+    blurb: 'The same two Latin words describe a rigorous, built-in correction procedure, a circular power calculation, and the single biggest source of manufactured "significant" findings in the literature — a paper rarely says which one it means.',
+    dek: `"Post hoc" literally just means "after this": decided or run after seeing the data, rather than planned in advance (a priori). That shared meaning is the entire family resemblance. What varies enormously is whether the "after the fact" part is harmless, actively corrected for, or exactly the problem — and all three uses appear throughout this site's own calculators and guides under the identical two words.`,
+    sections: [
+      {
+        heading: 'Post-hoc comparisons: legitimate, because the method expects this',
+        html: `<p>After a significant omnibus <a href="#anova-1way">ANOVA</a> or <a href="#kruskal-wallis">Kruskal-Wallis test</a>, which specific pairs of groups actually differ is deliberately decided <em>after</em> seeing that overall result &mdash; that's the whole point of a post-hoc pairwise comparison procedure like <a href="#tukeys-hsd">Tukey's HSD</a>, the <a href="#holm-sidak-test">Holm-Šídák test</a>, or <a href="#dunns-test">Dunn's Test</a>. Because the method is built around the fact that you're going to go looking for interesting pairs only once you already know the overall test was significant, it corrects for exactly that: controlling the family-wise error rate across however many pairwise comparisons turn out to be "worth" testing. This is the one sense of "post hoc" that isn't a caveat &mdash; it's a properly specified, expected step, not a shortcut around one.</p>`,
+      },
+      {
+        heading: 'Post-hoc power: not wrong, just uninformative',
+        html: `<p><a href="#posthoc-power">Post-hoc (achieved, or retrospective) power</a> is calculated from a completed study's own observed effect size after the fact. The catch: it's a deterministic, one-to-one function of the study's own p-value, so it can't tell a reader anything the p-value hasn't already said. A low post-hoc power number attached to a non-significant result doesn't mean the true effect is "trending" toward significance, and a high one attached to a significant result doesn't add independent reassurance &mdash; it's simply restating the same finding on a different scale. A-priori power belongs at the planning stage, before data collection; once a study is finished, its achieved power is closer to decoration than to new evidence.</p>`,
+      },
+      {
+        heading: 'Post hoc analysis: the pitfall — deciding what to report after seeing the answer',
+        html: `<p>This is the broad, colloquial sense, and the one actually worth being skeptical of: any analytic decision &mdash; which subgroup to highlight, which outcome to call primary, which time point to report, where to draw a cutpoint on a continuous variable &mdash; made <em>after</em> looking at the data, then presented as though it answered a question posed in advance. Unlike post-hoc pairwise comparisons above, this kind usually isn't corrected for, and often isn't even disclosed as having been chosen after the fact. Psychologist Norbert Kerr gave this practice its own name in a widely cited 1998 paper &mdash; <strong>HARKing</strong> (Hypothesizing After the Results are Known): writing up a post hoc finding as though the hypothesis had been specified before any data were collected.</p>`,
+      },
+      {
+        heading: 'A concrete version: the "optimal" cutpoint',
+        html: `<p>A continuous biomarker gets dichotomized at whatever threshold happens to best separate "responders" from "non-responders" in this particular dataset, then reported as "patients above X mg/dL had a significantly better response" &mdash; with no mention that dozens of other thresholds were quietly tried first. Searching for the best-looking cutpoint after seeing the data inflates the false-positive rate the same way an unrestricted subgroup search does (see <a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests</a> for that specific case), and the "optimal" cutpoint chosen this way is very unlikely to reproduce in an independent sample.</p>`,
+      },
+      {
+        heading: 'Side by side',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Sense of "post hoc"</th><th>What's decided after the fact</th><th>Is it a problem?</th></tr></thead><tbody>
+          <tr><td>Post-hoc comparisons</td><td>Which pairs of groups to test, after a significant omnibus test</td><td>No — the correction (Tukey's HSD, Holm-Šídák, Dunn's) is built for exactly this</td></tr>
+          <tr><td>Post-hoc power</td><td>Achieved power, recomputed from the study's own observed effect</td><td>Not wrong, just uninformative — restates the p-value on a different scale</td></tr>
+          <tr><td>Post hoc analysis</td><td>Which hypothesis, subgroup, outcome, or cutpoint to report, after seeing the data</td><td>Yes, unless disclosed and treated as hypothesis-generating only</td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper says "post hoc," check which of the three it means before reacting to the phrase itself. Next to "Tukey," "Holm-Šídák," or "Dunn's": an expected, corrected step after a significant omnibus test, not a red flag. Next to "power": treat the number as decorative. Next to "analysis," "comparison," or "subgroup" with no named correction procedure attached: this is the one to be skeptical of. Check whether the paper itself calls the finding exploratory or hypothesis-generating &mdash; an honest one will &mdash; and treat any such result as a reason to test the idea in a new, independent study, not as confirmatory evidence on its own.</p>`,
+      },
+    ],
+    related: [
+      { id: 'tukeys-hsd', why: "The standard corrected post-hoc pairwise comparison procedure after a significant 1-Way ANOVA." },
+      { id: 'holm-sidak-test', why: 'A slightly more powerful alternative to Tukey\'s HSD for the same corrected post-hoc comparisons.' },
+      { id: 'dunns-test', why: 'The non-parametric counterpart, run after a significant Kruskal-Wallis test.' },
+      { id: 'posthoc-power', why: "Computes achieved power directly, so you can see for yourself that it's fixed once the p-value is fixed." },
+      { id: 'appraisal-subgroup-interaction', why: 'The full treatment of the post hoc subgroup-hunting pattern this guide touches on via the cutpoint example.' },
+      { id: 'appraisal-sensitivity-vs-subgroup', why: 'Draws a related but different line — between varying an analytic assumption and re-slicing the sample after the fact.' },
+      { id: 'appraisal-tails-and-multiplicity', why: 'The family-wise error rate mechanism behind why unrestrained after-the-fact comparisons manufacture false positives.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'Places this specific pattern within a broader checklist of ways a result gets overinterpreted.' },
     ],
   },
 
@@ -22352,6 +22406,97 @@ const GUIDES = [
       { id: 'appraisal-sd-vs-se', why: 'Full explanation of the SD vs. SE distinction defined here.' },
       { id: 'standard-error', why: 'Computes SE directly, if you need the number rather than just the definition.' },
       { id: 'appraisal-appraising-ai-studies', why: 'Full explanation of why accuracy alone misleads under class imbalance — the reasoning behind the AI/ML terms defined here.' },
+    ],
+  },
+
+  {
+    id: 'reference-glossary-concepts',
+    category: 'Quick Reference',
+    title: 'Glossary of Statistical Concepts and Variable Roles',
+    blurb: 'A quick lookup for the ordinary-sounding words statistics gives a specific technical meaning to — variable, covariate, concordant/discordant, and more — grouped by topic, with links to the fuller guide or calculator where one exists.',
+    dek: `This page is a companion to the Abbreviations and Symbols glossary above: that one decodes acronyms and mathematical notation, this one defines the plain-English vocabulary that shows up in a methods section without ever being explained, on the assumption that everyone already knows what it means.`,
+    sections: [
+      {
+        heading: 'How These Terms Cluster',
+        html: `<p>Most terms below fall into one of three families. <strong>Role words</strong> describe the job a variable is playing in a specific analysis (independent variable, covariate, confounder) — the same variable can even change role between studies. <strong>Relationship words</strong> describe how two variables, or two samples, relate to each other (related vs. independent samples, concordant vs. discordant, homoscedastic vs. heteroscedastic). <strong>Design/shape words</strong> describe the structure of a study or the shape of a distribution (factor, level, skewness, bimodal). Knowing which bucket a word falls into is usually enough to guess roughly what it means before even reading the definition.</p>`,
+      },
+      {
+        heading: 'Quick Index (A–Z)',
+        html: `<p>Every term on this page, alphabetically &mdash; click one to jump straight to its entry below.</p><p class="ref-quick-index"><a href="#gloss-bimodal">Bimodal / Unimodal</a> &middot; <a href="#gloss-bivariate">Bivariate</a> &middot; <a href="#gloss-concordant">Concordant Pair</a> &middot; <a href="#gloss-confounder">Confounder</a> &middot; <a href="#gloss-covariate">Covariate</a> &middot; <a href="#gloss-dependent-var">Dependent Variable / Outcome / Response</a> &middot; <a href="#gloss-discordant">Discordant Pair</a> &middot; <a href="#gloss-factor">Factor</a> &middot; <a href="#gloss-heteroscedasticity">Heteroscedasticity</a> &middot; <a href="#gloss-homoscedasticity">Homoscedasticity</a> &middot; <a href="#gloss-independent-samples">Independent Samples</a> &middot; <a href="#gloss-independent-var">Independent Variable / Predictor / Exposure</a> &middot; <a href="#gloss-interaction-effect">Interaction Effect</a> &middot; <a href="#gloss-kurtosis">Kurtosis</a> &middot; <a href="#gloss-level">Level</a> &middot; <a href="#gloss-main-effect">Main Effect</a> &middot; <a href="#gloss-mediator">Mediator</a> &middot; <a href="#gloss-moderator">Moderator / Effect Modifier</a> &middot; <a href="#gloss-multivariate">Multivariate / Multivariable</a> &middot; <a href="#gloss-outlier">Outlier</a> &middot; <a href="#gloss-parameter">Parameter</a> &middot; <a href="#gloss-population">Population</a> &middot; <a href="#gloss-related-samples">Related / Paired / Matched Samples</a> &middot; <a href="#gloss-sample">Sample</a> &middot; <a href="#gloss-skewness">Skewness</a> &middot; <a href="#gloss-statistic">Statistic</a> &middot; <a href="#gloss-univariate">Univariate</a> &middot; <a href="#gloss-variable">Variable</a> &middot; <a href="#gloss-variate">Variate</a></p>`,
+      },
+      {
+        heading: 'Variable Roles: What Job Is a Variable Playing?',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-variable"></span>Variable</td><td style="text-align:left;">A quantity that can take different values across the subjects or observations in a study — the raw material every role below is a specific job for.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-independent-var"></span>Independent Variable / Predictor / Exposure</td><td style="text-align:left;">The variable presumed to influence or explain another. "Predictor" is the regression-modeling name for this role; "exposure" is the epidemiological name — three labels for the identical role, chosen by which field is doing the naming.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a>; <a href="#measures-of-association">Measures of Association</a></td></tr>
+          <tr><td><span id="gloss-dependent-var"></span>Dependent Variable / Outcome / Response</td><td style="text-align:left;">The variable being explained or predicted — what changes (or doesn't) because of the independent variable. Also called the response variable in a regression context.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a></td></tr>
+          <tr><td><span id="gloss-covariate"></span>Covariate</td><td style="text-align:left;">A variable included in an analysis primarily to adjust for its effect on the outcome, rather than as the main variable of interest — e.g., adjusting for baseline severity while the real question is about treatment.</td><td style="text-align:left;"><a href="#ancova">ANCOVA (2-Group, One Covariate)</a>; <a href="#learn/appraisal-ancova">How to Interpret an ANCOVA-Adjusted Result (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-confounder"></span>Confounder</td><td style="text-align:left;">A variable associated with both the exposure and the outcome that distorts the apparent relationship between them if not accounted for — the central concern behind randomization and statistical adjustment.</td><td style="text-align:left;"><a href="#learn/appraisal-confounding-bias">Confounding, Bias, and Why Randomization Matters (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-mediator"></span>Mediator</td><td style="text-align:left;">A variable sitting on the causal pathway between exposure and outcome, explaining part or all of how the exposure produces its effect. Adjusting for a mediator — rather than a confounder — can hide the very effect a study is trying to measure.</td><td style="text-align:left;"><a href="#learn/appraisal-ancova">How to Interpret an ANCOVA-Adjusted Result (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-moderator"></span>Moderator / Effect Modifier</td><td style="text-align:left;">A variable that changes the size or direction of the exposure-outcome relationship, rather than being a source of bias — the subject of a subgroup analysis and its interaction test.</td><td style="text-align:left;"><a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: '"-Variate" Family: Univariate, Bivariate, Multivariate',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-variate"></span>Variate</td><td style="text-align:left;">A single random variable or measured quantity — an older, more technical synonym for "variable" that mostly survives today inside the univariate/bivariate/multivariate family below, rather than as a standalone word.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-univariate"></span>Univariate</td><td style="text-align:left;">Involving, describing, or analyzing exactly one variable at a time — e.g., a univariate summary: the mean and SD of a single measurement.</td><td style="text-align:left;"><a href="#variance-sd">Variance &amp; Standard Deviation</a></td></tr>
+          <tr><td><span id="gloss-bivariate"></span>Bivariate</td><td style="text-align:left;">Involving exactly two variables at once, typically to describe their relationship — a bivariate scatterplot, a bivariate correlation.</td><td style="text-align:left;"><a href="#pearson-r">Pearson's Correlation</a></td></tr>
+          <tr><td><span id="gloss-multivariate"></span>Multivariate / Multivariable</td><td style="text-align:left;">Involving three or more variables analyzed jointly. Often used loosely for "more than one predictor," though careful usage reserves <strong>multivariate</strong> for multiple <em>outcome</em> variables analyzed together (as in MANOVA) and <strong>multivariable</strong> for multiple predictors with a single outcome (as in multiple regression) — a distinction worth knowing even though most papers don't observe it.</td><td style="text-align:left;"><a href="#multiple-regression">Multiple Linear Regression</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Population vs. Sample; Parameter vs. Statistic',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-population"></span>Population</td><td style="text-align:left;">The complete set of individuals or units a study wants to draw conclusions about — rarely measured in its entirety.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-sample"></span>Sample</td><td style="text-align:left;">The subset of the population actually observed or measured — what a study's data come from.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-parameter"></span>Parameter</td><td style="text-align:left;">A numerical characteristic of the population (the true mean &mu;, the true proportion &pi;) — almost always unknown, and the actual target of estimation.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (Latin vs. Greek notation)</td></tr>
+          <tr><td><span id="gloss-statistic"></span>Statistic</td><td style="text-align:left;">A numerical characteristic computed from a sample (the sample mean <span class="over-bar">x</span>) — used to estimate the corresponding, unobserved population parameter.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (Latin vs. Greek notation)</td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Related vs. Independent Samples; Concordant vs. Discordant Pairs',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-related-samples"></span>Related / Paired / Matched Samples</td><td style="text-align:left;">Two sets of measurements linked observation-by-observation to the same underlying unit — the same patient before and after, or two subjects deliberately matched on age, sex, or severity.</td><td style="text-align:left;"><a href="#learn/data-paired-independent">Paired/Matched vs. Independent Samples (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-independent-samples"></span>Independent Samples</td><td style="text-align:left;">Two sets of measurements with no such link — separate, unrelated subjects contributing to each group.</td><td style="text-align:left;"><a href="#unpaired-t-test">Unpaired t-Test (Welch's)</a></td></tr>
+          <tr><td><span id="gloss-concordant"></span>Concordant Pair</td><td style="text-align:left;">A matched pair, or a pair of paired binary measurements, where both members share the same outcome or classification — e.g., both the before and after measurement agree.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a>; <a href="#cohens-kappa">Cohen's Kappa</a></td></tr>
+          <tr><td><span id="gloss-discordant"></span>Discordant Pair</td><td style="text-align:left;">A matched pair where the two members disagree — the only pairs that carry any information in a McNemar's test, since concordant pairs cancel out of the comparison entirely.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Homoscedasticity vs. Heteroscedasticity',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-homoscedasticity"></span>Homoscedasticity</td><td style="text-align:left;">Constant variance (spread) across the range of another variable — e.g., a regression's residuals scattering evenly across every predicted value. Literally "same scatter," and the same underlying idea as homogeneity of variance, just the term more often reached for in a regression/residuals context.</td><td style="text-align:left;"><a href="#learn/appraisal-homogeneity-sphericity">Homogeneity of Variance and Sphericity (Learn guide)</a>; <a href="#levenes-test">Levene's Test</a></td></tr>
+          <tr><td><span id="gloss-heteroscedasticity"></span>Heteroscedasticity</td><td style="text-align:left;">The opposite: variance that changes systematically across the range of another variable — e.g., a regression residual funnel that widens as predicted values increase. A violation of the constant-variance assumption behind ordinary linear regression's standard errors.</td><td style="text-align:left;"><a href="#learn/appraisal-homogeneity-sphericity">Homogeneity of Variance and Sphericity (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Factor, Level, Main Effect, Interaction',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-factor"></span>Factor</td><td style="text-align:left;">A categorical independent variable in an ANOVA-family design — e.g., "Treatment" or "Sex" as a factor, as distinct from a continuous covariate.</td><td style="text-align:left;"><a href="#anova-2way">2-Way ANOVA with Replication</a></td></tr>
+          <tr><td><span id="gloss-level"></span>Level</td><td style="text-align:left;">One specific category within a factor — "Drug A," "Drug B," and "Placebo" are three levels of a "Treatment" factor.</td><td style="text-align:left;"><a href="#anova-1way">1-Way ANOVA</a></td></tr>
+          <tr><td><span id="gloss-main-effect"></span>Main Effect</td><td style="text-align:left;">The effect of one factor on the outcome, averaged across every level of every other factor in the model — what a factor does on its own.</td><td style="text-align:left;"><a href="#anova-2way">2-Way ANOVA with Replication</a></td></tr>
+          <tr><td><span id="gloss-interaction-effect"></span>Interaction Effect</td><td style="text-align:left;">When one factor's effect on the outcome depends on the level of another factor, so the two don't simply add together independently.</td><td style="text-align:left;"><a href="#anova-2way">2-Way ANOVA with Replication</a>; <a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Shape of a Distribution: Skewness, Kurtosis, Outlier, Bimodal',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-skewness"></span>Skewness</td><td style="text-align:left;">A measure of asymmetry in a distribution's shape. Positive (right) skew has a longer tail toward high values; negative (left) skew a longer tail toward low values — a common reason to prefer the median over the mean, and a non-parametric test over a parametric one.</td><td style="text-align:left;"><a href="#interquartile-range">Interquartile Range (IQR)</a>; <a href="#shapiro-wilk-test">Shapiro-Wilk Test</a></td></tr>
+          <tr><td><span id="gloss-kurtosis"></span>Kurtosis</td><td style="text-align:left;">A measure of how heavy a distribution's tails are relative to a normal distribution — high kurtosis means more extreme values than a normal curve would predict.</td><td style="text-align:left;"><a href="#shapiro-wilk-test">Shapiro-Wilk Test</a></td></tr>
+          <tr><td><span id="gloss-outlier"></span>Outlier</td><td style="text-align:left;">An observation notably distant from the rest of the data — not automatically an error, and not automatically safe to remove; a genuine extreme biological value and a data-entry mistake can look identical without further investigation.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-bimodal"></span>Bimodal / Unimodal</td><td style="text-align:left;">A distribution with two distinct peaks (bimodal) rather than one (unimodal) — often a sign the sample actually mixes two different underlying subgroups, which a single mean and SD would misrepresent.</td><td style="text-align:left;">&mdash;</td></tr>
+        </tbody></table></div>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-confounding-bias', why: 'Full explanation of confounding and why randomization controls for it — the concept behind the confounder row above.' },
+      { id: 'appraisal-ancova', why: 'Full explanation of covariates and mediators in the context of adjusting a trial for a baseline measurement.' },
+      { id: 'appraisal-subgroup-interaction', why: 'Full explanation of effect modification and the interaction test — the concept behind the moderator and interaction-effect rows above.' },
+      { id: 'appraisal-homogeneity-sphericity', why: 'Full explanation of homoscedasticity under its other common name, homogeneity of variance.' },
+      { id: 'data-paired-independent', why: 'Full explanation of related vs. independent samples, with worked examples of each.' },
+      { id: 'mcnemars-test', why: 'Computes a result directly from concordant/discordant pair counts, the terms defined above.' },
+      { id: 'reference-glossary-abbreviations', why: 'The companion glossary for abbreviations and mathematical notation, rather than plain-English concept words.' },
     ],
   },
 
