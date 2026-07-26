@@ -11361,7 +11361,12 @@ const CALCULATORS = [
      the assumption behind t-tests, ANOVA, and Pearson correlation.
      Paired in practice with Levene's/Brown-Forsythe test: Levene's
      checks equal variance across groups, Shapiro-Wilk checks the
-     shape of each group's (or the residuals') distribution.          */
+     shape of each group's (or the residuals') distribution. Royston's
+     (1995) AS R94 normalizing approximation — computed here for any
+     3 ≤ n ≤ 5000, matching R's shapiro.test() — was itself validated
+     by Royston only up to n = 2000; above that, treat the p-value with
+     more caution and corroborate with 'Kolmogorov-Smirnov Test
+     (One-Sample)' or a Q-Q plot, per the caveat calculate() appends.  */
   {
     id:          'shapiro-wilk-test',
     name:        'Shapiro-Wilk Test',
@@ -11410,7 +11415,7 @@ const CALCULATORS = [
       const isSignificant = pValue < 0.05;
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
-      return [
+      const rows = [
         { label: 'Sample Size (n)', value: n, ci: null, isRatio: false },
         { label: 'Mean',            value: f(mean, 3), ci: null, isRatio: false },
         { label: 'SD',              value: f(sd, 3),   ci: null, isRatio: false },
@@ -11422,8 +11427,15 @@ const CALCULATORS = [
             ? 'Reject H₀ — the sample departs significantly from a normal distribution.'
             : 'Fail to reject H₀ — no significant departure from normality detected.' },
         { label: 'Method', isText: true, ci: null, isRatio: false,
-          value: "Royston's (1995) algorithm AS R94 — the same approximation used internally by R's shapiro.test() — is most accurate for n ≥ 12 and valid up to n = 5000." },
+          value: "Royston's (1995) algorithm AS R94 — the same approximation used internally by R's shapiro.test() — is most accurate for n ≥ 12, and computes here for any 3 ≤ n ≤ 5000." },
       ];
+
+      if (n > 2000) {
+        rows.push({ label: 'Note on Large Samples', isText: true, ci: null, isRatio: false,
+          value: `Royston's (1995) normalizing approximation was validated by its author only up to n = 2000 — this result (n = ${n}) still computes, matching R's shapiro.test(), but its p-value is less rigorously validated at this size. Consider corroborating with the Kolmogorov-Smirnov Test (One-Sample) or a Q-Q plot rather than relying on this p-value alone.` });
+      }
+
+      return rows;
     }
   },
 
@@ -11529,7 +11541,12 @@ const CALCULATORS = [
      Normal(μ₀, σ₀) — parameters fixed in advance, not estimated from
      the same sample (that variant needs a Lilliefors correction, which
      this calculator doesn't apply — use Shapiro-Wilk instead if the
-     reference mean/SD should come from the sample itself).           */
+     reference mean/SD should come from the sample itself). Even
+     setting that aside, Shapiro-Wilk is generally the more powerful
+     default for testing normality specifically, for any n it remains
+     validated for (up to 2000, per Royston 1995) — this test's usual
+     role is comparing against an externally fixed reference
+     distribution, not as a general normality check.                 */
   {
     id:          'ks-test-one-sample',
     name:        'Kolmogorov-Smirnov Test (One-Sample)',
@@ -11589,7 +11606,7 @@ const CALCULATORS = [
             ? `Reject H₀ — the sample is not consistent with a Normal(${mu0}, ${sigma0}) distribution.`
             : `Fail to reject H₀ — the sample is consistent with a Normal(${mu0}, ${sigma0}) distribution.` },
         { label: 'Note', isText: true, ci: null, isRatio: false,
-          value: "This test assumes μ₀ and σ₀ were fixed in advance, not estimated from this same sample — to test normality using the sample's own mean and SD, use the Shapiro-Wilk Test instead." },
+          value: "This test assumes μ₀ and σ₀ were fixed in advance, not estimated from this same sample — to test normality using the sample's own mean and SD, use the Shapiro-Wilk Test instead. Shapiro-Wilk is also generally the more powerful default for a normality check in the first place, for any sample size it remains validated for (up to n = 2000, per Royston 1995)." },
       ];
     }
   },
