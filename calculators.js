@@ -9376,6 +9376,116 @@ const CALCULATORS = [
     }
   },
 
+  /* ── MANOVA (2 OUTCOMES) ─────────────────────────────────────────────
+     Multivariate extension of 1-Way ANOVA to two correlated outcome
+     variables analyzed jointly, from k independent groups' summary
+     statistics (same per-group Mean/SD/N shape as gatherGroups(),
+     extended with a second outcome's Mean/SD and the within-group
+     Y1-Y2 correlation). Deliberately scoped to exactly 2 outcomes so
+     E⁻¹H's eigenvalues are exact and closed-form (a 2×2 quadratic,
+     see manovaStats() above) rather than needing a general numerical
+     eigensolver this app has no other use for. Reports Wilks' Lambda
+     with its EXACT F-transform at p=2 (Rao 1951) and Pillai's Trace
+     with the standard F-approximation (Olson 1976).                 */
+  {
+    id:          'manova',
+    name:        'MANOVA (2 Outcomes)',
+    hint:        "Wilks' Λ = |E|/|E+H|, Pillai V = Σλᵢ/(1+λᵢ)",
+    category:    'ANOVA',
+    description: "Tests whether k independent groups differ on two correlated outcome variables analyzed jointly, using Wilks' Lambda and Pillai's Trace — the multivariate extension of 1-Way ANOVA to two outcomes at once.",
+
+    formulas: [
+      {
+        label: 'Hypothesis (H) & Error (E) SSCP Matrices',
+        latex: 'H = \\sum_i n_i(\\bar y_i-\\bar y)(\\bar y_i-\\bar y)^{\\top} \\qquad E = \\sum_i (n_i-1)\\,S_i'
+      },
+      {
+        label: "Wilks' Lambda",
+        latex: '\\Lambda = \\dfrac{|E|}{|E+H|}'
+      },
+      {
+        label: 'Exact F-Transform (p = 2)',
+        latex: 'F = \\dfrac{1-\\sqrt{\\Lambda}}{\\sqrt{\\Lambda}}\\cdot\\dfrac{df_E-1}{df_H}, \\quad df_1=2\\,df_H,\\ \\ df_2=2(df_E-1)'
+      },
+      {
+        label: "Pillai's Trace",
+        latex: 'V = \\dfrac{\\lambda_1}{1+\\lambda_1}+\\dfrac{\\lambda_2}{1+\\lambda_2}, \\quad \\lambda_1,\\lambda_2 = \\text{eigenvalues of } E^{-1}H'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupFields: [
+      { prefix: 'mean1_', label: 'Y₁ Mean' },
+      { prefix: 'sd1_',   label: 'Y₁ SD' },
+      { prefix: 'mean2_', label: 'Y₂ Mean' },
+      { prefix: 'sd2_',   label: 'Y₂ SD' },
+      { prefix: 'r_',     label: 'Within-Group r(Y₁,Y₂)' },
+      { prefix: 'n_',     label: 'Size (n)' },
+    ],
+    inputs: manovaGroupInputs([
+      { mean1: 138, sd1: 12, mean2: 88, sd2: 8, r: 0.6,  n: 15 },
+      { mean1: 130, sd1: 11, mean2: 84, sd2: 7, r: 0.55, n: 15 },
+      { mean1: 122, sd1: 10, mean2: 78, sd2: 7, r: 0.5,  n: 15 },
+    ]),
+
+    example(values) {
+      const { groups, error } = gatherManovaGroups(values);
+      if (error || groups.length < 2) return 'Enter Y₁/Y₂ mean, SD, within-group r, and n for at least 2 groups to see a worked medical example here.';
+      if (groups.some(g => g.sd1 <= 0 || g.sd2 <= 0)) return 'Both outcome SDs must be greater than 0 to see a worked medical example here.';
+      if (groups.some(g => g.r <= -1 || g.r >= 1)) return 'Within-group r must be strictly between -1 and 1 to see a worked medical example here.';
+      if (groups.some(g => g.n < 2) || typeof jStat === 'undefined' || !jStat.centralF)
+        return 'Enter at least 2 subjects per group to see a worked medical example here.';
+      const stats = manovaStats(groups);
+      if (!stats) return 'Enter data where the pooled within-group covariance matrix is not singular to see a worked medical example here.';
+      const pWilks = 1 - jStat.centralF.cdf(stats.wilksF, stats.wilksDf1, stats.wilksDf2);
+      const f = v => +v.toFixed(3);
+      const tail = pWilks < 0.05
+        ? 'the groups differ jointly across both measurements, considered together'
+        : 'no significant joint difference across both measurements was detected';
+      return `${stats.k} treatment groups (N = ${stats.N}) are compared on systolic and diastolic blood pressure at once, rather than running two separate t-tests that ignore how correlated those two measurements are within each patient. Wilks' Λ = ${f(stats.wilksLambda)}, F(${stats.wilksDf1},${stats.wilksDf2}) = ${f(stats.wilksF)}, ${formatPText(pWilks)} — ${tail}.`;
+    },
+
+    calculate(values) {
+      const { groups, error } = gatherManovaGroups(values);
+      if (error) return [err(error)];
+      if (groups.length < 2) return [err('Enter Y₁/Y₂ mean, SD, within-group r, and n for at least 2 groups')];
+      if (groups.some(g => g.sd1 <= 0 || g.sd2 <= 0)) return [err('Both outcome SDs must be greater than 0 for every group')];
+      if (groups.some(g => g.r <= -1 || g.r >= 1)) return [err('Within-group r must be strictly between -1 and 1 for every group')];
+      if (groups.some(g => g.n < 2)) return [err('Every group needs a size (n) of at least 2')];
+      if (typeof jStat === 'undefined' || !jStat.centralF)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const stats = manovaStats(groups);
+      if (!stats) return [err('The pooled within-group covariance matrix is singular for this data — check for a group with r = ±1 or otherwise degenerate spread')];
+      if (stats.dfE - 1 <= 0) return [err('Need more total subjects relative to the number of groups (df_E − 1 must be positive) — increase group sizes')];
+
+      const pWilks  = 1 - jStat.centralF.cdf(stats.wilksF, stats.wilksDf1, stats.wilksDf2);
+      const pPillai = 1 - jStat.centralF.cdf(stats.pillaiF, stats.pillaiDf1, stats.pillaiDf2);
+      const isSignificant = pWilks < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Groups (k) / Total N', value: `${stats.k} / ${stats.N}`, ci: null, isRatio: false, isText: true },
+        { label: 'df (Hypothesis, Error)', value: `${stats.dfH}, ${stats.dfE}`, ci: null, isRatio: false, isText: true },
+        { label: 'Hypothesis SSCP (H₁₁, H₂₂, H₁₂)', value: `${f(stats.H11,2)}, ${f(stats.H22,2)}, ${f(stats.H12,2)}`, ci: null, isRatio: false, isText: true },
+        { label: 'Error SSCP (E₁₁, E₂₂, E₁₂)', value: `${f(stats.E11,2)}, ${f(stats.E22,2)}, ${f(stats.E12,2)}`, ci: null, isRatio: false, isText: true },
+        { label: 'Eigenvalues of E⁻¹H (λ₁, λ₂)', value: `${f(stats.lambda1)}, ${f(stats.lambda2)}`, ci: null, isRatio: false, isText: true },
+        { label: "Wilks' Lambda (Λ)", value: f(stats.wilksLambda), ci: null, isRatio: false, highlight: true },
+        { label: 'F (Wilks) & p-value', isText: true, ci: null, isRatio: false, highlight: isSignificant,
+          value: `F(${stats.wilksDf1},${stats.wilksDf2}) = ${f(stats.wilksF)}, ${formatPText(pWilks)}${isSignificant ? ' — significant' : ''}` },
+        { label: "Pillai's Trace (V)", value: f(stats.pillaiV), ci: null, isRatio: false },
+        { label: 'F (Pillai) & p-value', isText: true, ci: null, isRatio: false, highlight: pPillai < 0.05,
+          value: `F(${f(stats.pillaiDf1,2)},${f(stats.pillaiDf2,2)}) = ${f(stats.pillaiF)}, ${formatPText(pPillai)}${pPillai < 0.05 ? ' — significant' : ''}` },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? "Reject H₀ — the groups differ significantly on Y₁ and Y₂ considered jointly (Wilks' Λ). Follow up with univariate ANOVAs on each outcome, or discriminant analysis, to see which outcome(s) drive the difference."
+            : "Fail to reject H₀ — no significant joint difference across Y₁ and Y₂ detected." },
+        { label: 'Method', isText: true, ci: null, isRatio: false,
+          value: "Scoped to exactly 2 outcome variables, so E⁻¹H's eigenvalues are exact (closed-form), and Wilks' Λ uses its exact F-transform for p = 2 (Rao 1951) rather than an approximation. Pillai's Trace is generally more robust than Wilks' Λ when the groups' covariance matrices or normality are in doubt — Hotelling-Lawley Trace and Roy's Largest Root are two further MANOVA statistics not computed here." },
+      ];
+    }
+  },
+
   /* ── 84. REPEATED MEASURES ANOVA ───────────────────────────────────────
      Within-subjects ANOVA from a subjects × conditions matrix (same
      input shape as Cronbach's Alpha, ICC, and Friedman) — matches the
@@ -14186,6 +14296,122 @@ function anovaStats(groups) {
   return { k, N, grandMean, ssb, ssw, dfB, dfW, msb, msw, F: msb / msw };
 }
 
+/* ── BIVARIATE MANOVA HELPERS ────────────────────────────────────────────
+   Same per-group-summary shape as groupInputs()/gatherGroups() above,
+   extended to two correlated outcome variables per group (mean/SD for
+   each, plus the within-group Y1-Y2 correlation, which is all that's
+   needed to reconstruct each group's own 2x2 covariance matrix without
+   raw subject-level data). Deliberately scoped to exactly 2 outcomes —
+   a general p-outcome MANOVA needs a numerical eigenvalue solver for an
+   arbitrary p×p matrix, which this app has no other use for and would
+   be a much larger, riskier addition than anything else here. At p=2,
+   E⁻¹H is a 2×2 matrix, so its eigenvalues are exact and closed-form
+   (the quadratic formula on its trace/determinant) rather than an
+   approximation. */
+
+function manovaGroupInputs(defaults) {
+  const inputs = [];
+  for (let i = 1; i <= 6; i++) {
+    const d = defaults[i - 1] || { mean1: '', sd1: '', mean2: '', sd2: '', r: '', n: '' };
+    inputs.push({ id: `mean1_${i}`, label: `Y₁ Mean`,                 default: d.mean1 });
+    inputs.push({ id: `sd1_${i}`,   label: `Y₁ SD`,                   default: d.sd1 });
+    inputs.push({ id: `mean2_${i}`, label: `Y₂ Mean`,                 default: d.mean2 });
+    inputs.push({ id: `sd2_${i}`,   label: `Y₂ SD`,                   default: d.sd2 });
+    inputs.push({ id: `r_${i}`,     label: `Within-Group r(Y₁,Y₂)`,   default: d.r });
+    inputs.push({ id: `n_${i}`,     label: `Size (n)`,                default: d.n });
+  }
+  return inputs;
+}
+
+// Reads mean1_{i}/sd1_{i}/mean2_{i}/sd2_{i}/r_{i}/n_{i} for i = 1..6,
+// returning only the fully-filled-in groups — same all-or-nothing rule
+// per group as gatherGroups().
+function gatherManovaGroups(values) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const groups = [];
+  for (let i = 1; i <= 6; i++) {
+    const mean1 = values[`mean1_${i}`], sd1 = values[`sd1_${i}`];
+    const mean2 = values[`mean2_${i}`], sd2 = values[`sd2_${i}`];
+    const r = values[`r_${i}`], n = values[`n_${i}`];
+    const fields = [mean1, sd1, mean2, sd2, r, n];
+    const any = fields.some(provided);
+    const all = fields.every(provided);
+    if (all) {
+      groups.push({ label: `Group ${i}`, mean1, sd1, mean2, sd2, r, n: Math.round(n) });
+    } else if (any) {
+      return { error: `Group ${i}: enter all six fields (Y₁/Y₂ mean & SD, r, and n) together, or leave the group entirely blank` };
+    }
+  }
+  return { groups };
+}
+
+// Bivariate (2-outcome) MANOVA from k independent groups' summary
+// statistics. Builds the 2×2 Hypothesis (H, between-groups) and Error
+// (E, pooled within-groups) SSCP matrices, gets E⁻¹H's exact eigenvalues
+// via the 2×2 characteristic polynomial (quadratic formula on its
+// trace/determinant — no numerical eigensolver needed at p=2), then
+// reports Wilks' Lambda with its EXACT F-transform for p=2 (valid for
+// any number of groups — Rao 1951) and Pillai's Trace with the standard
+// s/m/n F-approximation (Olson 1976).
+function manovaStats(groups) {
+  const p = 2;
+  const k = groups.length;
+  const N = groups.reduce((s, g) => s + g.n, 0);
+
+  const grandMean1 = groups.reduce((s, g) => s + g.n * g.mean1, 0) / N;
+  const grandMean2 = groups.reduce((s, g) => s + g.n * g.mean2, 0) / N;
+
+  const H11 = groups.reduce((s, g) => s + g.n * (g.mean1 - grandMean1) ** 2, 0);
+  const H22 = groups.reduce((s, g) => s + g.n * (g.mean2 - grandMean2) ** 2, 0);
+  const H12 = groups.reduce((s, g) => s + g.n * (g.mean1 - grandMean1) * (g.mean2 - grandMean2), 0);
+
+  const E11 = groups.reduce((s, g) => s + (g.n - 1) * g.sd1 ** 2, 0);
+  const E22 = groups.reduce((s, g) => s + (g.n - 1) * g.sd2 ** 2, 0);
+  const E12 = groups.reduce((s, g) => s + (g.n - 1) * g.r * g.sd1 * g.sd2, 0);
+
+  const dfH = k - 1;
+  const dfE = N - k;
+
+  const detE = E11 * E22 - E12 * E12;
+  const detEplusH = (E11 + H11) * (E22 + H22) - (E12 + H12) ** 2;
+  if (!(detE > 0) || !(detEplusH > 0)) return null;
+
+  const wilksLambda = detE / detEplusH;
+
+  const invE11 = E22 / detE, invE12 = -E12 / detE, invE22 = E11 / detE;
+  const M11 = invE11 * H11 + invE12 * H12;
+  const M12 = invE11 * H12 + invE12 * H22;
+  const M21 = invE12 * H11 + invE22 * H12;
+  const M22 = invE12 * H12 + invE22 * H22;
+
+  const traceM = M11 + M22;
+  const detM = M11 * M22 - M12 * M21;
+  const disc = Math.max(traceM * traceM - 4 * detM, 0);
+  const sqrtDisc = Math.sqrt(disc);
+  const lambda1 = Math.max((traceM + sqrtDisc) / 2, 0);
+  const lambda2 = Math.max((traceM - sqrtDisc) / 2, 0);
+
+  const sqrtLambda = Math.sqrt(wilksLambda);
+  const wilksF = ((1 - sqrtLambda) / sqrtLambda) * ((dfE - 1) / dfH);
+  const wilksDf1 = 2 * dfH;
+  const wilksDf2 = 2 * (dfE - 1);
+
+  const pillaiV = lambda1 / (1 + lambda1) + lambda2 / (1 + lambda2);
+  const s = Math.min(p, dfH);
+  const m = (Math.abs(p - dfH) - 1) / 2;
+  const n = (dfE - p - 1) / 2;
+  const pillaiF = ((2 * n + s + 1) / (2 * m + s + 1)) * (pillaiV / (s - pillaiV));
+  const pillaiDf1 = s * (2 * m + s + 1);
+  const pillaiDf2 = s * (2 * n + s + 1);
+
+  return {
+    k, N, dfH, dfE, H11, H22, H12, E11, E22, E12,
+    lambda1, lambda2,
+    wilksLambda, wilksF, wilksDf1, wilksDf2,
+    pillaiV, pillaiF, pillaiDf1, pillaiDf2,
+  };
+}
+
 // Critical value of the studentized range distribution at α = 0.05.
 // k = 2 is exact (q = √2 · t_{0.025,df}); k = 3..6 is linearly
 // interpolated by df from the standard published q-table (valid for
@@ -16662,6 +16888,7 @@ const CALCULATOR_INDEX = [
   { id: 'anova-1way',           name: '1-Way ANOVA',                     category: 'ANOVA',                       description: 'Analysis of Variance (ANOVA) test for differences in means across three or more independent groups.',                     status: 'available' },
   { id: 'anova-2way',           name: '2-Way ANOVA with Replication',    category: 'ANOVA',                       description: 'A two-factor Analysis of Variance (ANOVA) testing main effects and interaction for two factors with multiple observations per cell.',      status: 'available' },
   { id: 'anova-multifactor',    name: 'Multi-Factor ANOVA',              category: 'ANOVA',                       description: 'Extends one-way Analysis of Variance (ANOVA) to designs with more than two independent factors.',                    status: 'available' },
+  { id: 'manova',               name: 'MANOVA (2 Outcomes)',             category: 'ANOVA',                       description: "Tests whether k independent groups differ on two correlated outcome variables analyzed jointly, using Wilks' Lambda and Pillai's Trace.", status: 'available' },
   { id: 'tukeys-hsd',           name: "Tukey's HSD Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons controlling family-wise error rate after ANOVA.',               status: 'available' },
   { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: "Tests whether two or more groups have equal variances — the precondition check for a standard (pooled-variance) ANOVA. For the two-group case, current guidance is to skip this test and simply use Welch's t-test by default instead.", status: 'available' },
   { id: 'holm-sidak-test',      name: "Holm-Šídák Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons following ANOVA, using pooled-variance t-tests with the Holm-Šídák step-down correction for multiple comparisons.', status: 'available' },
@@ -17870,6 +18097,7 @@ const SEARCH_KEYWORDS = {
   'anova-1way':             ['one-way anova', 'compare three or more group means', 'analysis of variance'],
   'anova-2way':             ['two-way anova', 'two factors', 'interaction effect'],
   'anova-multifactor':      ['multi-factor anova', 'three or more factors'],
+  'manova':                 ['manova', 'multivariate analysis of variance', 'multiple outcome variables', 'wilks lambda', "wilks' lambda", "pillai's trace", 'pillai trace', 'two correlated outcomes'],
   'tukeys-hsd':             ["tukey's hsd", 'post hoc test', 'pairwise comparison after anova', 'which groups differ'],
   'holm-sidak-test':        ['holm-sidak test', 'holm sidak', 'post hoc test', 'pairwise comparison after anova', 'multiple comparisons correction', 'step-down sidak'],
   'shapiro-wilk-test':      ['shapiro-wilk test', 'shapiro wilk', 'test for normality', 'normality assumption', 'is my data normally distributed'],
@@ -18428,6 +18656,16 @@ const NOTATION = {
     { symbol: 'SS_E', meaning: 'Error sum of squares — leftover variation not explained by any factor\'s main effect (interactions fall in here too).' },
     { symbol: 'SS_T', meaning: 'Total sum of squares across all observations.' },
     { symbol: 'df_E', meaning: 'Degrees of freedom for error, after subtracting each factor\'s degrees of freedom from the total.' },
+  ],
+  'manova': [
+    { symbol: 'Y_1, Y_2', meaning: 'The two correlated outcome variables measured on every subject.' },
+    { symbol: 'H', meaning: 'Hypothesis (between-groups) SSCP matrix — the multivariate analog of SS_between, capturing how far each group\'s mean vector sits from the grand mean vector.' },
+    { symbol: 'E', meaning: 'Error (pooled within-groups) SSCP matrix — the multivariate analog of SS_within, pooling each group\'s own covariance matrix.' },
+    { symbol: 'S_i', meaning: "Group i's own 2×2 sample covariance matrix, reconstructed from its Y₁/Y₂ SDs and within-group correlation." },
+    { symbol: '\\lambda_1, \\lambda_2', meaning: 'Eigenvalues of E⁻¹H — how much each of the two independent directions of group separation contributes, in units of hypothesis variance per unit of error variance.' },
+    { symbol: '\\Lambda', meaning: "Wilks' Lambda — the proportion of total variance NOT explained by group differences (closer to 0 means groups differ more; 1 means no difference)." },
+    { symbol: 'V', meaning: "Pillai's Trace — an alternative multivariate test statistic, generally more robust than Wilks' Λ when the groups' covariance matrices or normality are in doubt." },
+    { symbol: 'df_H, df_E', meaning: 'Hypothesis and error degrees of freedom — k−1 and N−k respectively, the same quantities a univariate ANOVA uses.' },
   ],
   'tukeys-hsd': [
     { symbol: 'HSD_{ij}', meaning: 'Honestly Significant Difference — the minimum mean gap between group i and group j needed to call them significantly different.' },
@@ -22410,7 +22648,7 @@ const GUIDES = [
       },
       {
         heading: 'Regression & Modeling',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-anova-family"></span>ANOVA / ANCOVA / MANOVA</td><td>Analysis of Variance / Covariance / Multiple outcomes</td><td style="text-align:left;">ANOVA compares means across 3+ groups; ANCOVA adds a continuous covariate; MANOVA extends the comparison to multiple outcome variables at once.</td><td style="text-align:left;"><a href="#anova-1way">1-Way ANOVA</a>; <a href="#anova-multifactor">Multi-Factor ANOVA</a>; <a href="#repeated-measures-anova">Repeated Measures ANOVA</a></td></tr><tr><td><span id="gloss-art-anova"></span>ART ANOVA</td><td>Aligned Rank Transform ANOVA</td><td style="text-align:left;">A non-parametric alternative to factorial ANOVA for data that doesn't meet normality assumptions.</td><td style="text-align:left;"><a href="#art-anova">Aligned Rank Transform (ART) ANOVA</a></td></tr><tr><td><span id="gloss-ate"></span>ATE</td><td>Average Treatment Effect</td><td style="text-align:left;">The average effect of a treatment across a population, often estimated from observational data using weighting methods to approximate randomization.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-glm"></span>GLM</td><td>Generalized Linear Model</td><td style="text-align:left;">A family of regression models (including logistic and Poisson regression) that extends linear regression to outcomes that aren't normally distributed.</td><td style="text-align:left;"><a href="#logistic-regression">Logistic Regression (2&times;2)</a>; <a href="#poisson-negbinom">Poisson &amp; Negative Binomial</a></td></tr><tr><td><span id="gloss-glmm"></span>GLMM</td><td>Generalized Linear Mixed Model</td><td style="text-align:left;">A GLM that additionally includes random effects &mdash; used here for meta-analysis models that account for both within- and between-study variation.</td><td style="text-align:left;">&mdash;</td></tr><tr><td><span id="gloss-ipw"></span>IPW</td><td>Inverse Probability Weighting</td><td style="text-align:left;">A method that reweights observational data by the inverse of each participant's estimated probability of receiving the treatment they actually received, to reduce confounding.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-r-multcorr"></span>R</td><td>Multiple Correlation Coefficient</td><td style="text-align:left;">The correlation between the observed Y values and the model's predicted Ŷ values in a regression with two or more predictors. Always 0 to 1 (never negative), unlike the plain r it generalizes.</td><td style="text-align:left;"><a href="#multiple-regression">Multiple Linear Regression</a></td></tr><tr><td><span id="gloss-r2-model"></span>R²</td><td>Coefficient of Determination</td><td style="text-align:left;">The proportion of variance in Y explained by all predictors together. In a single-predictor model it reduces exactly to r² above; adjusted R² (reported alongside it) additionally penalizes adding predictors that don't improve the fit.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a>; <a href="#multiple-regression">Multiple Linear Regression</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-anova-family"></span>ANOVA / ANCOVA / MANOVA</td><td>Analysis of Variance / Covariance / Multiple outcomes</td><td style="text-align:left;">ANOVA compares means across 3+ groups; ANCOVA adds a continuous covariate; MANOVA extends the comparison to multiple outcome variables at once.</td><td style="text-align:left;"><a href="#anova-1way">1-Way ANOVA</a>; <a href="#anova-multifactor">Multi-Factor ANOVA</a>; <a href="#repeated-measures-anova">Repeated Measures ANOVA</a>; <a href="#manova">MANOVA (2 Outcomes)</a></td></tr><tr><td><span id="gloss-art-anova"></span>ART ANOVA</td><td>Aligned Rank Transform ANOVA</td><td style="text-align:left;">A non-parametric alternative to factorial ANOVA for data that doesn't meet normality assumptions.</td><td style="text-align:left;"><a href="#art-anova">Aligned Rank Transform (ART) ANOVA</a></td></tr><tr><td><span id="gloss-ate"></span>ATE</td><td>Average Treatment Effect</td><td style="text-align:left;">The average effect of a treatment across a population, often estimated from observational data using weighting methods to approximate randomization.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-glm"></span>GLM</td><td>Generalized Linear Model</td><td style="text-align:left;">A family of regression models (including logistic and Poisson regression) that extends linear regression to outcomes that aren't normally distributed.</td><td style="text-align:left;"><a href="#logistic-regression">Logistic Regression (2&times;2)</a>; <a href="#poisson-negbinom">Poisson &amp; Negative Binomial</a></td></tr><tr><td><span id="gloss-glmm"></span>GLMM</td><td>Generalized Linear Mixed Model</td><td style="text-align:left;">A GLM that additionally includes random effects &mdash; used here for meta-analysis models that account for both within- and between-study variation.</td><td style="text-align:left;">&mdash;</td></tr><tr><td><span id="gloss-ipw"></span>IPW</td><td>Inverse Probability Weighting</td><td style="text-align:left;">A method that reweights observational data by the inverse of each participant's estimated probability of receiving the treatment they actually received, to reduce confounding.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-r-multcorr"></span>R</td><td>Multiple Correlation Coefficient</td><td style="text-align:left;">The correlation between the observed Y values and the model's predicted Ŷ values in a regression with two or more predictors. Always 0 to 1 (never negative), unlike the plain r it generalizes.</td><td style="text-align:left;"><a href="#multiple-regression">Multiple Linear Regression</a></td></tr><tr><td><span id="gloss-r2-model"></span>R²</td><td>Coefficient of Determination</td><td style="text-align:left;">The proportion of variance in Y explained by all predictors together. In a single-predictor model it reduces exactly to r² above; adjusted R² (reported alongside it) additionally penalizes adding predictors that don't improve the fit.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a>; <a href="#multiple-regression">Multiple Linear Regression</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Study Design & Reporting Checklists',
