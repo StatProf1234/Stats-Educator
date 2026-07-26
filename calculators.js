@@ -685,7 +685,11 @@ const CALCULATORS = [
      (fixed case:control ratio breaks the row-margin assumption RR
      needs; OR is invariant to which margin is fixed and stays valid).
      Small-sample tables are pointed at 'Fisher's Exact Test' rather
-     than duplicating its exact hypergeometric computation here.      */
+     than duplicating its exact hypergeometric computation here. The
+     Yates-corrected row is kept for reproducing older/published
+     analyses, but current guidance (Campbell, Stat Med 2007) is to
+     skip the correction rather than lean on it — see the caveat row
+     calculate() appends below.                                      */
   {
     id:          'chi-square-2x2',
     name:        'Chi-Square 2×2',
@@ -779,6 +783,8 @@ const CALCULATORS = [
           ci: null, isRatio: false, isText: true },
         { label: 'χ² — When to Use', isText: true, ci: null, isRatio: false,
           value: 'χ² only tests whether exposure and outcome are statistically associated — it says nothing about the size or direction of the effect. Use RR or OR below for that.' },
+        { label: "Note on Yates' Correction", isText: true, ci: null, isRatio: false,
+          value: "Yates-corrected χ² is shown for reproducing older or published analyses, but current guidance (Campbell, Stat Med 2007) generally advises against applying it at all — it was designed to approximate Fisher's Exact Test but tends to overcorrect and lose power by comparison. If the minimum expected count below is adequate (≥5), prefer the uncorrected χ² above; if it's below 5, go straight to Fisher's Exact Test rather than relying on this correction." },
       ];
 
       if (minExpected < 5) {
@@ -1592,7 +1598,7 @@ const CALCULATORS = [
 
       const rows = [
         { label: 'Pooled SD (s_pooled)',                        value: f(sp),       ci: null, isRatio: false },
-        { label: 'SE of Mean Difference (Pooled)',              value: f(sePooled), ci: null, isRatio: false, highlight: true },
+        { label: 'SE of Mean Difference (Pooled)',              value: f(sePooled), ci: null, isRatio: false },
         { label: 'SE of Mean Difference (Welch, unequal var.)', value: f(seWelch),  ci: null, isRatio: false, highlight: true },
       ];
 
@@ -1604,6 +1610,9 @@ const CALCULATORS = [
           ci: [f(diff - margin), f(diff + margin)], isRatio: false, highlight: true
         });
       }
+
+      rows.push({ label: 'Which SE to use?', isText: true, ci: null, isRatio: false,
+        value: "Current guidance favors using the Welch SE by default for the t-test and CI, even when the two groups' variances look similar — it performs about as well as the pooled SE when variances are truly equal, and considerably better when they aren't, so there's little reason to condition the choice on a preliminary equal-variance test. The pooled SE is shown mainly for reproducing analyses that specifically call for it." });
 
       return rows;
     }
@@ -1617,7 +1626,7 @@ const CALCULATORS = [
     name:        "Unpaired t-Test (Welch's)",
     hint:        't = (x̄₁−x̄₂) / SE_Welch',
     category:    'T-Tests & Z-Tests',
-    description: 'Compares means of two independent groups without assuming equal variances.',
+    description: "Compares means of two independent groups without assuming equal variances — the recommended default over the classic pooled-variance (Student's) t-test, since it performs about as well when variances are equal and considerably better when they aren't.",
 
     formulas: [
       {
@@ -3074,22 +3083,26 @@ const CALCULATORS = [
   },
 
   /* ── 29b. LEVENE'S TEST (BROWN-FORSYTHE) ────────────────────────────────
-     Tests the equal-variance assumption behind 1-Way ANOVA and the
-     pooled-variance t-test — i.e. it's a PRECONDITION check, not a
-     test of the means themselves. Uses the Brown-Forsythe variant
-     (absolute deviations from each group's MEDIAN, not its mean),
-     which is the standard robust default since it holds up much
-     better than the original Levene formulation when the underlying
-     data is skewed. Mechanically: transform each observation to
-     z_ij = |x_ij − median_i|, then simply run a 1-way ANOVA F-test on
-     the z's instead of the raw values — a large F means the groups'
-     spreads (not their centers) differ.                             */
+     Tests the equal-variance assumption behind 1-Way ANOVA — a
+     PRECONDITION check, not a test of the means themselves. Uses the
+     Brown-Forsythe variant (absolute deviations from each group's
+     MEDIAN, not its mean), which is the standard robust default since
+     it holds up much better than the original Levene formulation when
+     the underlying data is skewed. Mechanically: transform each
+     observation to z_ij = |x_ij − median_i|, then simply run a 1-way
+     ANOVA F-test on the z's instead of the raw values — a large F
+     means the groups' spreads (not their centers) differ. Still
+     relevant for the k ≥ 3 ANOVA case (this app has no Welch's-ANOVA
+     equivalent implemented), but current guidance is to skip this
+     test entirely for the plain two-group case and simply use
+     Welch's t-test by default — see the k=2 note calculate() appends
+     below and 'Unpaired t-Test (Welch's)' itself.                   */
   {
     id:          'levenes-test',
     name:        "Levene's Test (Brown-Forsythe)",
     hint:        'W = F-statistic on |xᵢⱼ − medianᵢ|',
     category:    'ANOVA',
-    description: "Tests whether two or more groups have equal variances — the assumption behind ANOVA and the pooled-variance t-test.",
+    description: "Tests whether two or more groups have equal variances — the precondition check for a standard (pooled-variance) ANOVA. For the two-group case, current guidance is to skip this test and simply use Welch's t-test by default instead.",
 
     formulas: [
       {
@@ -3122,8 +3135,8 @@ const CALCULATORS = [
       const pValue = 1 - jStat.centralF.cdf(F, dfB, dfW);
       const f = v => +v.toFixed(2);
       const tail = pValue < 0.05
-        ? 'their variances differ significantly — a standard (pooled-variance) ANOVA or t-test would not be appropriate here; consider Welch\'s correction instead'
-        : 'no significant difference in spread was detected, so the equal-variance assumption behind a standard ANOVA/t-test looks reasonable';
+        ? 'their variances differ significantly — a standard (pooled-variance) ANOVA would not be appropriate here; consider a non-parametric alternative such as Kruskal-Wallis instead'
+        : 'no significant difference in spread was detected, so the equal-variance assumption behind a standard ANOVA looks reasonable';
       return `Before comparing mean pain scores across ${k} treatment groups (N = ${N}) with a standard ANOVA, Levene's test first checks whether the groups are even similarly variable to begin with — since ANOVA assumes equal variances across groups. W = ${f(F)}, ${formatPText(pValue)} — ${tail}.`;
     },
 
@@ -3155,9 +3168,18 @@ const CALCULATORS = [
         { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant
-            ? 'Reject H₀ — variances differ significantly across groups; a standard pooled-variance ANOVA/t-test is not appropriate here (consider Welch\'s correction or a non-parametric test instead)'
-            : 'Fail to reject H₀ — no significant difference in variances; the equal-variance assumption behind a standard ANOVA/t-test is reasonable' },
+            ? (k === 2
+                ? 'Reject H₀ — the two groups\' variances differ significantly; a standard pooled-variance t-test is not appropriate here (though see the note below on why that\'s rarely the deciding factor)'
+                : 'Reject H₀ — variances differ significantly across groups; a standard pooled-variance ANOVA is not appropriate here (consider a non-parametric alternative such as Kruskal-Wallis instead)')
+            : (k === 2
+                ? 'Fail to reject H₀ — no significant difference in variances between the two groups (see the note below on why this result rarely needs to change which t-test you run)'
+                : 'Fail to reject H₀ — no significant difference in variances; the equal-variance assumption behind a standard ANOVA is reasonable') },
       );
+
+      if (k === 2) {
+        rows.push({ label: 'Note for the two-group case', isText: true, ci: null, isRatio: false,
+          value: "When comparing exactly two groups, current guidance (e.g. Delacre, Lakens & Leys 2017) is to skip this pre-test and simply use Welch's t-test by default regardless of the result above — it performs about as well as a pooled-variance (Student's) t-test when variances are truly equal, and considerably better when they aren't, so there's little to gain from conditioning the choice on this test. This check remains relevant before a standard (pooled-variance) ANOVA with 3 or more groups, which has no equally simple unequal-variance default in this app." });
+      }
       return rows;
     }
   },
@@ -9458,6 +9480,101 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 109. MAUCHLY'S TEST OF SPHERICITY ───────────────────────────────────
+     Tests the assumption underneath 'Repeated Measures ANOVA' — same
+     subjects × conditions input shape. Transforms the k×k sample
+     covariance matrix onto k-1 orthonormal (reverse-Helmert) contrasts
+     to get S*, then Mauchly's (1940) W = |S*|/(tr(S*)/(k-1))^(k-1)
+     with Box's (1954) chi-square approximation, plus the
+     Greenhouse-Geisser epsilon correction factor. See
+     mauchlySphericityTest() in the MATRIX/SPHERICITY HELPERS above.  */
+  {
+    id:          'mauchlys-test',
+    name:        "Mauchly's Test of Sphericity",
+    hint:        'W = |S*| / [tr(S*)/(k−1)]^(k−1)',
+    category:    'ANOVA',
+    description: 'Tests whether the variances of the differences between every pair of repeated-measures conditions are equal — the sphericity assumption a standard Repeated Measures ANOVA depends on.',
+
+    formulas: [
+      {
+        label: 'Orthonormal Contrast Transform',
+        latex: 'S^{\\ast} = C\\,S\\,C^{\\top}, \\quad S = \\text{sample covariance of the } k \\text{ conditions}'
+      },
+      {
+        label: "Mauchly's W",
+        latex: 'W = \\dfrac{|S^{\\ast}|}{\\left(\\dfrac{\\operatorname{tr}(S^{\\ast})}{k-1}\\right)^{k-1}}'
+      },
+      {
+        label: 'Chi-Square Approximation',
+        latex: '\\chi^2 = -\\left[(n-1)-\\dfrac{2(k-1)^2+(k-1)+2}{6(k-1)}\\right]\\ln W, \\quad df=\\dfrac{k(k-1)}{2}-1'
+      },
+      {
+        label: 'Greenhouse-Geisser Epsilon',
+        latex: '\\hat\\varepsilon = \\dfrac{\\left[\\operatorname{tr}(S^{\\ast})\\right]^{2}}{(k-1)\\operatorname{tr}(S^{\\ast 2})}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'data', type: 'textarea',
+        label: 'Measurements — one row per subject, one column per condition (comma-separated)',
+        default: '11,11,7\n5,3,0\n13,10,9\n7,4,1\n6,5,4\n11,7,8'
+      },
+    ],
+
+    example({ data }) {
+      const matrix = parseMatrix(data);
+      const n = matrix.length;
+      if (n < 2) return 'Enter at least 2 subject rows to see a worked medical example here.';
+      const k = matrix[0].length;
+      if (k < 3 || matrix.some(row => row.length !== k) || matrix.some(row => row.some(v => !isFinite(v))) || n < k ||
+          typeof jStat === 'undefined' || !jStat.chisquare)
+        return 'Enter numeric data for at least 3 matched conditions, with at least as many subjects as conditions, to see a worked medical example here.';
+      const stats = mauchlySphericityTest(matrix);
+      if (!stats) return 'Enter numeric data for at least 3 matched conditions, with at least as many subjects as conditions, to see a worked medical example here.';
+      const pValue = 1 - jStat.chisquare.cdf(stats.chi2, stats.df);
+      const f = v => +v.toFixed(2);
+      const tail = pValue < 0.05
+        ? "sphericity looks violated here — a Greenhouse-Geisser or Huynh-Feldt correction to the RM ANOVA's degrees of freedom is warranted before trusting its p-value"
+        : 'no significant departure from sphericity was detected, so the standard Repeated Measures ANOVA can be trusted uncorrected';
+      return `${n} patients each have their symptom severity measured under ${k} different conditions. Before trusting a Repeated Measures ANOVA on this data, Mauchly's test checks whether every pair of conditions' score differences is equally variable (sphericity): W = ${f(stats.W)}, χ²(${stats.df}) = ${f(stats.chi2)}, ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate({ data }) {
+      const matrix = parseMatrix(data);
+      const n = matrix.length;
+      if (n < 2) return [err('Enter at least 2 subjects')];
+      const k = matrix[0].length;
+      if (k < 3) return [err('Enter at least 3 conditions (columns) — with only 2, sphericity is automatically satisfied')];
+      if (matrix.some(row => row.length !== k)) return [err('Every subject must have the same number of measurements')];
+      if (matrix.some(row => row.some(v => !isFinite(v)))) return [err('All values must be numeric')];
+      if (n < k) return [err(`Need at least as many subjects as conditions to estimate the covariance matrix (currently ${n} subjects for ${k} conditions)`)];
+      if (typeof jStat === 'undefined' || !jStat.chisquare)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const stats = mauchlySphericityTest(matrix);
+      if (!stats) return [err('The transformed covariance matrix is singular — check for duplicate or perfectly correlated conditions')];
+
+      const pValue = 1 - jStat.chisquare.cdf(stats.chi2, stats.df);
+      const isSignificant = pValue < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Subjects (n) / Conditions (k)', value: `${n} / ${k}`, ci: null, isRatio: false, isText: true },
+        { label: "Mauchly's W", value: f(stats.W), ci: null, isRatio: false, highlight: true },
+        { label: 'Chi-Square Approximation (χ²)', value: f(stats.chi2), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom', value: stats.df, ci: null, isRatio: false, isText: true },
+        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Greenhouse-Geisser ε', value: f(stats.epsilonGG, 3), ci: null, isRatio: false },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? 'Reject H₀ — sphericity is violated. Do not trust the standard Repeated Measures ANOVA p-value uncorrected — apply a Greenhouse-Geisser (ε above) or Huynh-Feldt correction to its degrees of freedom, or use a multivariate/mixed-model alternative.'
+            : 'Fail to reject H₀ — no evidence against sphericity. The standard (uncorrected) Repeated Measures ANOVA degrees of freedom are appropriate.' },
+      ];
+    }
+  },
+
   /* ── 85. KAPLAN-MEIER SURVIVAL CURVE ────────────────────────────────────
      Product-limit estimator of the survival function from raw time-
      to-event data with right censoring (event=0). Default data is the
@@ -11215,6 +11332,10 @@ const CALCULATORS = [
       rows.push({
         label: 'Method', isText: true, ci: null, isRatio: false,
         value: `Pooled-variance t-tests (using the ANOVA's MSW and dfW) with Holm-Šídák step-down correction across all pairs. The ${ciPct}% CI shown on each mean difference uses the unadjusted t critical value for context — significance (highlighted) is judged against α = ${alpha.toFixed(2)} using the Holm-Šídák-adjusted p-value instead.`
+      });
+      rows.push({
+        label: 'Note on unequal variances', isText: true, ci: null, isRatio: false,
+        value: "Every pairwise comparison here shares the ANOVA's single pooled MSW, so if Levene's Test flagged unequal variances across groups, that same limitation carries into each pair — unlike the two-group case, where Welch's t-test is simply the default regardless. A Welch-based post-hoc procedure (e.g. Games-Howell, not currently implemented in this app) would be the more appropriate choice once variances are notably unequal."
       });
 
       // C(6,2) = 15 — the most pairwise comparisons this calculator can
@@ -16046,10 +16167,13 @@ function equivalenceZoneSVG(diff, ciLo, ciHi, marginLo, marginHi) {
 }
 
 /* ── MATRIX HELPERS ────────────────────────────────────────────────────────
-   Small generic matrix operations for 'Multiple Linear Regression',
-   which solves the OLS normal equations β̂ = (X'X)⁻¹X'y directly —
-   no closed form exists for 2+ predictors, unlike the single-
-   predictor case in 'Simple Linear Regression'.                     */
+   Small generic matrix operations. matrixMultiply/matrixTranspose/
+   matrixInverse serve 'Multiple Linear Regression', which solves the
+   OLS normal equations β̂ = (X'X)⁻¹X'y directly — no closed form exists
+   for 2+ predictors, unlike the single-predictor case in 'Simple
+   Linear Regression'. determinant() additionally serves "Mauchly's
+   Test of Sphericity", which needs |Σ*| for a small (k-1)×(k-1)
+   contrast-transformed covariance matrix.                          */
 
 function matrixMultiply(A, B) {
   const rowsA = A.length, colsA = A[0].length, colsB = B[0].length;
@@ -16100,6 +16224,29 @@ function matrixInverse(A) {
   return M.map(row => row.slice(n));
 }
 
+// Determinant via Gaussian elimination with partial pivoting (O(n³),
+// fine for the small matrices this app ever builds). Returns 0 for a
+// singular matrix rather than throwing.
+function determinant(A) {
+  const n = A.length;
+  const M = A.map(row => [...row]);
+  let det = 1;
+  for (let col = 0; col < n; col++) {
+    let pivotRow = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(M[r][col]) > Math.abs(M[pivotRow][col])) pivotRow = r;
+    }
+    if (Math.abs(M[pivotRow][col]) < 1e-12) return 0;
+    if (pivotRow !== col) { [M[col], M[pivotRow]] = [M[pivotRow], M[col]]; det = -det; }
+    det *= M[col][col];
+    for (let r = col + 1; r < n; r++) {
+      const factor = M[r][col] / M[col][col];
+      for (let c = col; c < n; c++) M[r][c] -= factor * M[col][c];
+    }
+  }
+  return det;
+}
+
 // Maps a base symbol + number to its Unicode-subscript label (e.g.
 // subscriptLabel('β', 1) → 'β₁') for dynamically-labeled regression
 // coefficients, since the number of predictors isn't known until the
@@ -16107,6 +16254,69 @@ function matrixInverse(A) {
 const SUBSCRIPT_DIGITS = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
 function subscriptLabel(base, n) {
   return base + String(n).split('').map(d => SUBSCRIPT_DIGITS[+d]).join('');
+}
+
+/* ── SPHERICITY HELPERS ───────────────────────────────────────────────────
+   Shared by "Mauchly's Test of Sphericity" — same subjects × conditions
+   matrix shape as 'Repeated Measures ANOVA'.                         */
+
+// The (k-1) orthonormal reverse-Helmert contrasts used to test
+// sphericity: row i (1-indexed) is [1,...,1,-i,0,...,0]/sqrt(i(i+1)) —
+// each row sums to 0 (orthogonal to the constant vector, so the mean
+// is removed) and the rows are mutually orthogonal and unit-length.
+// Mauchly's W is invariant to which valid orthonormal contrast set is
+// used, so this particular choice is arbitrary but standard.
+function helmertContrasts(k) {
+  const M = [];
+  for (let i = 1; i <= k - 1; i++) {
+    const row = new Array(k).fill(0);
+    for (let c = 0; c < i; c++) row[c] = 1;
+    row[i] = -i;
+    const norm = Math.sqrt(i * (i + 1));
+    M.push(row.map(v => v / norm));
+  }
+  return M;
+}
+
+// Mauchly's (1940) test of sphericity from a subjects × conditions
+// matrix: transforms the raw k×k sample covariance matrix S onto k-1
+// orthonormal contrasts (removing the mean) to get S*, then computes
+// W = |S*| / (tr(S*)/(k-1))^(k-1) and Box's (1954) chi-square
+// approximation to W's sampling distribution. Also returns the
+// Greenhouse-Geisser epsilon estimate — [tr(S*)]² / [(k-1)·tr(S*²)] —
+// the standard correction factor applied to the RM ANOVA's degrees of
+// freedom once sphericity is violated. Returns null if S* is singular
+// (too few subjects relative to conditions).
+function mauchlySphericityTest(matrix) {
+  const n = matrix.length, k = matrix[0].length, p = k - 1;
+
+  const means = Array.from({ length: k }, (_, j) => matrix.reduce((s, row) => s + row[j], 0) / n);
+  const S = Array.from({ length: k }, () => new Array(k).fill(0));
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < k; j++) {
+      let s = 0;
+      for (const row of matrix) s += (row[i] - means[i]) * (row[j] - means[j]);
+      S[i][j] = s / (n - 1);
+    }
+  }
+
+  const M = helmertContrasts(k);
+  const Sstar = matrixMultiply(M, matrixMultiply(S, matrixTranspose(M)));
+
+  const detS = determinant(Sstar);
+  if (!(detS > 0)) return null;
+  const trace = Sstar.reduce((s, row, i) => s + row[i], 0);
+  const W = detS / Math.pow(trace / p, p);
+
+  const dfW = n - 1;
+  const correction = 1 - (2 * p * p + p + 2) / (6 * p * dfW);
+  const chi2 = -dfW * correction * Math.log(W);
+  const df = (p * (p + 1)) / 2 - 1;
+
+  const traceSq = matrixMultiply(Sstar, Sstar).reduce((s, row, i) => s + row[i], 0);
+  const epsilonGG = (trace * trace) / (p * traceSq);
+
+  return { n, k, p, W, chi2, df, epsilonGG };
 }
 
 /* ── SURVIVAL ANALYSIS HELPERS ────────────────────────────────────────────
@@ -16399,7 +16609,7 @@ const CALCULATOR_INDEX = [
 
   // ── 3. T-TESTS & Z-TESTS ─────────────────────────────────────────────
   { id: 'one-sample-t-test',    name: '1-Sample t-Test',                 category: 'T-Tests & Z-Tests',           description: 'Tests whether a sample mean differs from a known population mean.',                           status: 'available' },
-  { id: 'unpaired-t-test',      name: "Unpaired t-Test (Welch's)",       category: 'T-Tests & Z-Tests',           description: 'Compares means of two independent groups without assuming equal variances.',                   status: 'available' },
+  { id: 'unpaired-t-test',      name: "Unpaired t-Test (Welch's)",       category: 'T-Tests & Z-Tests',           description: "Compares means of two independent groups without assuming equal variances — the recommended default over the classic pooled-variance (Student's) t-test.", status: 'available' },
   { id: 'equivalence-test',     name: 'Equivalence / Non-Inferiority Test (TOST)', category: 'T-Tests & Z-Tests',  description: 'Tests whether the difference between two independent group means is small enough to be considered equivalent (or non-inferior) to a pre-specified margin, using the two one-sided tests (TOST) procedure.', status: 'available' },
   { id: 'paired-t-test',        name: 'Paired t-Test',                   category: 'T-Tests & Z-Tests',           description: 'Tests the mean difference between paired or matched observations.',                           status: 'available' },
   { id: 'se-mean-diff',         name: 'Standard Error of a Mean Difference', category: 'T-Tests & Z-Tests',       description: 'Computes the standard error of the difference between two independent sample means, using pooled and Welch (unequal-variance) methods.', status: 'available' },
@@ -16436,10 +16646,11 @@ const CALCULATOR_INDEX = [
   { id: 'anova-2way',           name: '2-Way ANOVA with Replication',    category: 'ANOVA',                       description: 'A two-factor Analysis of Variance (ANOVA) testing main effects and interaction for two factors with multiple observations per cell.',      status: 'available' },
   { id: 'anova-multifactor',    name: 'Multi-Factor ANOVA',              category: 'ANOVA',                       description: 'Extends one-way Analysis of Variance (ANOVA) to designs with more than two independent factors.',                    status: 'available' },
   { id: 'tukeys-hsd',           name: "Tukey's HSD Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons controlling family-wise error rate after ANOVA.',               status: 'available' },
-  { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: 'Tests whether two or more groups have equal variances — the assumption behind ANOVA and the pooled-variance t-test.', status: 'available' },
+  { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: "Tests whether two or more groups have equal variances — the precondition check for a standard (pooled-variance) ANOVA. For the two-group case, current guidance is to skip this test and simply use Welch's t-test by default instead.", status: 'available' },
   { id: 'holm-sidak-test',      name: "Holm-Šídák Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons following ANOVA, using pooled-variance t-tests with the Holm-Šídák step-down correction for multiple comparisons.', status: 'available' },
   { id: 'shapiro-wilk-test',    name: 'Shapiro-Wilk Test',               category: 'ANOVA',                       description: 'Tests whether a sample of continuous data is consistent with a normal distribution — the assumption behind parametric tests like the t-test and ANOVA.', status: 'available' },
   { id: 'repeated-measures-anova', name: 'Repeated Measures ANOVA',      category: 'ANOVA',                       description: 'A within-subjects Analysis of Variance (ANOVA) that analyzes data from designs where the same subjects are measured under multiple conditions.',   status: 'available' },
+  { id: 'mauchlys-test',        name: "Mauchly's Test of Sphericity",   category: 'ANOVA',                       description: 'Tests whether the variances of the differences between every pair of repeated-measures conditions are equal — the sphericity assumption behind Repeated Measures ANOVA.', status: 'available' },
   { id: 'ancova',               name: 'ANCOVA (2-Group, One Covariate)', category: 'ANOVA',                       description: "Analysis of Covariance (ANCOVA) compares two groups' outcome means while statistically adjusting for a continuous baseline covariate — the standard analysis for a two-arm trial with a baseline measurement.", status: 'available' },
 
   // ── 7. CORRELATION & REGRESSION ──────────────────────────────────────
@@ -16787,7 +16998,10 @@ const WIZARD_TREE = {
       { label: 'Categorical (binary yes/no) at each occasion',   next: 'cochranResult' },
     ]
   },
-  rmAnovaResult:  { results: [ { id: 'repeated-measures-anova', why: 'ANOVA for the same subjects measured under 3+ conditions.' } ] },
+  rmAnovaResult:  { results: [
+    { id: 'repeated-measures-anova', why: 'ANOVA for the same subjects measured under 3+ conditions.' },
+    { id: 'mauchlys-test', why: 'Check this first — tests the sphericity assumption a standard Repeated Measures ANOVA depends on.' },
+  ] },
   friedmanResult: { results: [ { id: 'friedman-test', why: 'Non-parametric repeated-measures test across 3+ related conditions.' } ] },
   cochranResult:  { results: [ { id: 'cochrans-q', why: 'Tests for differences among 3+ matched binary (yes/no) measurements.' } ] },
 
@@ -17312,6 +17526,7 @@ const LEARN_WIZARD_TREE = {
       { label: 'How prevalence affects a diagnostic test', next: 'res_prevalence' },
       { label: 'Survival analysis basics — censoring, hazard ratios', next: 'res_survival' },
       { label: 'How much to trust pooled or synthesized evidence', next: 'res_evidence' },
+      { label: 'Test assumptions — equal variances, sphericity', next: 'res_variance_assumptions' },
       { label: 'A specific reading trap or pitfall', next: 'res_pitfall' },
     ]
   },
@@ -17335,6 +17550,7 @@ const LEARN_WIZARD_TREE = {
   ]},
   res_prevalence: { results: [ { id: 'appraisal-diagnostic-tests-prevalence', why: 'The same test performs differently in a screening population than in a specialty referral clinic.' } ] },
   res_survival:   { results: [ { id: 'appraisal-survival-basics', why: 'Censoring, the log-rank test, and what a hazard ratio assumes to stay valid.' } ] },
+  res_variance_assumptions: { results: [ { id: 'appraisal-homogeneity-sphericity', why: "Homogeneity of variance (Levene's Test) and sphericity (Mauchly's Test) are the same underlying question — does spread stay constant — asked of independent groups vs. repeated measurements." } ] },
   res_evidence: { results: [
     { id: 'appraisal-meta-analysis-reading', why: "Heterogeneity, fixed vs. random effects, and why pooling can't fix flawed primary studies." },
     { id: 'appraisal-bias-tools', why: 'A map of which tool answers which question — CONSORT, RoB 2, AMSTAR-2, GRADE, and more.' },
@@ -17639,6 +17855,7 @@ const SEARCH_KEYWORDS = {
   'holm-sidak-test':        ['holm-sidak test', 'holm sidak', 'post hoc test', 'pairwise comparison after anova', 'multiple comparisons correction', 'step-down sidak'],
   'shapiro-wilk-test':      ['shapiro-wilk test', 'shapiro wilk', 'test for normality', 'normality assumption', 'is my data normally distributed'],
   'repeated-measures-anova': ['repeated measures anova', 'same subjects multiple conditions'],
+  'mauchlys-test': ['mauchly test', 'mauchly\'s w', 'sphericity test', 'sphericity assumption', 'test of sphericity', 'rm anova assumption'],
   'ancova':                 ['ancova', 'analysis of covariance', 'adjust for baseline', 'baseline-adjusted analysis', 'covariate-adjusted comparison', 'change score vs ancova', 'adjusted mean difference', 'randomized controlled trial', 'homogeneity of regression slopes'],
 
   // Correlation & Regression
@@ -18032,7 +18249,7 @@ const NOTATION = {
     { symbol: '\\chi^2', meaning: 'Chi-square statistic testing whether the exposure (rows) and outcome (columns) are associated.' },
     { symbol: 'a, b, c, d', meaning: 'The four cell counts of the 2×2 table: exposed/outcome+, exposed/outcome−, unexposed/outcome+, unexposed/outcome−.' },
     { symbol: 'N', meaning: 'Total number of subjects across all four cells.' },
-    { symbol: '\\chi^2_{Yates}', meaning: 'Chi-square statistic with a continuity correction applied for small expected counts.' },
+    { symbol: '\\chi^2_{Yates}', meaning: "Chi-square statistic with a continuity correction applied for small expected counts — shown for reference, but current guidance favors skipping it in favor of Fisher's Exact Test instead." },
     { symbol: '\\varphi', meaning: "Phi coefficient — a correlation-like measure of the strength of association between exposure and outcome." },
     { symbol: 'RR', meaning: 'Relative risk — how many times more likely the outcome is in the exposed group versus the unexposed group.' },
     { symbol: 'OR', meaning: 'Odds ratio — the odds of the outcome in the exposed group divided by the odds in the unexposed group.' },
@@ -18235,6 +18452,17 @@ const NOTATION = {
     { symbol: 'SS_{error}', meaning: 'Leftover variation after removing both the condition effect and the subject effect.' },
     { symbol: 'SS_T', meaning: 'Total sum of squares across every measurement in the subjects × conditions matrix.' },
     { symbol: 'F', meaning: 'F-statistic — ratio of the condition effect\'s mean square to the error mean square, with the between-subject variation removed.' },
+  ],
+  'mauchlys-test': [
+    { symbol: 'S', meaning: 'Sample k×k covariance matrix of the raw conditions.' },
+    { symbol: 'C', meaning: 'The (k-1)×k matrix of orthonormal contrasts used to remove the mean and reduce the problem to k-1 dimensions.' },
+    { symbol: 'S^{\\ast}', meaning: 'The (k-1)×(k-1) covariance matrix of the transformed (contrast) variables, S* = CSCᵀ.' },
+    { symbol: 'k', meaning: 'Number of repeated-measures conditions.' },
+    { symbol: 'n', meaning: 'Number of subjects.' },
+    { symbol: 'W', meaning: "Mauchly's W — how close S* is to a scaled identity matrix (W = 1 means perfect sphericity)." },
+    { symbol: '\\chi^2', meaning: "Box's chi-square approximation to W's sampling distribution under the null hypothesis of sphericity." },
+    { symbol: 'df', meaning: 'Degrees of freedom for the chi-square approximation, k(k-1)/2 − 1.' },
+    { symbol: '\\hat\\varepsilon', meaning: 'Greenhouse-Geisser epsilon — how far S* departs from sphericity, used to shrink the RM ANOVA\'s degrees of freedom when sphericity fails (ranges from 1/(k-1) to 1).' },
   ],
   'ancova': [
     { symbol: 'X_{ij}, Y_{ij}', meaning: "Subject j's Baseline/Covariate and Outcome values in group i." },
@@ -18897,7 +19125,7 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. For tables larger than 2&times;2 with several low expected cell counts, the <strong>Monte Carlo Exact Test</strong> is the r&times;c analog of Fisher's Exact Test. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
+        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> (adequate expected counts) or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables — current guidance favors going straight to Fisher's Exact Test for small samples rather than applying a Yates continuity correction to the chi-square approximation, which tends to overcorrect; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. For tables larger than 2&times;2 with several low expected cell counts, the <strong>Monte Carlo Exact Test</strong> is the r&times;c analog of Fisher's Exact Test. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
       },
     ],
     related: [
@@ -19080,7 +19308,7 @@ const GUIDES = [
       { id: 'unpaired-t-test', why: 'Compares means between two independent continuous samples.' },
       { id: 'paired-t-test', why: 'Compares means between two paired/matched continuous measurements.' },
       { id: 'anova-1way', why: 'Extends the two-group comparison to three or more independent groups.' },
-      { id: 'levenes-test', why: 'Checks the equal-variance assumption behind ANOVA and the pooled-variance t-test.' },
+      { id: 'levenes-test', why: "Checks the equal-variance precondition for a standard ANOVA with 3+ groups (not needed before the two-group t-test above — Welch's handles unequal variances by default)." },
       { id: 'pearson-r', why: 'Measures the linear relationship between two continuous variables.' },
       { id: 'simple-regression', why: 'Fits a line predicting one continuous variable from another.' },
       { id: 'cohens-d', why: 'Standardized effect size for the difference between two means.' },
@@ -20155,6 +20383,7 @@ const GUIDES = [
       { id: 'binomial-hyp-test', why: 'Worked example of a p-value calculation against a binomial null hypothesis.' },
       { id: 'appraisal-tails-and-multiplicity', why: 'Extends this guide\'s multiple-comparisons example into the formal family-wise error rate, and covers one-tailed vs. two-tailed testing.' },
       { id: 'appraisal-frequentist-bayesian', why: 'Generalizes this guide\'s P(data|null) vs. P(null|data) distinction into the full frequentist-vs-Bayesian divide.' },
+      { id: 'appraisal-confidence-intervals', why: 'Covers the CI-p-value duality — why any value outside a 95% CI is exactly the set of values a p-value < 0.05 would reject.' },
     ],
   },
 
@@ -20221,11 +20450,16 @@ const GUIDES = [
         heading: 'What actually matters when reading one',
         html: `<p>The width of the interval (its precision, driven mostly by sample size) and what values fall inside it &mdash; especially near the boundary closest to "no effect." A confidence interval that barely excludes zero is far less reassuring than one comfortably clear of it, even though both would technically be called "statistically significant."</p>`,
       },
+      {
+        heading: 'The CI–p-value duality: two views of the same test',
+        html: `<p>A confidence interval and a p-value aren't two independent pieces of evidence confirming each other &mdash; a 95% CI is built by inverting the same hypothesis test that produces a p-value, so the two encode exactly the same information about statistical significance. Any hypothesized value that falls <em>outside</em> a 95% CI is a value the data are inconsistent with at the &alpha; = 0.05 level: a two-sided test of "is the true value actually this?" against that value would come back with p &lt; 0.05. That's why checking whether a 95% CI crosses the null value (0 for a difference, 1 for a ratio) and checking whether p &lt; 0.05 always agree &mdash; they're reading the same underlying test from two different angles, not two separate confirmations of it.</p><p>What the CI adds beyond a bare p-value is the entire range of values the data remain compatible with, not just whether the null was rejected. A p-value of 0.04 next to a CI that barely excludes the null looks very different from a p-value of 0.04 next to a CI that excludes it by a wide margin, even though both would be reported identically as "p &lt; 0.05" &mdash; the CI is what makes the difference between "just barely inconsistent with no effect" and "clearly inconsistent with anything close to no effect" visible.</p>`,
+      },
     ],
     related: [
       { id: 'single-sample-ci', why: 'Builds a confidence interval for a single sample mean.' },
       { id: 'confidence-interval-proportion', why: 'Same idea for a single sample proportion.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Uses interval width as the direct evidence that a striking effect size is still imprecisely estimated.' },
+      { id: 'appraisal-p-values', why: 'The p-value companion guide — see the CI-p-value duality section above for why the two are two views of the same test.' },
     ],
   },
 
@@ -20579,6 +20813,65 @@ const GUIDES = [
       { id: 'ancova', why: 'Computes the two-group, one-covariate case described here, including the homogeneity-of-regression-slopes check.' },
       { id: 'unpaired-t-test', why: 'The unadjusted comparison ANCOVA improves on whenever baseline and outcome are correlated.' },
       { id: 'multiple-regression', why: 'The general-linear-model machinery ANCOVA extends to several covariates or more than two groups at once.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-homogeneity-sphericity',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Homogeneity of Variance and Sphericity: The Constant-Variance Assumptions Behind ANOVA-Family Tests',
+    blurb: 'Two precondition checks with unrelated-sounding names that are really the same question — does spread stay constant? — asked of two different data shapes: independent groups, and repeated measurements on the same subjects.',
+    dek: `Levene's Test and Mauchly's Test look like unconnected procedures, but both exist to answer a version of the same question before a t-test or ANOVA-family result can be trusted: is the data's spread constant across whatever is being compared? Homogeneity of variance asks that across independent groups; sphericity asks a related version of it across repeated conditions measured on the same subjects. Neither gets much explanation in a typical methods section, and both are commonly reported wrong or skipped outright.`,
+    sections: [
+      {
+        heading: 'The same underlying question, two data shapes',
+        html: `<p><strong>Homogeneity of variance</strong> asks whether two or more <em>independent</em> groups have equal variances &mdash; Var(Group 1) = Var(Group 2) = &hellip;. <strong>Sphericity</strong> asks a structurally different but related question about <em>repeated</em> measurements on the <em>same</em> subjects: whether the variance of the difference between every possible pair of conditions is equal &mdash; e.g., in a 3-condition design, Var(A&minus;B), Var(A&minus;C), and Var(B&minus;C) must all be roughly the same. Both are "does spread stay constant" questions; they just differ in what's being compared &mdash; separate groups side by side, versus the same subjects measured more than once.</p>`,
+      },
+      {
+        heading: 'The connective tissue: compound symmetry',
+        html: `<p><strong>Compound symmetry</strong> is the concept that ties the two together: it requires equal variances across the k repeated conditions themselves <em>and</em> equal covariances between every pair of them &mdash; literally homogeneity of variance, extended to a repeated-measures covariance matrix, plus one further condition on the covariances. Compound symmetry is <em>sufficient</em> for sphericity but not necessary for it; sphericity is the weaker property a Repeated Measures ANOVA's F-test actually depends on. With exactly two repeated conditions there's only one pair of scores to difference, so sphericity is automatically satisfied &mdash; this entire issue only arises once a design has three or more repeated measurements, the direct analog of needing three or more independent groups before homogeneity of variance becomes more than a two-group question.</p>`,
+      },
+      {
+        heading: 'Homogeneity of variance: what it requires and how it\'s checked',
+        html: `<p>The standard check is <a href="#levenes-test">Levene's Test</a>, in its Brown-Forsythe form: it transforms each observation to its absolute deviation from its own group's <em>median</em> (more robust to skewed data than deviation from the mean), then runs an ordinary 1-way ANOVA F-test on those transformed values &mdash; a large F means the groups' spreads, not their centers, differ. It's the precondition behind a standard pooled-variance t-test or 1-Way ANOVA, both of which assume every group shares one common variance when computing their pooled error term.</p>`,
+      },
+      {
+        heading: 'What a homogeneity-of-variance violation means for your test',
+        html: `<p>The two-group and 3+-group cases now get different advice. For exactly two groups, current guidance (e.g. Delacre, Lakens &amp; Leys, 2017) is to skip Levene's Test as a gate entirely and simply use <a href="#unpaired-t-test">Welch's t-test</a> by default &mdash; it performs about as well as a pooled-variance (Student's) t-test when variances are truly equal, and considerably better when they aren't, so there's little to gain from conditioning the choice on a preliminary test. For three or more groups, Levene's Test remains genuinely relevant: this app has no equally simple unequal-variance ("Welch's ANOVA") default implemented, so a significant Levene's result there is a real reason to consider the <a href="#kruskal-wallis">Kruskal-Wallis Test</a> instead of trusting a standard pooled-variance ANOVA.</p>`,
+      },
+      {
+        heading: "Sphericity: what it requires and how it's checked",
+        html: `<p><a href="#mauchlys-test">Mauchly's Test</a> is the standard formal check: it tests H&#8320;: sphericity holds, using a statistic (W) built from the covariance matrix of an orthonormal set of contrasts among the conditions, with a chi-square approximation to its null distribution. It has two well-documented weaknesses of its own &mdash; low power to detect real violations in small samples, and paradoxically high power to flag trivial, practically unimportant violations in large samples. A non-significant Mauchly's Test in a small trial is not a guarantee that sphericity truly holds, and a significant one in a very large study is not automatically fatal to the analysis; the size of the estimated departure (the epsilon below) matters as much as the p-value.</p>`,
+      },
+      {
+        heading: 'What a sphericity violation means for your test',
+        html: `<p>Unlike the two-group homogeneity case, there's no simple "just switch tests" default here &mdash; the standard fix instead shrinks a Repeated Measures ANOVA's degrees of freedom rather than discarding the test. A violation makes the RM ANOVA's F-test anti-conservative (its true Type I error rate runs higher than the nominal &alpha;, without the reported p-value itself signaling this), so both the numerator and denominator degrees of freedom get multiplied by a correction factor, epsilon (&epsilon;, bounded between 1/(k&minus;1) and 1), before recomputing the p-value against the corrected, generally non-integer, degrees of freedom &mdash; which is why a corrected result is reported as something like F(1.62, 8.11) rather than a pair of whole numbers. The <strong>Greenhouse-Geisser</strong> epsilon is the standard estimate but tends to over-correct when the true epsilon is close to 1; the <strong>Huynh-Feldt</strong> correction is a less conservative small-sample adjustment to it, often preferred once Greenhouse-Geisser's own epsilon is reasonably close to 1. A common rule of thumb (Girden, 1992): use Greenhouse-Geisser below about 0.75, Huynh-Feldt at or above it &mdash; a convention, not a rigid law. A multivariate (MANOVA) approach or a linear mixed-effects model with an unstructured covariance matrix avoid the assumption altogether, at some cost in power with small samples; if the outcome is also non-normal or ordinal, the <a href="#friedman-test">Friedman Test</a> sidesteps sphericity entirely rather than correcting the same parametric model for it.</p>`,
+      },
+      {
+        heading: 'Side by side',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th></th><th>Homogeneity of Variance</th><th>Sphericity</th></tr></thead><tbody>
+          <tr><td>Applies to</td><td>2+ independent groups</td><td>Same subjects across 3+ repeated conditions</td></tr>
+          <tr><td>Precondition for</td><td>Pooled-variance t-test / standard ANOVA</td><td>Repeated Measures ANOVA</td></tr>
+          <tr><td>Tested by</td><td>Levene's Test (Brown-Forsythe)</td><td>Mauchly's Test</td></tr>
+          <tr><td>H&#8320;</td><td>All group variances are equal</td><td>All pairwise condition-difference variances are equal</td></tr>
+          <tr><td>If violated</td><td>Two groups: use Welch's t-test by default, no pre-test needed. Three or more: consider Kruskal-Wallis instead.</td><td>Apply a Greenhouse-Geisser/Huynh-Feldt correction, switch to MANOVA/a mixed model, or use the Friedman Test if also non-normal.</td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>For a two-independent-group t-test, don't expect (or need) to see a homogeneity-of-variance test at all &mdash; a paper that simply reports Welch's t-test throughout is following current guidance, not skipping a step. For a 3+-group ANOVA or Repeated Measures ANOVA, check whether Levene's or Mauchly's Test is mentioned in the methods at all: its complete absence (rather than a reported non-significant result) is itself worth flagging, since the alternative is silently assuming constant variance by default rather than having checked it. If a Repeated Measures ANOVA instead reports "Greenhouse-Geisser corrected" or "Huynh-Feldt corrected" degrees of freedom &mdash; typically visible as non-integer values in the F-statistic &mdash; that's confirmation the correction was actually applied, not merely considered.</p>`,
+      },
+    ],
+    related: [
+      { id: 'levenes-test', why: "Tests homogeneity of variance directly — the Brown-Forsythe check described here." },
+      { id: 'mauchlys-test', why: "Computes Mauchly's W, its chi-square approximation, and the Greenhouse-Geisser epsilon described here." },
+      { id: 'unpaired-t-test', why: "Welch's t-test — the recommended two-group default regardless of Levene's Test result." },
+      { id: 'anova-1way', why: 'The 3+ independent-group test homogeneity of variance is a precondition for.' },
+      { id: 'repeated-measures-anova', why: 'The 3+ repeated-condition test sphericity is a precondition for.' },
+      { id: 'kruskal-wallis', why: 'Non-parametric alternative when homogeneity of variance fails across 3+ independent groups.' },
+      { id: 'friedman-test', why: 'Non-parametric repeated-measures alternative that sidesteps the sphericity assumption entirely.' },
+      { id: 'appraisal-crossover-trial', why: 'A common design where the same sphericity assumption applies across three or more treatment periods.' },
+      { id: 'data-paired-independent', why: 'Background on why repeated/paired measurements need their own test family in the first place.' },
     ],
   },
 

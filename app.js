@@ -70,6 +70,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.closest('a')) setSidebarOpen(false);
   });
 
+  // Breadcrumb category crumb (see renderCalculator/renderGuide's
+  // .page-breadcrumb) — pre-expands that category's section before
+  // the browser follows the link back to its hub, so the hub lands
+  // already open to the relevant section instead of fully collapsed.
+  // Delegated (rather than attached per-render) since every
+  // calculator/guide page rebuilds this breadcrumb from scratch.
+  document.addEventListener('click', e => {
+    const link = e.target.closest('a[data-expand-cat]');
+    if (!link) return;
+    const cat = link.dataset.expandCat;
+    const set = link.dataset.expandTarget === 'learn' ? expandedLearnCategories
+      : link.dataset.expandTarget === 'designs' ? expandedDesignCategories
+      : expandedHomeCategories;
+    set.add(cat);
+    pendingCategoryScroll = cat;
+  });
+
   // Chart export (PNG/JPG) — a single delegated listener attached
   // once here, rather than one per button, since showResults()
   // rebuilds the results DOM (and every button in it) from scratch
@@ -202,6 +219,54 @@ const expandedHomeCategories = new Set();
 // from expandedHomeCategories, defaults CLOSED, holds categories the
 // user has explicitly opened.
 const expandedLearnCategories = new Set();
+
+// Set by clicking a breadcrumb's category crumb (see the delegated
+// [data-expand-cat] click handler in the DOMContentLoaded block below)
+// just before the browser follows the link back to '#'/'#learn'/
+// '#designs' — consumed once by the next renderHome()/renderLearnHub()/
+// renderDesignsHub() to scroll straight to that now-expanded section
+// instead of dropping the user back at the top of a many-category hub
+// page. Same category-name string works across all three hubs' markup
+// (they all render sections as .home-section[data-cat="..."]).
+let pendingCategoryScroll = null;
+
+// Shared by renderHome()/renderLearnHub()/renderDesignsHub(): if a
+// breadcrumb click requested a specific category, scroll its section
+// into view instead of resetting to the top of the page. Falls back
+// to scrollTop = 0 (the normal behavior) when nothing was requested or
+// the category can't be found on this particular hub.
+function scrollToPendingCategoryOrTop() {
+  const main = document.getElementById('main');
+  const cat = pendingCategoryScroll;
+  pendingCategoryScroll = null;
+  const section = cat && document.querySelector(`.home-section[data-cat="${CSS.escape(cat)}"]`);
+  if (section) section.scrollIntoView({ block: 'start' });
+  else main.scrollTop = 0;
+}
+
+// Maps a Learn guide to its breadcrumb category crumb. Ordinary
+// categories link straight back to '#learn' with that category
+// pre-expanded. 'Appraising Studies by Design' guides are the
+// exception: the Learn hub deliberately excludes that whole category
+// (see renderLearnHub) in favor of the separate Designs hub, which
+// groups them under its own curated buckets (DESIGN_GLANCE_CATEGORIES)
+// rather than by guide.category directly — so this looks up which
+// bucket (if any) actually features the guide and points there
+// instead. A couple of guides in that category aren't featured in any
+// bucket yet (e.g. Genetic Association Studies, Realist Reviews); for
+// those this returns a plain, non-clickable crumb rather than link to
+// a hub page that won't actually show them.
+function guideCategoryCrumb(guide) {
+  if (guide.category !== 'Appraising Studies by Design') {
+    return { label: guide.category, href: '#learn', expandCat: guide.category, expandTarget: 'learn' };
+  }
+  for (const { category, keys } of DESIGN_GLANCE_CATEGORIES) {
+    if (keys.some(key => DESIGN_WIZARD_TREE[key]?.results?.[0]?.id === guide.id)) {
+      return { label: category, href: '#designs', expandCat: category, expandTarget: 'designs' };
+    }
+  }
+  return { label: guide.category, href: null };
+}
 
 function applyActiveState() {
   const id = location.hash.slice(1);
@@ -454,7 +519,7 @@ function renderHome() {
     </a>
     <div class="home-sections-grid">${sections}</div>
   `;
-  document.getElementById('main').scrollTop = 0;
+  scrollToPendingCategoryOrTop();
 
   document.querySelectorAll('.home-section-header').forEach(header => {
     header.addEventListener('click', () => {
@@ -942,7 +1007,7 @@ function renderLearnHub() {
     });
   });
 
-  document.getElementById('main').scrollTop = 0;
+  scrollToPendingCategoryOrTop();
 }
 
 // The 16 design leaves of DESIGN_WIZARD_TREE, grouped for the hub's
@@ -958,7 +1023,7 @@ const DESIGN_GLANCE_CATEGORIES = [
   { category: 'Observational — Comparative', keys: ['cohortResult', 'caseControlResult'] },
   { category: 'Observational — Descriptive', keys: ['caseSeriesResult', 'prevalenceResult', 'ecologicalResult'] },
   { category: 'Diagnostic & Prognostic', keys: ['diagAccuracyResult', 'aiStudyResult', 'prognosisResult'] },
-  { category: 'Evidence Synthesis & Planning', keys: ['systematicReviewResult', 'scopingReviewResult', 'realistReviewResult', 'guidelineResult', 'pilotResult'] },
+  { category: 'Evidence Synthesis & Planning', keys: ['systematicReviewResult', 'scopingReviewResult', 'guidelineResult', 'pilotResult'] },
 ];
 
 // Tracks which Designs hub categories the user has explicitly opened
@@ -1033,7 +1098,7 @@ function renderDesignsHub() {
     });
   });
 
-  document.getElementById('main').scrollTop = 0;
+  scrollToPendingCategoryOrTop();
 }
 
 // Renders a single guide: figure + legend, then prose sections, then
@@ -1098,8 +1163,19 @@ function renderGuide(guide) {
     return '';
   }).join('');
 
+  const crumb = guideCategoryCrumb(guide);
+  const crumbMiddleHtml = crumb.href
+    ? `<a href="${crumb.href}" data-expand-cat="${esc(crumb.expandCat)}" data-expand-target="${crumb.expandTarget}">${esc(crumb.label)}</a>`
+    : `<span>${esc(crumb.label)}</span>`;
+
   view().innerHTML = `
-    <div class="calc-eyebrow"><a class="calc-back" href="#learn">← All Guides</a></div>
+    <div class="page-breadcrumb">
+      <a href="#learn">Learn</a>
+      <span class="page-crumb-sep">›</span>
+      ${crumbMiddleHtml}
+      <span class="page-crumb-sep">›</span>
+      <span class="page-crumb-current">${esc(guide.title)}</span>
+    </div>
     <h1 class="calc-title">${esc(guide.title)}</h1>
     <p class="calc-desc">${guide.dek}</p>
     ${guide.figure ? `
@@ -1156,9 +1232,12 @@ function renderCalculator(calc) {
     : renderGrid(calc);
 
   view().innerHTML = `
-    <div class="calc-eyebrow">
-      <a class="calc-back" href="#" aria-label="Back to all calculators">← All</a>
-      ${esc(calc.category)}
+    <div class="page-breadcrumb">
+      <a href="#">Calculators</a>
+      <span class="page-crumb-sep">›</span>
+      <a href="#" data-expand-cat="${esc(calc.category)}" data-expand-target="home">${esc(calc.category)}</a>
+      <span class="page-crumb-sep">›</span>
+      <span class="page-crumb-current">${esc(calc.name)}</span>
     </div>
     <h1 class="calc-title">${esc(calc.name)}</h1>
     <p class="calc-desc">${esc(calc.description)}</p>
@@ -1267,9 +1346,12 @@ function renderExplorerCalculator(calc) {
   `).join('');
 
   view().innerHTML = `
-    <div class="calc-eyebrow">
-      <a class="calc-back" href="#" aria-label="Back to all calculators">← All</a>
-      ${esc(calc.category)}
+    <div class="page-breadcrumb">
+      <a href="#">Calculators</a>
+      <span class="page-crumb-sep">›</span>
+      <a href="#" data-expand-cat="${esc(calc.category)}" data-expand-target="home">${esc(calc.category)}</a>
+      <span class="page-crumb-sep">›</span>
+      <span class="page-crumb-current">${esc(calc.name)}</span>
     </div>
 
     <div class="explorer-header">
