@@ -22707,7 +22707,7 @@ const GUIDES = [
   {
     id: 'reference-glossary-concepts',
     category: 'Quick Reference',
-    title: 'Glossary of Statistical Concepts and Variable Roles',
+    title: 'Glossary of Statistical Concepts and Roles',
     blurb: 'A quick lookup for the ordinary-sounding words statistics gives a specific technical meaning to — variable, covariate, concordant/discordant, and more — grouped by topic, with links to the fuller guide or calculator where one exists.',
     dek: `This page is a companion to the Abbreviations and Symbols glossary above: that one decodes acronyms and mathematical notation, this one defines the plain-English vocabulary that shows up in a methods section without ever being explained, on the assumption that everyone already knows what it means.`,
     sections: [
