@@ -5975,11 +5975,35 @@ const CALCULATORS = [
         { label: 'z(β₀) & p-value', isText: true, ci: null, isRatio: false, value: `z = ${f(zStats[0])}, ${formatPText(pStats[0])}` },
       ];
 
+      // Each predictor's own CRUDE (univariable) odds ratio — fit from
+      // that single predictor and Y alone via the same IRLS routine
+      // (just with k=1, which for a binary predictor reduces to the
+      // identical closed-form 2×2 OR) — computed directly here rather
+      // than sending the user elsewhere to compute it by hand, so the
+      // crude-vs-adjusted comparison this calculator exists to
+      // demonstrate is visible in one place, for every predictor.
+      const crudeSummaries = [];
       for (let j = 1; j <= k; j++) {
         const aOR = Math.exp(beta[j]);
         const ciOR = [Math.exp(ciBeta[j][0]), Math.exp(ciBeta[j][1])];
+        const Xuni = matrix.map(row => [1, row[j]]);
+        const crudeFit = fitLogisticRegression(Xuni, yVals);
+
+        if (crudeFit) {
+          const seCrude = Math.sqrt(crudeFit.cov[1][1]);
+          const crudeOR = Math.exp(crudeFit.beta[1]);
+          const ciCrudeOR = [Math.exp(crudeFit.beta[1] - Zcrit * seCrude), Math.exp(crudeFit.beta[1] + Zcrit * seCrude)];
+          rows.push({ label: `Crude Odds Ratio (${subscriptLabel('X', j)} alone, ignoring other predictors)`, value: f(crudeOR),
+            ci: [f(ciCrudeOR[0]), f(ciCrudeOR[1])], isRatio: true });
+          crudeSummaries.push({ j, crudeOR, crudeBeta: crudeFit.beta[1], aOR, beta: beta[j], hasCrudeOR: true });
+        } else {
+          rows.push({ label: `Crude Odds Ratio (${subscriptLabel('X', j)} alone, ignoring other predictors)`, isText: true, ci: null, isRatio: false,
+            value: `Not shown — ${subscriptLabel('X', j)} alone perfectly separates Y, so its own crude coefficient has no finite MLE.` });
+          crudeSummaries.push({ j, aOR, beta: beta[j], hasCrudeOR: false });
+        }
+
         rows.push(
-          { label: `Coefficient ${subscriptLabel('β', j)} (${subscriptLabel('X', j)})`, value: f(beta[j]),
+          { label: `Coefficient ${subscriptLabel('β', j)} (${subscriptLabel('X', j)}, adjusted)`, value: f(beta[j]),
             ci: [f(ciBeta[j][0]), f(ciBeta[j][1])], isRatio: false },
           { label: `z(${subscriptLabel('β', j)}) & p-value`, isText: true, ci: null, isRatio: false,
             value: `z = ${f(zStats[j])}, ${formatPText(pStats[j])}` },
@@ -6001,8 +6025,29 @@ const CALCULATORS = [
           value: `Only about ${f(epv, 1)} events per predictor (the rarer of Y=1/Y=0, divided by k) — below the conventional rule-of-thumb minimum of 10 events per variable (EPV). Coefficients and CIs above may be unstable; treat them cautiously and consider this exploratory until replicated in a larger sample.` });
       }
 
-      rows.push({ label: 'Crude vs. Adjusted', isText: true, ci: null, isRatio: false,
-        value: "Each aOR above holds every other predictor in the model constant — compare it to the CRUDE (unadjusted) odds ratio for that same exposure alone, from 'Measures of Association' or 'Logistic Regression (2×2)' on a plain 2×2 table of that exposure and Y, ignoring the other predictors entirely. A large gap between the two is a sign the other predictors were meaningfully confounding that exposure's crude association. As the Table 2 Fallacy notes, only the exposure this model was actually built around should be read as a clean adjusted estimate — the other predictors' own aORs above aren't necessarily unconfounded for their own relationships with Y." });
+      // A dynamic, per-predictor explanation built from THIS model's
+      // own numbers (not generic prose) — what β_j actually is, and
+      // how far adjustment moved it from the crude, unadjusted version.
+      // "Closer to/further from the null" is judged on the log-odds
+      // (β) scale, since that's the scale the OR's distance from 1 is
+      // symmetric on — a raw OR ratio (e.g. aOR/crudeOR) would give
+      // the wrong direction whenever an OR sits below 1.
+      const explanationParts = crudeSummaries.map(s => {
+        const Xj = subscriptLabel('X', s.j);
+        const betaj = subscriptLabel('β', s.j);
+        if (!s.hasCrudeOR) {
+          return `${betaj} (${Xj}) = ${f(s.beta, 2)} is ${Xj}'s adjusted log-odds coefficient, holding every other predictor constant — e^${betaj} = ${f(s.aOR, 2)} is its adjusted odds ratio (${Xj}'s own crude OR isn't shown above, since it alone perfectly separates Y).`;
+        }
+        const distCrude = Math.abs(s.crudeBeta), distAdj = Math.abs(s.beta);
+        const pctShrink = distCrude > 0 ? (1 - distAdj / distCrude) * 100 : 0;
+        const direction = pctShrink > 0
+          ? `moved ${f(Math.abs(pctShrink), 0)}% closer to the null (OR = 1) after adjustment`
+          : `moved ${f(Math.abs(pctShrink), 0)}% further from the null after adjustment`;
+        return `For ${Xj}: ignoring the other predictor(s), the crude odds ratio is ${f(s.crudeOR, 2)}. Adjusting for the other predictor(s) gives ${betaj} = ${f(s.beta, 2)} (the log-odds change per unit of ${Xj}, holding everything else constant), an adjusted odds ratio of ${subscriptLabel('aOR', s.j)} = e^${f(s.beta, 2)} = ${f(s.aOR, 2)} — the association ${direction}, evidence the other predictor(s) were confounding ${Xj}'s crude association with Y.`;
+      });
+
+      rows.push({ label: 'Crude vs. Adjusted, in This Model', isText: true, ci: null, isRatio: false,
+        value: `${explanationParts.join(' ')} As the Table 2 Fallacy notes, only the exposure this model was actually built around should be read as a clean adjusted estimate — the other predictors' own aORs above aren't necessarily unconfounded for their own relationships with Y.` });
 
       return rows;
     }
