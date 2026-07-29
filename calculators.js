@@ -5887,6 +5887,10 @@ const CALCULATORS = [
       {
         label: 'Likelihood-Ratio Test (Overall Model)',
         latex: 'G^2 = 2(LL-LL_0) \\sim \\chi^2_k'
+      },
+      {
+        label: "Firth's Penalized Score (bias-reduced fitting option, below)",
+        latex: 'X^\\top\\big(y-\\hat p+h\\,(\\tfrac12-\\hat p)\\big)=0, \\quad h_i = \\hat p_i(1-\\hat p_i)\\,x_i^\\top(X^\\top WX)^{-1}x_i'
       }
     ],
 
@@ -5897,9 +5901,17 @@ const CALCULATORS = [
         label: 'Data — Y (0/1), X₁, X₂, … (comma-separated, one row per subject, at least 2 predictor columns)',
         default: '0,1,40\n0,1,45\n0,1,48\n0,1,50\n0,1,52\n0,1,55\n0,1,58\n0,1,60\n0,1,62\n1,1,64\n0,1,66\n1,1,68\n1,1,70\n0,1,72\n1,1,75\n0,0,55\n0,0,58\n1,0,60\n0,0,62\n0,0,65\n1,0,68\n0,0,70\n1,0,72\n1,0,74\n1,0,76\n1,0,78\n1,0,80\n1,0,82\n1,0,84\n1,0,86'
       },
+      {
+        id: 'method', type: 'select', label: 'Fitting Method', default: 'mle',
+        note: "Firth's method penalizes the likelihood to shrink coefficients slightly toward 0, which reduces small-sample bias and — unlike standard MLE — still converges to a finite estimate even when a predictor perfectly or near-perfectly separates the outcome. Switch to it if standard MLE reports non-convergence, or whenever events per predictor (EPV) is low.",
+        options: [
+          { value: 'mle',   label: 'Standard (Maximum Likelihood)' },
+          { value: 'firth', label: "Firth's Penalized Likelihood (bias-reduced)" },
+        ]
+      },
     ],
 
-    example({ data }) {
+    example({ data, method }) {
       const matrix = parseMatrix(data);
       if (matrix.length < 2) return 'Enter a Y (0/1) column and at least 2 predictor columns to see a worked medical example here.';
       const cols = matrix[0].length;
@@ -5912,9 +5924,12 @@ const CALCULATORS = [
       if (yVals.some(v => v !== 0 && v !== 1)) return 'The Y column must be 0/1 to see a worked medical example here.';
       if (n < 5 * (k + 1)) return 'Enter more subjects relative to the number of predictors to see a worked medical example here.';
 
+      const useFirth = method === 'firth';
       const X = matrix.map(row => [1, ...row.slice(1)]);
-      const fit = fitLogisticRegression(X, yVals);
-      if (!fit) return 'Enter data where the model actually converges (avoid a predictor that perfectly separates the outcome) to see a worked medical example here.';
+      const fit = fitLogisticRegression(X, yVals, useFirth);
+      if (!fit) return useFirth
+        ? 'The model still did not converge even with Firth’s method — check the data for other numeric issues (e.g. a constant predictor).'
+        : 'Enter data where the model actually converges (avoid a predictor that perfectly separates the outcome), or switch to Firth’s Penalized Likelihood below, to see a worked medical example here.';
 
       const aOR1 = Math.exp(fit.beta[1]);
       // Crude (unadjusted) OR for surgery type alone, ignoring age
@@ -5930,7 +5945,7 @@ const CALCULATORS = [
       return `${n} patients each have their surgery type (X₁: minimally invasive = 1, open = 0) and age (X₂) recorded, along with whether a complication occurred (Y). Ignoring age entirely, minimally invasive surgery looks strongly protective — a crude odds ratio of ${f(crudeOR)} from a plain 2×2 table of surgery type and complication alone (see 'Measures of Association' or 'Logistic Regression (2×2)'). But older patients in this sample were both more likely to receive open surgery and more likely to have a complication — once age is held constant, the adjusted odds ratio for surgery type shrinks to aOR = ${f(aOR1)}, with a confidence interval comfortably including 1: most of that crude "protective" effect was really just age, not the surgery itself.`;
     },
 
-    calculate({ data }) {
+    calculate({ data, method }) {
       const matrix = parseMatrix(data);
       if (matrix.length < 2) return [err('Enter at least 2 rows of data')];
       const cols = matrix[0].length;
@@ -5947,10 +5962,13 @@ const CALCULATORS = [
       if (n < 5 * (k + 1))
         return [err(`Need at least ${5 * (k + 1)} subjects to fit ${k} predictors reasonably stably (currently ${n}) — logistic regression needs more data per parameter than linear regression does`)];
 
+      const useFirth = method === 'firth';
       const X = matrix.map(row => [1, ...row.slice(1)]);
-      const fit = fitLogisticRegression(X, yVals);
+      const fit = fitLogisticRegression(X, yVals, useFirth);
       if (!fit)
-        return [err('The model did not converge — this almost always means one predictor (or a combination of predictors) perfectly or near-perfectly separates the outcome, which sends its true coefficient toward infinity. Check for a predictor value present in only one outcome group.')];
+        return [err(useFirth
+          ? 'The model still did not converge, even with Firth’s penalized likelihood — check for a constant or duplicate predictor column, or other data-entry issues beyond ordinary separation.'
+          : 'The model did not converge — this almost always means one predictor (or a combination of predictors) perfectly or near-perfectly separates the outcome, which sends its true coefficient toward infinity. Check for a predictor value present in only one outcome group, or switch Fitting Method above to Firth’s Penalized Likelihood, which is designed to still produce a finite estimate in exactly this situation.')];
 
       const { beta, cov, LL, LL0 } = fit;
       const seBeta = beta.map((_, j) => Math.sqrt(cov[j][j]));
@@ -5971,6 +5989,9 @@ const CALCULATORS = [
       const rows = [
         { label: 'Sample Size (n) / Predictors (k)', value: `${n} / ${k}`, ci: null, isRatio: false, isText: true },
         { label: 'Events (Y=1) / Non-Events (Y=0)', value: `${nEvents} / ${n - nEvents}`, ci: null, isRatio: false, isText: true },
+        { label: 'Fitting Method', isText: true, ci: null, isRatio: false, value: useFirth
+          ? "Firth's penalized likelihood — every coefficient below is shrunk slightly toward 0 relative to standard MLE, correcting small-sample bias and guaranteeing convergence even under (quasi-)complete separation, at the cost of a small amount of bias in the opposite direction. Prefer this whenever EPV is low or standard MLE reports non-convergence."
+          : 'Standard maximum likelihood (MLE). Switch to Firth’s Penalized Likelihood above if this reports non-convergence, or if events per predictor (EPV, below) is low.' },
         { label: 'Intercept (β₀) — log-odds when every predictor is 0', value: f(beta[0]), ci: [f(ciBeta[0][0]), f(ciBeta[0][1])], isRatio: false },
         { label: 'z(β₀) & p-value', isText: true, ci: null, isRatio: false, value: `z = ${f(zStats[0])}, ${formatPText(pStats[0])}` },
       ];
@@ -5987,7 +6008,7 @@ const CALCULATORS = [
         const aOR = Math.exp(beta[j]);
         const ciOR = [Math.exp(ciBeta[j][0]), Math.exp(ciBeta[j][1])];
         const Xuni = matrix.map(row => [1, row[j]]);
-        const crudeFit = fitLogisticRegression(Xuni, yVals);
+        const crudeFit = fitLogisticRegression(Xuni, yVals, useFirth);
 
         if (crudeFit) {
           const seCrude = Math.sqrt(crudeFit.cov[1][1]);
@@ -16717,14 +16738,27 @@ function matrixInverse(A) {
 // equations directly (X'WX and the score X'(y-p) built as weighted
 // sums, not via a literal n×n diagonal W, since W is diagonal and
 // that would waste an O(n²) matrix for no reason) via the same
-// matrixInverse() used for OLS. Returns null if the algorithm doesn't
-// converge within 50 iterations or any coefficient diverges — almost
-// always a sign of (quasi-)complete separation, where some predictor
-// perfectly sorts the outcome and its true MLE is at +/-infinity.
-function fitLogisticRegression(X, y) {
+// matrixInverse() used for OLS.
+//
+// When useFirth is true, fits Firth's (1993) penalized-likelihood
+// model instead: maximizes L(β) + ½log|I(β)| rather than L(β)
+// directly, which both reduces ordinary MLE's small-sample bias and
+// guarantees a finite maximum even under complete/quasi-complete
+// separation (where ordinary MLE has none). Firth's penalty enters
+// through a modified score, X'(y-p+h(½-p)) in place of X'(y-p), where
+// hᵢ = wᵢ·xᵢ'(X'WX)⁻¹xᵢ is the i-th diagonal of the hat matrix — reusing
+// the same (X'WX)⁻¹ already computed for the ordinary Newton step, so
+// the extra cost is one more O(np²) pass per iteration, not a second solve.
+//
+// Returns null if the algorithm doesn't converge within 100 iterations
+// or any coefficient diverges. With useFirth false, that's almost
+// always (quasi-)complete separation — some predictor perfectly sorts
+// the outcome and its true MLE is at +/-infinity; useFirth true is
+// specifically meant to rescue that case instead of failing.
+function fitLogisticRegression(X, y, useFirth = false) {
   const n = X.length, p = X[0].length; // p = k + 1, including the intercept
   let beta = new Array(p).fill(0);
-  const MAX_ITER = 50, TOL = 1e-8;
+  const MAX_ITER = 100, TOL = 1e-8;
   let converged = false;
 
   for (let iter = 0; iter < MAX_ITER; iter++) {
@@ -16735,17 +16769,25 @@ function fitLogisticRegression(X, y) {
     });
 
     const XtWX = Array.from({ length: p }, () => new Array(p).fill(0));
-    const score = new Array(p).fill(0);
     for (let i = 0; i < n; i++) {
-      const xi = X[i], wi = pHat[i] * (1 - pHat[i]), resid = y[i] - pHat[i];
-      for (let a = 0; a < p; a++) {
-        score[a] += xi[a] * resid;
-        for (let b = 0; b < p; b++) XtWX[a][b] += wi * xi[a] * xi[b];
-      }
+      const xi = X[i], wi = pHat[i] * (1 - pHat[i]);
+      for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) XtWX[a][b] += wi * xi[a] * xi[b];
     }
 
     const XtWXinv = matrixInverse(XtWX);
     if (!XtWXinv) return null;
+
+    const score = new Array(p).fill(0);
+    for (let i = 0; i < n; i++) {
+      const xi = X[i], wi = pHat[i] * (1 - pHat[i]);
+      let resid = y[i] - pHat[i];
+      if (useFirth) {
+        let quad = 0;
+        for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) quad += xi[a] * XtWXinv[a][b] * xi[b];
+        resid += (wi * quad) * (0.5 - pHat[i]);
+      }
+      for (let a = 0; a < p; a++) score[a] += xi[a] * resid;
+    }
 
     const step = XtWXinv.map(row => row.reduce((s, v, j) => s + v * score[j], 0));
     const newBeta = beta.map((b, j) => b + step[j]);
@@ -18426,7 +18468,7 @@ const SEARCH_KEYWORDS = {
   'simple-regression':    ['simple linear regression', 'line of best fit', 'one predictor regression', 'predict y from x'],
   'multiple-regression':  ['multiple linear regression', 'multiple predictors', 'multivariable regression', 'two or more predictors'],
   'logistic-regression':  ['logistic regression', 'binary outcome regression', 'odds ratio from a 2x2 table', 'predict yes no outcome'],
-  'multiple-logistic-regression': ['multiple logistic regression', 'multivariable logistic regression', 'adjusted odds ratio', 'aor', 'two or more predictors binary outcome', 'logistic regression multiple predictors', 'crude vs adjusted or', 'table 2 adjusted or'],
+  'multiple-logistic-regression': ['multiple logistic regression', 'multivariable logistic regression', 'adjusted odds ratio', 'aor', 'two or more predictors binary outcome', 'logistic regression multiple predictors', 'crude vs adjusted or', 'table 2 adjusted or', 'firth', "firth's method", 'penalized likelihood', 'bias-reduced logistic regression', 'complete separation', 'quasi-complete separation', 'model did not converge'],
   'multivariable-predictor': ['prediction calculator', 'predict an outcome', 'diet', 'health behavior', 'medications', 'risk score calculator', 'score a new patient', 'apply a regression equation', 'multiple predictors prediction'],
 
   // Effect Sizes & Agreement
@@ -19136,6 +19178,7 @@ const NOTATION = {
     { symbol: 'z', meaning: "Wald test statistic for a coefficient — that coefficient divided by its own standard error, referenced to the standard normal distribution." },
     { symbol: 'LL,\\ LL_0', meaning: "Log-likelihood of the fitted model, and of the intercept-only ('null') model — the basis of the likelihood-ratio test." },
     { symbol: 'G^2', meaning: 'Likelihood-ratio test statistic for the overall model, 2(LL − LL₀), compared to a chi-square distribution with k degrees of freedom.' },
+    { symbol: 'h_i', meaning: "Firth's-method-only term: subject i's hat-matrix diagonal, wᵢ·xᵢ'(X'WX)⁻¹xᵢ — how much leverage that subject has on the fit, used to bias-correct the score equation." },
   ],
   'multivariable-predictor': [
     { symbol: '\\eta', meaning: 'Linear predictor — the intercept plus every predictor’s coefficient times its value, added together.' },
