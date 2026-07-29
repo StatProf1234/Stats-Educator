@@ -5851,7 +5851,164 @@ const CALCULATORS = [
     }
   },
 
-  /* ── 51a. MULTIVARIABLE OUTCOME PREDICTOR ──────────────────────────────
+  /* ── 51a. MULTIPLE LOGISTIC REGRESSION ──────────────────────────────────
+     The multivariable extension of 'Logistic Regression (2×2)': 2+
+     predictors at once, fit by Newton-Raphson/IRLS (fitLogisticRegression()
+     above) since 2+ predictors have no closed form. Each predictor's
+     exponentiated coefficient is its ADJUSTED odds ratio (aOR) — holding
+     every other predictor in the model constant — as opposed to the
+     CRUDE/unadjusted OR a single 2×2 table or 'Measures of Association'
+     gives for that same exposure alone. This is the calculator that
+     actually produces the "aOR" figure a Table 2 reports, and the Table 2
+     Fallacy guide's caveat applies directly: only the coefficient for the
+     exposure the model was built around should be read as a clean
+     adjusted effect — the other predictors' own coefficients aren't
+     necessarily unconfounded for their own exposure-outcome relationships. */
+  {
+    id:          'multiple-logistic-regression',
+    name:        'Multiple Logistic Regression',
+    hint:        'logit(P)=β₀+β₁x₁+…+βₖxₖ, aOR=e^β (adjusted)',
+    category:    'Correlation & Regression',
+    description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor in the model constant — plus its 95% CI, Wald test, and the model's overall likelihood-ratio test.",
+
+    formulas: [
+      {
+        label: 'Logistic Model',
+        latex: '\\text{logit}\\big(P(Y=1)\\big) = \\beta_0+\\beta_1X_1+\\cdots+\\beta_kX_k'
+      },
+      {
+        label: 'Fitting: Newton-Raphson / IRLS (no closed form for k ≥ 2)',
+        latex: '\\hat\\beta^{(t+1)} = \\hat\\beta^{(t)} + (X^\\top WX)^{-1}X^\\top(y-\\hat p), \\quad W=\\text{diag}\\big(\\hat p_i(1-\\hat p_i)\\big)'
+      },
+      {
+        label: 'Adjusted Odds Ratio',
+        latex: '\\text{aOR}_j = e^{\\hat\\beta_j}, \\quad 95\\%\\ CI = e^{\\hat\\beta_j \\,\\pm\\, 1.96\\,SE(\\hat\\beta_j)}'
+      },
+      {
+        label: 'Likelihood-Ratio Test (Overall Model)',
+        latex: 'G^2 = 2(LL-LL_0) \\sim \\chi^2_k'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'data', type: 'textarea',
+        label: 'Data — Y (0/1), X₁, X₂, … (comma-separated, one row per subject, at least 2 predictor columns)',
+        default: '0,1,40\n0,1,45\n0,1,48\n0,1,50\n0,1,52\n0,1,55\n0,1,58\n0,1,60\n0,1,62\n1,1,64\n0,1,66\n1,1,68\n1,1,70\n0,1,72\n1,1,75\n0,0,55\n0,0,58\n1,0,60\n0,0,62\n0,0,65\n1,0,68\n0,0,70\n1,0,72\n1,0,74\n1,0,76\n1,0,78\n1,0,80\n1,0,82\n1,0,84\n1,0,86'
+      },
+    ],
+
+    example({ data }) {
+      const matrix = parseMatrix(data);
+      if (matrix.length < 2) return 'Enter a Y (0/1) column and at least 2 predictor columns to see a worked medical example here.';
+      const cols = matrix[0].length;
+      if (matrix.some(row => row.length !== cols) || matrix.some(row => row.some(v => !isFinite(v))))
+        return 'Enter numeric data with a consistent number of columns to see a worked medical example here.';
+      const k = cols - 1;
+      if (k < 2) return 'Enter at least 2 predictor columns to see a worked medical example here.';
+      const n = matrix.length;
+      const yVals = matrix.map(row => row[0]);
+      if (yVals.some(v => v !== 0 && v !== 1)) return 'The Y column must be 0/1 to see a worked medical example here.';
+      if (n < 5 * (k + 1)) return 'Enter more subjects relative to the number of predictors to see a worked medical example here.';
+
+      const X = matrix.map(row => [1, ...row.slice(1)]);
+      const fit = fitLogisticRegression(X, yVals);
+      if (!fit) return 'Enter data where the model actually converges (avoid a predictor that perfectly separates the outcome) to see a worked medical example here.';
+
+      const aOR1 = Math.exp(fit.beta[1]);
+      // Crude (unadjusted) OR for surgery type alone, ignoring age
+      // entirely — the "before adjustment" number this worked example
+      // contrasts against the model's actual adjusted aOR.
+      let a2 = 0, b2 = 0, c2 = 0, d2 = 0;
+      matrix.forEach(([Y, X1]) => {
+        if (X1 === 1 && Y === 1) a2++; else if (X1 === 1 && Y === 0) b2++;
+        else if (X1 === 0 && Y === 1) c2++; else if (X1 === 0 && Y === 0) d2++;
+      });
+      const crudeOR = (a2 * d2) / (b2 * c2);
+      const f = v => +v.toFixed(2);
+      return `${n} patients each have their surgery type (X₁: minimally invasive = 1, open = 0) and age (X₂) recorded, along with whether a complication occurred (Y). Ignoring age entirely, minimally invasive surgery looks strongly protective — a crude odds ratio of ${f(crudeOR)} from a plain 2×2 table of surgery type and complication alone (see 'Measures of Association' or 'Logistic Regression (2×2)'). But older patients in this sample were both more likely to receive open surgery and more likely to have a complication — once age is held constant, the adjusted odds ratio for surgery type shrinks to aOR = ${f(aOR1)}, with a confidence interval comfortably including 1: most of that crude "protective" effect was really just age, not the surgery itself.`;
+    },
+
+    calculate({ data }) {
+      const matrix = parseMatrix(data);
+      if (matrix.length < 2) return [err('Enter at least 2 rows of data')];
+      const cols = matrix[0].length;
+      if (matrix.some(row => row.length !== cols)) return [err('Every row must have the same number of columns')];
+      if (matrix.some(row => row.some(v => !isFinite(v)))) return [err('All values must be numeric')];
+      const k = cols - 1;
+      if (k < 2) return [err(`This calculator needs at least 2 predictor columns (found ${k}) — use Logistic Regression (2×2) for exactly 1`)];
+      const n = matrix.length;
+
+      const yVals = matrix.map(row => row[0]);
+      if (yVals.some(v => v !== 0 && v !== 1)) return [err('The first column (Y) must be exactly 0 or 1 for every row')];
+      const nEvents = yVals.reduce((s, v) => s + v, 0);
+      if (nEvents === 0 || nEvents === n) return [err('Y must include at least one 0 and at least one 1 — there is nothing to model if every outcome is identical')];
+      if (n < 5 * (k + 1))
+        return [err(`Need at least ${5 * (k + 1)} subjects to fit ${k} predictors reasonably stably (currently ${n}) — logistic regression needs more data per parameter than linear regression does`)];
+
+      const X = matrix.map(row => [1, ...row.slice(1)]);
+      const fit = fitLogisticRegression(X, yVals);
+      if (!fit)
+        return [err('The model did not converge — this almost always means one predictor (or a combination of predictors) perfectly or near-perfectly separates the outcome, which sends its true coefficient toward infinity. Check for a predictor value present in only one outcome group.')];
+
+      const { beta, cov, LL, LL0 } = fit;
+      const seBeta = beta.map((_, j) => Math.sqrt(cov[j][j]));
+      const zStats = beta.map((b, j) => b / seBeta[j]);
+      const pStats = zStats.map(z => normalTwoTailedP(z));
+      const Zcrit = 1.96;
+      const ciBeta = beta.map((b, j) => [b - Zcrit * seBeta[j], b + Zcrit * seBeta[j]]);
+
+      const G2 = 2 * (LL - LL0);
+      const dfModel = k;
+      const pG2 = typeof jStat !== 'undefined' && jStat.chisquare ? 1 - jStat.chisquare.cdf(G2, dfModel) : null;
+      const mcFaddenR2 = 1 - LL / LL0;
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const nEventsMinority = Math.min(nEvents, n - nEvents);
+      const epv = nEventsMinority / k;
+
+      const rows = [
+        { label: 'Sample Size (n) / Predictors (k)', value: `${n} / ${k}`, ci: null, isRatio: false, isText: true },
+        { label: 'Events (Y=1) / Non-Events (Y=0)', value: `${nEvents} / ${n - nEvents}`, ci: null, isRatio: false, isText: true },
+        { label: 'Intercept (β₀) — log-odds when every predictor is 0', value: f(beta[0]), ci: [f(ciBeta[0][0]), f(ciBeta[0][1])], isRatio: false },
+        { label: 'z(β₀) & p-value', isText: true, ci: null, isRatio: false, value: `z = ${f(zStats[0])}, ${formatPText(pStats[0])}` },
+      ];
+
+      for (let j = 1; j <= k; j++) {
+        const aOR = Math.exp(beta[j]);
+        const ciOR = [Math.exp(ciBeta[j][0]), Math.exp(ciBeta[j][1])];
+        rows.push(
+          { label: `Coefficient ${subscriptLabel('β', j)} (${subscriptLabel('X', j)})`, value: f(beta[j]),
+            ci: [f(ciBeta[j][0]), f(ciBeta[j][1])], isRatio: false },
+          { label: `z(${subscriptLabel('β', j)}) & p-value`, isText: true, ci: null, isRatio: false,
+            value: `z = ${f(zStats[j])}, ${formatPText(pStats[j])}` },
+          { label: `Adjusted Odds Ratio (${subscriptLabel('aOR', j)}) = e^${subscriptLabel('β', j)}`, value: f(aOR),
+            ci: [f(ciOR[0]), f(ciOR[1])], isRatio: true, highlight: true },
+        );
+      }
+
+      rows.push(
+        { label: `Likelihood-Ratio Test (Overall Model) — G²(${dfModel})`, isText: true, ci: null, isRatio: false, highlight: pG2 !== null && pG2 < 0.05,
+          value: pG2 !== null
+            ? `G² = ${f(G2)}, ${formatPText(pG2)}${pG2 < 0.05 ? ' — the model as a whole predicts Y significantly better than the intercept alone' : ' — the model does not significantly outperform the intercept alone'}`
+            : `G² = ${f(G2)} (statistics library unavailable for the χ² p-value)` },
+        { label: "McFadden's Pseudo-R²", value: f(mcFaddenR2), ci: null, isRatio: false },
+      );
+
+      if (epv < 10) {
+        rows.push({ label: 'Note on Sample Size', isText: true, ci: null, isRatio: false,
+          value: `Only about ${f(epv, 1)} events per predictor (the rarer of Y=1/Y=0, divided by k) — below the conventional rule-of-thumb minimum of 10 events per variable (EPV). Coefficients and CIs above may be unstable; treat them cautiously and consider this exploratory until replicated in a larger sample.` });
+      }
+
+      rows.push({ label: 'Crude vs. Adjusted', isText: true, ci: null, isRatio: false,
+        value: "Each aOR above holds every other predictor in the model constant — compare it to the CRUDE (unadjusted) odds ratio for that same exposure alone, from 'Measures of Association' or 'Logistic Regression (2×2)' on a plain 2×2 table of that exposure and Y, ignoring the other predictors entirely. A large gap between the two is a sign the other predictors were meaningfully confounding that exposure's crude association. As the Table 2 Fallacy notes, only the exposure this model was actually built around should be read as a clean adjusted estimate — the other predictors' own aORs above aren't necessarily unconfounded for their own relationships with Y." });
+
+      return rows;
+    }
+  },
+
+  /* ── 51b. MULTIVARIABLE OUTCOME PREDICTOR ──────────────────────────────
      Scores a NEW individual from a linear or logistic equation the
      user already has — an intercept plus a coefficient and a value
      for each predictor (e.g. diet, health behavior, medication use) —
@@ -16506,6 +16663,75 @@ function matrixInverse(A) {
   return M.map(row => row.slice(n));
 }
 
+// Fits a multivariable logistic regression by Newton-Raphson / IRLS —
+// no closed form exists once there are 2+ predictors, unlike the
+// single-predictor case in 'Logistic Regression (2×2)' (β₁ = ln(OR)
+// directly from the 2×2 table). X must already include the leading
+// intercept column of 1s, matching 'Multiple Linear Regression's
+// convention; y is 0/1. Each iteration solves the weighted normal
+// equations directly (X'WX and the score X'(y-p) built as weighted
+// sums, not via a literal n×n diagonal W, since W is diagonal and
+// that would waste an O(n²) matrix for no reason) via the same
+// matrixInverse() used for OLS. Returns null if the algorithm doesn't
+// converge within 50 iterations or any coefficient diverges — almost
+// always a sign of (quasi-)complete separation, where some predictor
+// perfectly sorts the outcome and its true MLE is at +/-infinity.
+function fitLogisticRegression(X, y) {
+  const n = X.length, p = X[0].length; // p = k + 1, including the intercept
+  let beta = new Array(p).fill(0);
+  const MAX_ITER = 50, TOL = 1e-8;
+  let converged = false;
+
+  for (let iter = 0; iter < MAX_ITER; iter++) {
+    const eta = X.map(row => row.reduce((s, xij, j) => s + xij * beta[j], 0));
+    const pHat = eta.map(e => {
+      const raw = 1 / (1 + Math.exp(-e));
+      return Math.min(Math.max(raw, 1e-10), 1 - 1e-10);
+    });
+
+    const XtWX = Array.from({ length: p }, () => new Array(p).fill(0));
+    const score = new Array(p).fill(0);
+    for (let i = 0; i < n; i++) {
+      const xi = X[i], wi = pHat[i] * (1 - pHat[i]), resid = y[i] - pHat[i];
+      for (let a = 0; a < p; a++) {
+        score[a] += xi[a] * resid;
+        for (let b = 0; b < p; b++) XtWX[a][b] += wi * xi[a] * xi[b];
+      }
+    }
+
+    const XtWXinv = matrixInverse(XtWX);
+    if (!XtWXinv) return null;
+
+    const step = XtWXinv.map(row => row.reduce((s, v, j) => s + v * score[j], 0));
+    const newBeta = beta.map((b, j) => b + step[j]);
+    const maxChange = Math.max(...newBeta.map((b, j) => Math.abs(b - beta[j])));
+    beta = newBeta;
+
+    if (beta.some(b => !isFinite(b) || Math.abs(b) > 1e6)) return null;
+    if (maxChange < TOL) { converged = true; break; }
+  }
+  if (!converged) return null;
+
+  // Recompute W and (X'WX)⁻¹ at the converged β — this final inverse
+  // IS the model's covariance matrix (Fisher information inverse),
+  // not just a solver step, so its diagonal gives each coefficient's SE.
+  const etaFinal = X.map(row => row.reduce((s, xij, j) => s + xij * beta[j], 0));
+  const pFinal = etaFinal.map(e => Math.min(Math.max(1 / (1 + Math.exp(-e)), 1e-10), 1 - 1e-10));
+  const XtWXFinal = Array.from({ length: p }, () => new Array(p).fill(0));
+  for (let i = 0; i < n; i++) {
+    const xi = X[i], wi = pFinal[i] * (1 - pFinal[i]);
+    for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) XtWXFinal[a][b] += wi * xi[a] * xi[b];
+  }
+  const cov = matrixInverse(XtWXFinal);
+  if (!cov) return null;
+
+  const LL = y.reduce((s, yi, i) => s + (yi * Math.log(pFinal[i]) + (1 - yi) * Math.log(1 - pFinal[i])), 0);
+  const pBar = y.reduce((s, v) => s + v, 0) / n;
+  const LL0 = n * (pBar * Math.log(pBar) + (1 - pBar) * Math.log(1 - pBar));
+
+  return { beta, cov, pFitted: pFinal, LL, LL0 };
+}
+
 // Determinant via Gaussian elimination with partial pivoting (O(n³),
 // fine for the small matrices this app ever builds). Returns 0 for a
 // singular matrix rather than throwing.
@@ -16944,6 +17170,7 @@ const CALCULATOR_INDEX = [
   { id: 'simple-regression',    name: 'Simple Linear Regression',        category: 'Correlation & Regression',    description: 'Fits a straight line to data and estimates slope, intercept, R², and significance.',            status: 'available' },
   { id: 'multiple-regression',  name: 'Multiple Linear Regression',      category: 'Correlation & Regression',    description: 'Fits a linear model with two or more predictors at once, estimating each coefficient, its standard error, R², adjusted R², and overall significance.', status: 'available' },
   { id: 'logistic-regression',  name: 'Logistic Regression (2×2)',       category: 'Correlation & Regression',    description: 'Estimates the log-odds and OR from a 2×2 table using logistic regression.',                     status: 'available' },
+  { id: 'multiple-logistic-regression', name: 'Multiple Logistic Regression', category: 'Correlation & Regression', description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor constant — plus its 95% CI, Wald test, and the model's overall likelihood-ratio test.", status: 'available' },
   { id: 'multivariable-predictor', name: 'Multivariable Outcome Predictor', category: 'Correlation & Regression', description: 'Computes a predicted outcome — or predicted probability — for a new individual from a linear or logistic equation you supply: an intercept plus a coefficient and a value for each predictor (e.g. diet, health behavior, medication use).', status: 'available' },
 
   // ── 8. EFFECT SIZES & AGREEMENT ──────────────────────────────────────
@@ -17409,13 +17636,15 @@ const WIZARD_TREE = {
     options: [
       { label: 'One predictor, continuous outcome',                    next: 'simpleRegResult' },
       { label: 'Two or more predictors, continuous outcome',           next: 'multipleRegResult' },
-      { label: 'Binary (yes/no) outcome, from a 2×2 exposure table',   next: 'logisticRegResult' },
+      { label: 'Binary (yes/no) outcome, one exposure (2×2 table)',    next: 'logisticRegResult' },
+      { label: 'Binary (yes/no) outcome, two or more predictors',      next: 'multipleLogisticRegResult' },
       { label: "Score a new individual from a model/equation I already have", next: 'predictorResult' },
     ]
   },
   simpleRegResult:   { results: [ { id: 'simple-regression',   why: 'Fits a line through paired (X, Y) data — one predictor.' } ] },
   multipleRegResult: { results: [ { id: 'multiple-regression', why: 'Fits a linear model with 2+ predictors at once, controlling for each other.' } ] },
-  logisticRegResult: { results: [ { id: 'logistic-regression', why: 'Estimates log-odds and OR for a binary outcome from a 2×2 exposure table.' } ] },
+  logisticRegResult: { results: [ { id: 'logistic-regression', why: 'Estimates log-odds and OR for a binary outcome from a single 2×2 exposure table — a crude, unadjusted OR.' } ] },
+  multipleLogisticRegResult: { results: [ { id: 'multiple-logistic-regression', why: "Fits a logistic model with 2+ predictors at once, giving each one's adjusted odds ratio (aOR) — the figure a paper's Table 2 actually reports." } ] },
   predictorResult:   { results: [ { id: 'multivariable-predictor', why: 'Plugs an intercept, coefficients, and predictor values (e.g. diet, health behavior, medications) into a linear or logistic equation to score one new individual.' } ] },
 
   agreementGoal: {
@@ -18152,6 +18381,7 @@ const SEARCH_KEYWORDS = {
   'simple-regression':    ['simple linear regression', 'line of best fit', 'one predictor regression', 'predict y from x'],
   'multiple-regression':  ['multiple linear regression', 'multiple predictors', 'multivariable regression', 'two or more predictors'],
   'logistic-regression':  ['logistic regression', 'binary outcome regression', 'odds ratio from a 2x2 table', 'predict yes no outcome'],
+  'multiple-logistic-regression': ['multiple logistic regression', 'multivariable logistic regression', 'adjusted odds ratio', 'aor', 'two or more predictors binary outcome', 'logistic regression multiple predictors', 'crude vs adjusted or', 'table 2 adjusted or'],
   'multivariable-predictor': ['prediction calculator', 'predict an outcome', 'diet', 'health behavior', 'medications', 'risk score calculator', 'score a new patient', 'apply a regression equation', 'multiple predictors prediction'],
 
   // Effect Sizes & Agreement
@@ -18850,6 +19080,17 @@ const NOTATION = {
     { symbol: 'b', meaning: 'Count of exposed subjects without the outcome (2×2 table cell), used to compute the odds ratio.' },
     { symbol: 'SE(\\beta_0)', meaning: "Wald standard error of the intercept, based on the unexposed group's cell counts (c, d)." },
     { symbol: 'SE(\\beta_1)', meaning: 'Wald standard error of the slope, based on all four 2×2 table cell counts.' },
+  ],
+  'multiple-logistic-regression': [
+    { symbol: '\\hat\\beta', meaning: 'Vector of estimated coefficients (intercept plus one per predictor), found iteratively since there is no closed form once k ≥ 2.' },
+    { symbol: 'X', meaning: "Matrix of predictor values (with a column of 1's for the intercept) built from the entered data." },
+    { symbol: 'y', meaning: 'Column vector of the binary (0/1) outcome values entered.' },
+    { symbol: '\\hat p', meaning: "Each subject's predicted probability of Y=1 at the current iteration's coefficients." },
+    { symbol: 'W', meaning: 'Diagonal weight matrix, w_i = p̂ᵢ(1−p̂ᵢ) — how much each subject contributes to the next Newton-Raphson step.' },
+    { symbol: 'aOR_j', meaning: "Adjusted odds ratio for predictor j — e raised to that predictor's coefficient, holding every other predictor in the model constant." },
+    { symbol: 'z', meaning: "Wald test statistic for a coefficient — that coefficient divided by its own standard error, referenced to the standard normal distribution." },
+    { symbol: 'LL,\\ LL_0', meaning: "Log-likelihood of the fitted model, and of the intercept-only ('null') model — the basis of the likelihood-ratio test." },
+    { symbol: 'G^2', meaning: 'Likelihood-ratio test statistic for the overall model, 2(LL − LL₀), compared to a chi-square distribution with k degrees of freedom.' },
   ],
   'multivariable-predictor': [
     { symbol: '\\eta', meaning: 'Linear predictor — the intercept plus every predictor’s coefficient times its value, added together.' },
@@ -20974,6 +21215,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'measures-of-association', why: 'The same RR/OR output that confounding and bias can distort if not accounted for.' },
+      { id: 'multiple-logistic-regression', why: "Statistically adjusts for measured confounders directly — computes the adjusted OR this guide's 'randomization vs. adjustment' distinction is built around." },
       { id: 'ipw-ate', why: 'Uses inverse probability weighting to adjust for measured confounders in an observational analysis.' },
       { id: 'assoc-pred-intervals', why: 'Prediction intervals for measures of association, useful when communicating uncertainty beyond a single confidence interval.' },
       { id: 'appraisal-ancova', why: "Applies the same 'don't adjust for a variable on the causal pathway' rule to choosing a covariate in a baseline-adjusted trial analysis." },
@@ -21741,6 +21983,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'measures-of-association', why: 'Produces the same odds ratio/relative risk output that sits at the center of this fallacy.' },
+      { id: 'multiple-logistic-regression', why: "Fits exactly the multivariable model this fallacy is about — computes every predictor's adjusted OR, with a built-in reminder that only the exposure of interest should be read that way." },
       { id: 'ipw-ate', why: 'A modeling approach built specifically around one exposure of interest — illustrating the same principle from a different angle.' },
     ],
   },
@@ -22652,7 +22895,7 @@ const GUIDES = [
       },
       {
         heading: 'Quick Index (A–Z)',
-        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-accuracy">Accuracy</a> &middot; <a href="#gloss-af-paf">AF / PAF</a> &middot; <a href="#gloss-agree-ii">AGREE II</a> &middot; <a href="#gloss-alpha">&alpha; (alpha)</a> &middot; <a href="#gloss-amstar-2">AMSTAR-2</a> &middot; <a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a> &middot; <a href="#gloss-ar">AR</a> &middot; <a href="#gloss-ard">ARD</a> &middot; <a href="#gloss-art-anova">ART ANOVA</a> &middot; <a href="#gloss-arr">ARR</a> &middot; <a href="#gloss-ate">ATE</a> &middot; <a href="#gloss-auc">AUC</a> &middot; <a href="#gloss-auprc">AUPRC / PR-AUC</a> &middot; <a href="#gloss-auroc">AUROC</a> &middot; <a href="#gloss-axis">AXIS</a> &middot; <a href="#gloss-beta">&beta; (beta)</a> &middot; <a href="#gloss-cdf">CDF</a> &middot; <a href="#gloss-ci">CI</a> &middot; <a href="#gloss-confusion-matrix">Confusion Matrix</a> &middot; <a href="#gloss-consort">CONSORT</a> &middot; <a href="#gloss-cri">CrI</a> &middot; <a href="#gloss-cv">CV</a> &middot; <a href="#gloss-d-g">d / g</a> &middot; <a href="#gloss-deff">DEFF</a> &middot; <a href="#gloss-df">df</a> &middot; <a href="#gloss-f1">F1 Score</a> &middot; <a href="#gloss-glm">GLM</a> &middot; <a href="#gloss-glmm">GLMM</a> &middot; <a href="#gloss-grade">GRADE</a> &middot; <a href="#gloss-h0-ha">H0 / Ha (H1)</a> &middot; <a href="#gloss-hksj">HKSJ</a> &middot; <a href="#gloss-hr">HR</a> &middot; <a href="#gloss-i2">I&sup2;</a> &middot; <a href="#gloss-icc">ICC</a> &middot; <a href="#gloss-ipw">IPW</a> &middot; <a href="#gloss-iqr">IQR</a> &middot; <a href="#gloss-itt-pp">ITT / PP</a> &middot; <a href="#gloss-jbi">JBI</a> &middot; <a href="#gloss-kappa">&kappa; (kappa)</a> &middot; <a href="#gloss-lr">LR+ / LR&minus;</a> &middot; <a href="#gloss-n-N">n / N</a> &middot; <a href="#gloss-ncp">NCP (λ)</a> &middot; <a href="#gloss-nnh">NNH</a> &middot; <a href="#gloss-nnt">NNT</a> &middot; <a href="#gloss-nos">NOS</a> &middot; <a href="#gloss-or">OR</a> &middot; <a href="#gloss-p-hat">p (proportion)</a> &middot; <a href="#gloss-p-value">p (p-value)</a> &middot; <a href="#gloss-pi">PI</a> &middot; <a href="#gloss-ppv-npv">PPV / NPV</a> &middot; <a href="#gloss-precision">Precision</a> &middot; <a href="#gloss-prisma">PRISMA</a> &middot; <a href="#gloss-prisma-scr">PRISMA-ScR</a> &middot; <a href="#gloss-q">Q</a> &middot; <a href="#gloss-quadas-2">QUADAS-2</a> &middot; <a href="#gloss-quips">QUIPS</a> &middot; <a href="#gloss-r-rho">r / &rho;</a> &middot; <a href="#gloss-r-multcorr">R (mult. correlation)</a> &middot; <a href="#gloss-r2-corr">r&sup2; (single predictor)</a> &middot; <a href="#gloss-r2-model">R&sup2; (regression)</a> &middot; <a href="#gloss-rct">RCT</a> &middot; <a href="#gloss-recall">Recall</a> &middot; <a href="#gloss-rob-2">RoB 2</a> &middot; <a href="#gloss-robins-i">ROBINS-I</a> &middot; <a href="#gloss-robis">ROBIS</a> &middot; <a href="#gloss-roc">ROC</a> &middot; <a href="#gloss-rr">RR</a> &middot; <a href="#gloss-rrd">RRD</a> &middot; <a href="#gloss-rrr">RRR</a> &middot; <a href="#gloss-s-sigma">s / &sigma;</a> &middot; <a href="#gloss-sd">SD</a> &middot; <a href="#gloss-se-sem">SE / SEM</a> &middot; <a href="#gloss-sens-spec">Sens / Spec</a> &middot; <a href="#gloss-strobe">STROBE</a> &middot; <a href="#gloss-tau">&tau; (Kendall's tau)</a> &middot; <a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a> &middot; <a href="#gloss-tpr-fpr">TPR / FPR</a> &middot; <a href="#gloss-var">Var</a> &middot; <a href="#gloss-x-X">x / X</a> &middot; <a href="#gloss-x-bar">x&#772; (x-bar)</a></p>`,
+        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-accuracy">Accuracy</a> &middot; <a href="#gloss-af-paf">AF / PAF</a> &middot; <a href="#gloss-agree-ii">AGREE II</a> &middot; <a href="#gloss-alpha">&alpha; (alpha)</a> &middot; <a href="#gloss-amstar-2">AMSTAR-2</a> &middot; <a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a> &middot; <a href="#gloss-aor">aOR</a> &middot; <a href="#gloss-ar">AR</a> &middot; <a href="#gloss-ard">ARD</a> &middot; <a href="#gloss-art-anova">ART ANOVA</a> &middot; <a href="#gloss-arr">ARR</a> &middot; <a href="#gloss-ate">ATE</a> &middot; <a href="#gloss-auc">AUC</a> &middot; <a href="#gloss-auprc">AUPRC / PR-AUC</a> &middot; <a href="#gloss-auroc">AUROC</a> &middot; <a href="#gloss-axis">AXIS</a> &middot; <a href="#gloss-beta">&beta; (beta)</a> &middot; <a href="#gloss-cdf">CDF</a> &middot; <a href="#gloss-ci">CI</a> &middot; <a href="#gloss-confusion-matrix">Confusion Matrix</a> &middot; <a href="#gloss-consort">CONSORT</a> &middot; <a href="#gloss-cri">CrI</a> &middot; <a href="#gloss-cv">CV</a> &middot; <a href="#gloss-d-g">d / g</a> &middot; <a href="#gloss-deff">DEFF</a> &middot; <a href="#gloss-df">df</a> &middot; <a href="#gloss-f1">F1 Score</a> &middot; <a href="#gloss-glm">GLM</a> &middot; <a href="#gloss-glmm">GLMM</a> &middot; <a href="#gloss-grade">GRADE</a> &middot; <a href="#gloss-h0-ha">H0 / Ha (H1)</a> &middot; <a href="#gloss-hksj">HKSJ</a> &middot; <a href="#gloss-hr">HR</a> &middot; <a href="#gloss-i2">I&sup2;</a> &middot; <a href="#gloss-icc">ICC</a> &middot; <a href="#gloss-ipw">IPW</a> &middot; <a href="#gloss-iqr">IQR</a> &middot; <a href="#gloss-itt-pp">ITT / PP</a> &middot; <a href="#gloss-jbi">JBI</a> &middot; <a href="#gloss-kappa">&kappa; (kappa)</a> &middot; <a href="#gloss-lr">LR+ / LR&minus;</a> &middot; <a href="#gloss-n-N">n / N</a> &middot; <a href="#gloss-ncp">NCP (λ)</a> &middot; <a href="#gloss-nnh">NNH</a> &middot; <a href="#gloss-nnt">NNT</a> &middot; <a href="#gloss-nos">NOS</a> &middot; <a href="#gloss-or">OR</a> &middot; <a href="#gloss-p-hat">p (proportion)</a> &middot; <a href="#gloss-p-value">p (p-value)</a> &middot; <a href="#gloss-pi">PI</a> &middot; <a href="#gloss-ppv-npv">PPV / NPV</a> &middot; <a href="#gloss-precision">Precision</a> &middot; <a href="#gloss-prisma">PRISMA</a> &middot; <a href="#gloss-prisma-scr">PRISMA-ScR</a> &middot; <a href="#gloss-q">Q</a> &middot; <a href="#gloss-quadas-2">QUADAS-2</a> &middot; <a href="#gloss-quips">QUIPS</a> &middot; <a href="#gloss-r-rho">r / &rho;</a> &middot; <a href="#gloss-r-multcorr">R (mult. correlation)</a> &middot; <a href="#gloss-r2-corr">r&sup2; (single predictor)</a> &middot; <a href="#gloss-r2-model">R&sup2; (regression)</a> &middot; <a href="#gloss-rct">RCT</a> &middot; <a href="#gloss-recall">Recall</a> &middot; <a href="#gloss-rob-2">RoB 2</a> &middot; <a href="#gloss-robins-i">ROBINS-I</a> &middot; <a href="#gloss-robis">ROBIS</a> &middot; <a href="#gloss-roc">ROC</a> &middot; <a href="#gloss-rr">RR</a> &middot; <a href="#gloss-rrd">RRD</a> &middot; <a href="#gloss-rrr">RRR</a> &middot; <a href="#gloss-s-sigma">s / &sigma;</a> &middot; <a href="#gloss-sd">SD</a> &middot; <a href="#gloss-se-sem">SE / SEM</a> &middot; <a href="#gloss-sens-spec">Sens / Spec</a> &middot; <a href="#gloss-strobe">STROBE</a> &middot; <a href="#gloss-tau">&tau; (Kendall's tau)</a> &middot; <a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a> &middot; <a href="#gloss-tpr-fpr">TPR / FPR</a> &middot; <a href="#gloss-var">Var</a> &middot; <a href="#gloss-x-X">x / X</a> &middot; <a href="#gloss-x-bar">x&#772; (x-bar)</a></p>`,
       },
       {
         heading: 'Probability & Distributions',
@@ -22668,7 +22911,7 @@ const GUIDES = [
       },
       {
         heading: 'Effect Measures (Epidemiology & Clinical Research)',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-af-paf"></span>AF / PAF</td><td>Attributable Fraction / Population Attributable Fraction</td><td style="text-align:left;">The proportion of cases (among the exposed, or the whole population) that would not have occurred without the exposure.</td><td style="text-align:left;"><a href="#attributable-fraction">Attributable Fraction (AFe &amp; PAF)</a>; <a href="#par">Population Attributable Risk</a></td></tr><tr><td><span id="gloss-ar"></span>AR</td><td>Absolute Risk</td><td style="text-align:left;">The risk (proportion) of an outcome within a single group &mdash; e.g. AR&#8330; in the exposed/treated group, AR&#8331; in the unexposed/control group. Not itself a difference; see ARD directly below for that.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-ard"></span>ARD</td><td>Absolute Risk Difference</td><td style="text-align:left;">AR in one group minus AR in the other. The general, either-sign version of the same subtraction ARR below frames specifically as a treatment benefit.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-arr"></span>ARR</td><td>Absolute Risk Reduction</td><td style="text-align:left;">The plain difference between two absolute risks (control risk minus treated risk), in percentage points &mdash; the benefit-framed case of ARD above.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-hr"></span>HR</td><td>Hazard Ratio</td><td style="text-align:left;">The ratio of the instantaneous event rate (hazard) between two groups over time &mdash; the standard effect measure from Cox regression and survival analysis.</td><td style="text-align:left;"><a href="#cox-ph">Cox Proportional Hazards (Hazard Ratio)</a></td></tr><tr><td><span id="gloss-nnh"></span>NNH</td><td>Number Needed to Harm</td><td style="text-align:left;">The same logic as NNT, applied to an adverse effect instead of a benefit.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNT &amp; NNH</a></td></tr><tr><td><span id="gloss-nnt"></span>NNT</td><td>Number Needed to Treat</td><td style="text-align:left;">1 &divide; ARR (as a decimal). How many patients must be treated for one to benefit.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNT &amp; NNH</a></td></tr><tr><td><span id="gloss-or"></span>OR</td><td>Odds Ratio</td><td style="text-align:left;">Ratio of the odds of an outcome between two groups. The only measure estimable from a case-control study; approximates RR when the outcome is rare.</td><td style="text-align:left;"><a href="#or-to-rr">Odds Ratio to Risk Ratio</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rr"></span>RR</td><td>Relative Risk</td><td style="text-align:left;">Risk of an outcome in an exposed/treated group divided by risk in an unexposed/control group. Estimable directly in RCTs and cohort studies.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rrd"></span>RRD</td><td>Relative Risk Difference</td><td style="text-align:left;">|RR − 1| &mdash; the same computation as RRR below, reported as an unsigned magnitude for a general exposure rather than assuming the exposure is a risk-reducing treatment.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-rrr"></span>RRR</td><td>Relative Risk Reduction</td><td style="text-align:left;">(Control risk &minus; treated risk) &divide; control risk. Tends to look larger than ARR and is more often highlighted in abstracts.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-af-paf"></span>AF / PAF</td><td>Attributable Fraction / Population Attributable Fraction</td><td style="text-align:left;">The proportion of cases (among the exposed, or the whole population) that would not have occurred without the exposure.</td><td style="text-align:left;"><a href="#attributable-fraction">Attributable Fraction (AFe &amp; PAF)</a>; <a href="#par">Population Attributable Risk</a></td></tr><tr><td><span id="gloss-ar"></span>AR</td><td>Absolute Risk</td><td style="text-align:left;">The risk (proportion) of an outcome within a single group &mdash; e.g. AR&#8330; in the exposed/treated group, AR&#8331; in the unexposed/control group. Not itself a difference; see ARD directly below for that.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-ard"></span>ARD</td><td>Absolute Risk Difference</td><td style="text-align:left;">AR in one group minus AR in the other. The general, either-sign version of the same subtraction ARR below frames specifically as a treatment benefit.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-arr"></span>ARR</td><td>Absolute Risk Reduction</td><td style="text-align:left;">The plain difference between two absolute risks (control risk minus treated risk), in percentage points &mdash; the benefit-framed case of ARD above.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-hr"></span>HR</td><td>Hazard Ratio</td><td style="text-align:left;">The ratio of the instantaneous event rate (hazard) between two groups over time &mdash; the standard effect measure from Cox regression and survival analysis.</td><td style="text-align:left;"><a href="#cox-ph">Cox Proportional Hazards (Hazard Ratio)</a></td></tr><tr><td><span id="gloss-nnh"></span>NNH</td><td>Number Needed to Harm</td><td style="text-align:left;">The same logic as NNT, applied to an adverse effect instead of a benefit.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNT &amp; NNH</a></td></tr><tr><td><span id="gloss-nnt"></span>NNT</td><td>Number Needed to Treat</td><td style="text-align:left;">1 &divide; ARR (as a decimal). How many patients must be treated for one to benefit.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNT &amp; NNH</a></td></tr><tr><td><span id="gloss-or"></span>OR</td><td>Odds Ratio</td><td style="text-align:left;">Ratio of the odds of an outcome between two groups. The only measure estimable from a case-control study; approximates RR when the outcome is rare.</td><td style="text-align:left;"><a href="#or-to-rr">Odds Ratio to Risk Ratio</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-aor"></span>aOR</td><td>Adjusted Odds Ratio</td><td style="text-align:left;">An OR from a multivariable model — holding every other predictor in that model constant — as opposed to a CRUDE (unadjusted) OR from a single exposure alone. The two can differ substantially when the other predictors confound the exposure-outcome relationship; this app's "Logistic Regression (2×2)" computes only the crude version, since it takes a single 2×2 table.</td><td style="text-align:left;"><a href="#multiple-logistic-regression">Multiple Logistic Regression</a>; <a href="#learn/appraisal-table2-fallacy">The Table 2 Fallacy (Learn guide)</a></td></tr><tr><td><span id="gloss-rr"></span>RR</td><td>Relative Risk</td><td style="text-align:left;">Risk of an outcome in an exposed/treated group divided by risk in an unexposed/control group. Estimable directly in RCTs and cohort studies.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rrd"></span>RRD</td><td>Relative Risk Difference</td><td style="text-align:left;">|RR − 1| &mdash; the same computation as RRR below, reported as an unsigned magnitude for a general exposure rather than assuming the exposure is a risk-reducing treatment.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-rrr"></span>RRR</td><td>Relative Risk Reduction</td><td style="text-align:left;">(Control risk &minus; treated risk) &divide; control risk. Tends to look larger than ARR and is more often highlighted in abstracts.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Diagnostic Testing',
@@ -22713,11 +22956,11 @@ const GUIDES = [
     sections: [
       {
         heading: 'How These Terms Cluster',
-        html: `<p>A few terms below are foundational vocabulary everything else builds on: population/sample, parameter/statistic, point estimate/interval estimate, distribution/sampling distribution, and effect/effect size — pairs worth getting straight first, since several later rows (covariate, homoscedasticity, NCP) only make sense once "distribution" specifically means the sampling distribution of a statistic, not the raw data, and "effect size" specifically means a magnitude independent of sample size, not just "there was an effect." Past that, most remaining terms fall into one of four families. <strong>Role words</strong> describe the job a variable is playing in a specific analysis (independent variable, covariate, confounder) — the same variable can even change role between studies. <strong>Relationship words</strong> describe how two variables, or two samples, relate to each other (related vs. independent samples, concordant vs. discordant). <strong>Assumption words</strong> describe a condition a parametric method depends on (normality, linearity, homoscedastic vs. heteroscedastic). <strong>Design/shape words</strong> describe the structure of a study or the shape of a distribution (factor, level, skewness, bimodal). Knowing which bucket a word falls into is usually enough to guess roughly what it means before even reading the definition. A final trio — Cauchy, Mahalanobis, and the non-centrality parameter — don't fit any of those buckets either; they're specifically-named concepts (a distribution, a distance measure, a power calculation's engine) worth knowing on their own rather than as an example of a broader family.</p>`,
+        html: `<p>A few terms below are foundational vocabulary everything else builds on: population/sample, parameter/statistic, point estimate/interval estimate, crude/adjusted estimate, distribution/sampling distribution, and effect/effect size — pairs worth getting straight first, since several later rows (covariate, homoscedasticity, NCP) only make sense once "distribution" specifically means the sampling distribution of a statistic, not the raw data, and "effect size" specifically means a magnitude independent of sample size, not just "there was an effect." Past that, most remaining terms fall into one of four families. <strong>Role words</strong> describe the job a variable is playing in a specific analysis (independent variable, covariate, confounder) — the same variable can even change role between studies. <strong>Relationship words</strong> describe how two variables, or two samples, relate to each other (related vs. independent samples, concordant vs. discordant). <strong>Assumption words</strong> describe a condition a parametric method depends on (normality, linearity, homoscedastic vs. heteroscedastic). <strong>Design/shape words</strong> describe the structure of a study or the shape of a distribution (factor, level, skewness, bimodal). Knowing which bucket a word falls into is usually enough to guess roughly what it means before even reading the definition. A final trio — Cauchy, Mahalanobis, and the non-centrality parameter — don't fit any of those buckets either; they're specifically-named concepts (a distribution, a distance measure, a power calculation's engine) worth knowing on their own rather than as an example of a broader family.</p>`,
       },
       {
         heading: 'Quick Index (A–Z)',
-        html: `<p>Every term on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-bimodal">Bimodal / Unimodal</a> &middot; <a href="#gloss-bivariate">Bivariate</a> &middot; <a href="#gloss-cauchy">Cauchy Distribution</a> &middot; <a href="#gloss-concordant">Concordant Pair</a> &middot; <a href="#gloss-confounder">Confounder</a> &middot; <a href="#gloss-covariate">Covariate</a> &middot; <a href="#gloss-dependent-var">Dependent Variable / Outcome / Response</a> &middot; <a href="#gloss-discordant">Discordant Pair</a> &middot; <a href="#gloss-distribution">Distribution</a> &middot; <a href="#gloss-effect">Effect</a> &middot; <a href="#gloss-effect-size">Effect Size</a> &middot; <a href="#gloss-factor">Factor</a> &middot; <a href="#gloss-heteroscedasticity">Heteroscedasticity</a> &middot; <a href="#gloss-homoscedasticity">Homoscedasticity</a> &middot; <a href="#gloss-independent-samples">Independent Samples</a> &middot; <a href="#gloss-independent-var">Independent Variable / Predictor / Exposure</a> &middot; <a href="#gloss-interaction-effect">Interaction Effect</a> &middot; <a href="#gloss-interval-estimate">Interval Estimate</a> &middot; <a href="#gloss-kurtosis">Kurtosis</a> &middot; <a href="#gloss-level">Level</a> &middot; <a href="#gloss-linearity">Linearity</a> &middot; <a href="#gloss-mahalanobis">Mahalanobis Distance</a> &middot; <a href="#gloss-main-effect">Main Effect</a> &middot; <a href="#gloss-mediator">Mediator</a> &middot; <a href="#gloss-moderator">Moderator / Effect Modifier</a> &middot; <a href="#gloss-multivariate">Multivariate / Multivariable</a> &middot; <a href="#gloss-ncp">Non-Centrality Parameter (NCP)</a> &middot; <a href="#gloss-normality">Normality</a> &middot; <a href="#gloss-outlier">Outlier</a> &middot; <a href="#gloss-parameter">Parameter</a> &middot; <a href="#gloss-point-estimate">Point Estimate</a> &middot; <a href="#gloss-population">Population</a> &middot; <a href="#gloss-related-samples">Related / Paired / Matched Samples</a> &middot; <a href="#gloss-sample">Sample</a> &middot; <a href="#gloss-sampling-distribution">Sampling Distribution</a> &middot; <a href="#gloss-skewness">Skewness</a> &middot; <a href="#gloss-statistic">Statistic</a> &middot; <a href="#gloss-univariate">Univariate</a> &middot; <a href="#gloss-variable">Variable</a> &middot; <a href="#gloss-variate">Variate</a></p>`,
+        html: `<p>Every term on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-adjusted-estimate">Adjusted Estimate</a> &middot; <a href="#gloss-bimodal">Bimodal / Unimodal</a> &middot; <a href="#gloss-bivariate">Bivariate</a> &middot; <a href="#gloss-cauchy">Cauchy Distribution</a> &middot; <a href="#gloss-concordant">Concordant Pair</a> &middot; <a href="#gloss-confounder">Confounder</a> &middot; <a href="#gloss-covariate">Covariate</a> &middot; <a href="#gloss-crude-estimate">Crude (Unadjusted) Estimate</a> &middot; <a href="#gloss-dependent-var">Dependent Variable / Outcome / Response</a> &middot; <a href="#gloss-discordant">Discordant Pair</a> &middot; <a href="#gloss-distribution">Distribution</a> &middot; <a href="#gloss-effect">Effect</a> &middot; <a href="#gloss-effect-size">Effect Size</a> &middot; <a href="#gloss-factor">Factor</a> &middot; <a href="#gloss-heteroscedasticity">Heteroscedasticity</a> &middot; <a href="#gloss-homoscedasticity">Homoscedasticity</a> &middot; <a href="#gloss-independent-samples">Independent Samples</a> &middot; <a href="#gloss-independent-var">Independent Variable / Predictor / Exposure</a> &middot; <a href="#gloss-interaction-effect">Interaction Effect</a> &middot; <a href="#gloss-interval-estimate">Interval Estimate</a> &middot; <a href="#gloss-kurtosis">Kurtosis</a> &middot; <a href="#gloss-level">Level</a> &middot; <a href="#gloss-linearity">Linearity</a> &middot; <a href="#gloss-mahalanobis">Mahalanobis Distance</a> &middot; <a href="#gloss-main-effect">Main Effect</a> &middot; <a href="#gloss-mediator">Mediator</a> &middot; <a href="#gloss-moderator">Moderator / Effect Modifier</a> &middot; <a href="#gloss-multivariate">Multivariate / Multivariable</a> &middot; <a href="#gloss-ncp">Non-Centrality Parameter (NCP)</a> &middot; <a href="#gloss-normality">Normality</a> &middot; <a href="#gloss-outlier">Outlier</a> &middot; <a href="#gloss-parameter">Parameter</a> &middot; <a href="#gloss-point-estimate">Point Estimate</a> &middot; <a href="#gloss-population">Population</a> &middot; <a href="#gloss-related-samples">Related / Paired / Matched Samples</a> &middot; <a href="#gloss-sample">Sample</a> &middot; <a href="#gloss-sampling-distribution">Sampling Distribution</a> &middot; <a href="#gloss-skewness">Skewness</a> &middot; <a href="#gloss-statistic">Statistic</a> &middot; <a href="#gloss-univariate">Univariate</a> &middot; <a href="#gloss-variable">Variable</a> &middot; <a href="#gloss-variate">Variate</a></p>`,
       },
       {
         heading: 'Variable Roles: What Job Is a Variable Playing?',
@@ -22754,6 +22997,13 @@ const GUIDES = [
         html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
           <tr><td><span id="gloss-point-estimate"></span>Point Estimate</td><td style="text-align:left;">A single value calculated from sample data that serves as the best available guess for an unknown population parameter — a sample mean, a risk ratio, a regression coefficient. Nearly every "value" this site's calculators report is a point estimate.</td><td style="text-align:left;">&mdash;</td></tr>
           <tr><td><span id="gloss-interval-estimate"></span>Interval Estimate</td><td style="text-align:left;">A range of plausible values built around a point estimate, rather than a single number — a confidence interval is the standard example. A point estimate alone throws away exactly the information needed to judge how precisely it was measured, which is why this site pairs one with a CI wherever one is computable, and why a forest plot draws each study as a square (the point estimate) sitting inside a line (its interval estimate) rather than the square alone.</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a>; <a href="#learn/reading-forest-plots">How to Read a Forest Plot (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Crude vs. Adjusted Estimate',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-crude-estimate"></span>Crude (Unadjusted) Estimate</td><td style="text-align:left;">A point estimate — an odds ratio, risk ratio, or mean difference — computed from the exposure and outcome alone, ignoring every other variable. A plain 2&times;2 table gives a crude OR or RR; a two-group t-test gives a crude mean difference.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#logistic-regression">Logistic Regression (2×2)</a></td></tr>
+          <tr><td><span id="gloss-adjusted-estimate"></span>Adjusted Estimate</td><td style="text-align:left;">The same kind of point estimate, but from a model that holds one or more other variables (age, sex, comorbidity, baseline severity) constant — an adjusted odds ratio (aOR), adjusted hazard ratio (aHR), or ANCOVA's adjusted mean difference. Crude and adjusted estimates can differ substantially when those other variables confound the exposure-outcome relationship; a large gap between the two is itself evidence of confounding, not a sign one of the two numbers is simply wrong.</td><td style="text-align:left;"><a href="#multiple-logistic-regression">Multiple Logistic Regression</a>; <a href="#ancova">ANCOVA (2-Group, One Covariate)</a>; <a href="#learn/appraisal-table2-fallacy">The Table 2 Fallacy (Learn guide)</a>; <a href="#learn/appraisal-confounding-bias">Confounding, Bias, and Why Randomization Matters (Learn guide)</a></td></tr>
         </tbody></table></div>`,
       },
       {
@@ -22830,6 +23080,8 @@ const GUIDES = [
       { id: 'shapiro-wilk-test', why: 'Tests the normality assumption defined above directly, on your own data.' },
       { id: 'appraisal-confidence-intervals', why: 'Full explanation of the interval estimate defined above, and what "95% confidence" actually covers.' },
       { id: 'reading-forest-plots', why: 'Reads the point-estimate-square-inside-interval-estimate-line convention defined above directly off a real chart.' },
+      { id: 'multiple-logistic-regression', why: 'Computes the adjusted OR defined above directly, and shows how it can differ from the crude OR once a confounder is held constant.' },
+      { id: 'appraisal-table2-fallacy', why: "Full explanation of why only one exposure's adjusted estimate in a multivariable table is actually a clean, confounding-free number." },
       { id: 'clt-simulator', why: 'Watch the Central Limit Theorem hold for ordinary skewed/bimodal populations — the Cauchy row above is the classic counterexample where it fails.' },
       { id: 'appraisal-sd-vs-se', why: 'Full explanation of the distribution-vs-sampling-distribution distinction defined above — why SD and SE describe two different distributions entirely.' },
       { id: 'manova', why: 'Computes Mahalanobis-distance-based group separation directly, via Wilks\' Lambda and Pillai\'s Trace.' },
