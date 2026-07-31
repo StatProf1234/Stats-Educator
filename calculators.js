@@ -14973,14 +14973,20 @@ function sdBellCurveSVG(mean, sd, data, opts = {}) {
     return `<line x1="${px}" y1="${PT}" x2="${px}" y2="${baseline}" stroke="#4E6EDB" stroke-width="1" stroke-dasharray="3,3" opacity=".4"/>`;
   }).join('');
 
-  // Percentage labels (68.27-95.45-99.73 rule) — inside the shaded
-  // bands. The 2-3 SD label sits ABOVE its (very low) curve height
-  // rather than below it, since the curve there is too close to the
-  // baseline to fit a label underneath — yFrac must clear that curve
-  // height (~0.044 at z=2.5) by enough margin that the text doesn't
-  // dip down into the line.
+  // Percentage labels — each is the probability of just its own
+  // one-sided, one-SD-wide slice (0 to 1σ, 1σ to 2σ, 2σ to 3σ), NOT
+  // the cumulative two-sided empirical-rule figures (68.27/95.45/
+  // 99.73%, which describe the FULL ±kσ band and are what the legend
+  // and prose elsewhere on this site quote) — since the same label is
+  // drawn on both sides of the mean, using the two-sided total here
+  // would double-count it. 34.13 + 34.13 = 68.27%, the usual band
+  // figure, split across its two mirrored halves. The 2-3 SD label
+  // sits ABOVE its (very low) curve height rather than below it,
+  // since the curve there is too close to the baseline to fit a label
+  // underneath — yFrac must clear that curve height (~0.044 at z=2.5)
+  // by enough margin that the text doesn't dip down into the line.
   const pctLabels = [
-    { z: 0.5,  pct: '68.27%', yFrac: 0.38 },
+    { z: 0.5,  pct: '34.13%', yFrac: 0.38 },
     { z: 1.5,  pct: '13.59%', yFrac: 0.15 },
     { z: 2.5,  pct: '2.14%',  yFrac: 0.12 },
   ].flatMap(({ z, pct, yFrac }) => {
@@ -15021,7 +15027,7 @@ function sdBellCurveSVG(mean, sd, data, opts = {}) {
   const critLow  = hasShade && isTwoTailed ? mean - critZ * sd : null;
   const shadeColor = '#2D4FBA';
   const F = "font-family:'IBM Plex Mono',monospace";
-  const fNum = v => (+v.toFixed(2)).toString();
+  const fNum = v => (+v.toFixed(3)).toString();
 
   const upperShade = hasShade ? band(Math.max(critHigh, xMin), xMax) : '';
   const lowerShade = (hasShade && isTwoTailed) ? band(xMin, Math.min(critLow, xMax)) : '';
