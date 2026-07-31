@@ -55,6 +55,24 @@ function checkEffectMeasureBound(studies, measureInfo, describe = s => s.label) 
   if (!offender) return null;
   return [err(`${measureInfo.label} must be between -${measureInfo.bound} and ${measureInfo.bound} (it's a difference of two proportions) — check ${esc(describe(offender))} for a data-entry error, such as entering a percentage instead of a proportion.`)];
 }
+// Parses the optional "Minimal Important Difference (MID) / Threshold"
+// field shared by the additive/ratio meta-analysis calculators
+// (Meta-Analysis, HKSJ, Network) into the internal (log, for a ratio
+// measure) scale the forest plot functions position everything else
+// on. Entered on the natural/display scale (e.g. an RR of 1.25), not
+// the log scale a ratio measure's own study-level effect inputs use —
+// a reader thinks of a clinical threshold as "an RR of 1.25," not
+// "ln(1.25)" — so this is the one place that natural-scale value gets
+// converted, rather than asking users to log-transform a threshold
+// themselves the way they already must for each study's effect.
+function parseMidThreshold(raw, measureInfo) {
+  const provided = raw !== '' && raw != null && isFinite(raw);
+  if (!provided) return { mid: null, error: null };
+  if (measureInfo.isRatio && raw <= 0) {
+    return { mid: null, error: [err('Minimal Important Difference / Threshold must be a positive number on the natural scale (e.g. 1.25 for RR/OR/HR) — enter the raw threshold, not its log value.')] };
+  }
+  return { mid: measureInfo.isRatio ? Math.log(raw) : raw, error: null };
+}
 
 const CALCULATORS = [
 
@@ -3500,9 +3518,9 @@ const CALCULATORS = [
   {
     id:          'z-table',
     name:        'z-Distribution Table',
-    hint:        'Φ(z) lookup + full z-table + critical values',
+    hint:        'Φ(z) lookup + full z-table + critical values + shaded rejection region',
     category:    'Probability & Distributions',
-    description: 'Looks up cumulative probabilities and critical values for the standard normal distribution.',
+    description: 'Looks up cumulative probabilities and critical values for the standard normal distribution, with a shaded one- or two-tailed rejection region drawn on the curve itself.',
 
     formulas: [
       {
@@ -3523,6 +3541,12 @@ const CALCULATORS = [
     inputs: [
       { id: 'z',     label: 'z-Value to Look Up',              default: 1.96 },
       { id: 'alpha', label: 'Significance Level (α, two-tailed)', default: 0.05 },
+      { id: 'tails', type: 'select', label: 'Shade Which Rejection Region?', default: 'two',
+        note: 'Draws the standard normal curve below with this region shaded at the chosen α, alongside the reference table.',
+        options: [
+          { value: 'two', label: 'Two-Tailed (α/2 in each tail)' },
+          { value: 'one', label: 'One-Tailed (all of α in the upper tail)' },
+        ] },
     ],
 
     example({ z, alpha }) {
@@ -3533,7 +3557,7 @@ const CALCULATORS = [
       return `A newborn's birth weight is z = ${z} standard deviations from the population mean on a standard growth chart. Φ(z) = ${(+phi.toFixed(4))} means about ${(phi * 100).toFixed(1)}% of newborns weigh less than this one. The two-tailed p-value (${formatPValue(twoTailedP)}) tells you how unusual a deviation this large is if this baby truly came from the reference population.`;
     },
 
-    calculate({ z, alpha }) {
+    calculate({ z, alpha, tails }) {
       if (!isFinite(z))                                 return [err('z-value is required')];
       if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
 
@@ -3556,6 +3580,7 @@ const CALCULATORS = [
           { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true },
           { label: `Critical Value (one-tailed, α = ${alpha})`, value: f(critOne), ci: null, isRatio: false },
         );
+        rows.push({ label: 'Rejection Region', isSVG: true, svg: normalAlphaRegionSVG(alpha, tails, tails === 'one' ? critOne : critTwo) });
       }
 
       rows.push({ isSVG: true, svg: zTableHTML(z) });
@@ -7125,6 +7150,8 @@ const CALCULATORS = [
       { id: 'measure', type: 'select', label: 'Effect Measure', default: 'md',
         note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as the effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
         options: EFFECT_MEASURE_OPTIONS },
+      { id: 'mid', label: 'Minimal Important Difference / Threshold (optional)', default: '',
+        note: 'Draws a second, green dashed line on the forest plot at this value, in addition to the null line — enter it on the natural scale (e.g. 1.25 for an RR/OR/HR threshold, or 4 for an MD threshold), not as a log value even for ratio measures. Leave blank to draw only the null line.' },
       { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.45 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.12 },
@@ -7178,6 +7205,9 @@ const CALCULATORS = [
       const measureInfo = effectMeasureInfo(values.measure);
       const boundError = checkEffectMeasureBound(studies, measureInfo);
       if (boundError) return boundError;
+
+      const { mid, error: midError } = parseMidThreshold(values.mid, measureInfo);
+      if (midError) return midError;
 
       const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
@@ -7234,7 +7264,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot', isSVG: true,
-        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio, { Q, df, pQ, I2, tau2 }, pi, transform, measureLabel)
+        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio, { Q, df, pQ, I2, tau2 }, pi, transform, measureLabel, mid)
       });
 
       rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
@@ -10269,6 +10299,8 @@ const CALCULATORS = [
       { id: 'measure', type: 'select', label: 'Effect Measure', default: 'rr',
         note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as each comparison\'s effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
         options: EFFECT_MEASURE_OPTIONS },
+      { id: 'mid', label: 'Minimal Important Difference / Threshold vs Reference (optional)', default: '',
+        note: 'Draws a second, green dashed line on the "Forest Plot vs Reference" below at this value, in addition to the null line — enter it on the natural scale (e.g. 1.25 for an RR/OR/HR threshold, or 4 for an MD threshold), not as a log value even for ratio measures. Leave blank to draw only the null line.' },
       { id: 'direction', type: 'select', label: 'For This Outcome, Which Direction Is Better?', default: 'higher', options: [
         { value: 'higher', label: 'Higher values are better (e.g., cure rate, response rate)' },
         { value: 'lower',  label: 'Lower values are better (e.g., mortality, relapse, adverse events)' },
@@ -10372,6 +10404,9 @@ const CALCULATORS = [
         c => `${treatmentLabel(values, c.t1)} vs ${treatmentLabel(values, c.t2)}`);
       if (boundError) return boundError;
 
+      const { mid, error: midError } = parseMidThreshold(values.mid, measureInfo);
+      if (midError) return midError;
+
       const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
       const Z = 1.96;
@@ -10428,7 +10463,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot vs Reference', isSVG: true,
-        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment), transform, measureLabel)
+        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment), transform, measureLabel, mid)
       });
 
       rows.push({ label: 'League Table — All Pairwise Comparisons', isSVG: true, svg: networkLeagueTableSVG(fit, isRatio, nameFor) });
@@ -11056,6 +11091,8 @@ const CALCULATORS = [
       { id: 'measure', type: 'select', label: 'Effect Measure', default: 'md',
         note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as the effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
         options: EFFECT_MEASURE_OPTIONS },
+      { id: 'mid', label: 'Minimal Important Difference / Threshold (optional)', default: '',
+        note: 'Draws a second, green dashed line on the forest plot at this value, in addition to the null line — enter it on the natural scale (e.g. 1.25 for an RR/OR/HR threshold, or 4 for an MD threshold), not as a log value even for ratio measures. Leave blank to draw only the null line.' },
       { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.40 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.15 },
@@ -11123,6 +11160,9 @@ const CALCULATORS = [
       const measureInfo = effectMeasureInfo(values.measure);
       const boundError = checkEffectMeasureBound(studies, measureInfo);
       if (boundError) return boundError;
+
+      const { mid, error: midError } = parseMidThreshold(values.mid, measureInfo);
+      if (midError) return midError;
 
       const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
@@ -11208,7 +11248,7 @@ const CALCULATORS = [
         }
 
         rows.push({ label: 'Forest Plot — Standard vs HKSJ', isSVG: true,
-          svg: hksjForestPlotSVG(studies, w, pooledRE, ciNormal, ciHKSJ, isRatio, transform, { Q, df, pQ, I2, tau2 }, pi, measureLabel) });
+          svg: hksjForestPlotSVG(studies, w, pooledRE, ciNormal, ciHKSJ, isRatio, transform, { Q, df, pQ, I2, tau2 }, pi, measureLabel, mid) });
 
         const widthNormal = transform(ciNormal[1]) - transform(ciNormal[0]);
         const widthHKSJ = transform(ciHKSJ[1]) - transform(ciHKSJ[0]);
@@ -14796,6 +14836,96 @@ function sdBellCurveSVG(mean, sd, data) {
 </svg>`;
 }
 
+// Standard normal curve with the rejection region(s) for a chosen
+// alpha shaded directly on it — one-tailed (upper tail only) or
+// two-tailed (both tails, each holding alpha/2) — so a reader can see
+// exactly what "alpha" carves out of the curve before ever running a
+// real hypothesis test. Companion visualization for 'z-table' (which
+// supplies live alpha/tails inputs) and the "How to Read a Normal
+// Distribution" Learn guide (which calls this directly with fixed
+// illustrative values for its own static figure). NOT the same chart
+// as 'power-with-graph', which overlays a SECOND (alternative-
+// hypothesis) curve to additionally show β and power — this one only
+// ever draws the single standard-normal curve and its rejection
+// region(s), with no alternative distribution involved.
+// `critUpper` is the ALREADY-COMPUTED upper critical z (jStat.normal.inv
+// result) — deliberately passed in rather than computed here, so this
+// function has no jStat dependency of its own and stays safe to call
+// from a GUIDES figure at module-load time (GUIDES entries, unlike
+// calculators, are built eagerly rather than lazily on a Calculate
+// click, so anything they call must not assume jStat has already
+// finished loading).
+function normalAlphaRegionSVG(alpha, tails, critUpper) {
+  const isTwoTailed = tails !== 'one';
+  const W = 560, H = 200;
+  const PL = 16, PR = 16, PT = 34, PB = 30;
+  const plotH = H - PT - PB;
+  const baseline = PT + plotH;
+
+  const xMin = -4, xMax = 4;
+  const toX = x => PL + ((x - xMin) / (xMax - xMin)) * (W - PL - PR);
+  const phi = x => Math.exp(-0.5 * x * x);
+  const toY = y => baseline - y * plotH;
+
+  const curvePts = [];
+  for (let i = 0; i <= 300; i++) {
+    const x = xMin + (i / 300) * (xMax - xMin);
+    curvePts.push(`${toX(x).toFixed(1)},${toY(phi(x)).toFixed(1)}`);
+  }
+
+  const band = (lo, hi) => {
+    if (hi <= lo) return '';
+    const steps = 120;
+    const pts = [`${toX(lo).toFixed(1)},${baseline}`];
+    for (let i = 0; i <= steps; i++) {
+      const x = lo + (i / steps) * (hi - lo);
+      pts.push(`${toX(x).toFixed(1)},${toY(phi(x)).toFixed(1)}`);
+    }
+    pts.push(`${toX(hi).toFixed(1)},${baseline}`);
+    return pts.join(' ');
+  };
+
+  const critLower = isTwoTailed ? -critUpper : null;
+
+  const upperBand = band(Math.max(critUpper, xMin), xMax);
+  const lowerBand = isTwoTailed ? band(xMin, Math.min(critLower, xMax)) : '';
+
+  const shadeColor = '#2D4FBA';
+  const F = "font-family:'IBM Plex Mono',monospace";
+  const f = v => (+v.toFixed(3)).toString();
+
+  const critLine = value => {
+    const x = toX(value).toFixed(1);
+    return `
+    <line x1="${x}" y1="${(PT - 6).toFixed(1)}" x2="${x}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.25" stroke-dasharray="4,3" opacity=".55"/>
+    <text x="${x}" y="${(PT - 10).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" fill="#1A1A2E">z=${f(value)}</text>`;
+  };
+
+  const regionLabel = (center, text) =>
+    `<text x="${toX(center).toFixed(1)}" y="${(baseline - 14).toFixed(1)}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${shadeColor}">${text}</text>`;
+
+  const upperCenter = (Math.max(critUpper, xMin) + xMax) / 2;
+  const lowerCenter = isTwoTailed ? (xMin + Math.min(critLower, xMax)) / 2 : null;
+
+  const ticks = [-3, -2, -1, 0, 1, 2, 3].map(z => {
+    const px = toX(z).toFixed(1);
+    return `<line x1="${px}" y1="${baseline}" x2="${px}" y2="${(baseline + 4).toFixed(1)}" stroke="#CDD2E0" stroke-width="1"/>
+<text x="${px}" y="${H - 6}" text-anchor="middle" style="${F}" font-size="8.5" fill="#7B8099">${z}</text>`;
+  }).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Standard normal curve with the ${isTwoTailed ? 'two-tailed' : 'one-tailed'} rejection region for alpha = ${alpha} shaded">
+  <polygon points="${upperBand}" fill="${shadeColor}" opacity=".3"/>
+  ${lowerBand ? `<polygon points="${lowerBand}" fill="${shadeColor}" opacity=".3"/>` : ''}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <polyline points="${curvePts.join(' ')}" fill="none" stroke="#4E6EDB" stroke-width="2.25" stroke-linejoin="round"/>
+  ${critLine(critUpper)}
+  ${isTwoTailed ? critLine(critLower) : ''}
+  ${regionLabel(upperCenter, isTwoTailed ? `α/2 = ${f(alpha / 2)}` : `α = ${f(alpha)}`)}
+  ${isTwoTailed ? regionLabel(lowerCenter, `α/2 = ${f(alpha / 2)}`) : ''}
+  ${ticks}
+</svg>`;
+}
+
 // Horizontal box-and-whisker plot for 'interquartile-range': box from
 // Q1 to Q3 with a median line, whiskers extending to the most
 // extreme NON-outlier data point on each side (the standard Tukey
@@ -15590,6 +15720,26 @@ function predictionIntervalWhiskerSVG(toX, PL, y, piLo, piHi, transform) {
     <text x="${xMid}" y="${(y - 9).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[${fmt(piLo)}, ${fmt(piHi)}]</text>`;
 }
 
+// Optional Minimal Important Difference (MID) / non-inferiority margin
+// line: a second dashed vertical line, drawn only when the caller
+// supplies a threshold, and styled distinctly (green, wider dashes)
+// from the black "no effect" null line so the two are never confused
+// at a glance. Whether a result clears the null is a different
+// question from whether it clears a pre-specified clinical threshold
+// (see the "dashed null line" section of the How to Read a Forest Plot
+// Learn guide) — this line lets a reader check the second question
+// directly on the same plot, rather than only the first. `mid` is
+// already on the plot's internal scale (log, for a ratio measure,
+// matching how every other position on these plots is computed), and
+// `label` is the pre-formatted display-scale value shown for it.
+function midLineSVG(toX, mid, y1, y2, label) {
+  if (mid == null || !isFinite(mid)) return '';
+  const x = toX(mid).toFixed(1);
+  return `
+    <line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#23875B" stroke-width="1.25" stroke-dasharray="6,2" opacity=".7"/>
+    <text x="${x}" y="${(y1 - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#23875B">MID = ${label}</text>`;
+}
+
 // Forest plot for 'meta-analysis': each study's own 95% CI (blue
 // squares, sized by its fixed-effect weight) plus the fixed-effect
 // and random-effects pooled estimates as diamonds (blue / amber,
@@ -15622,7 +15772,7 @@ function forestSideColumns(x1, x2, y, effect, ciLo, ciHi, weightPct, transform, 
       ${weightText}`;
 }
 
-function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform, measureLabel) {
+function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform, measureLabel, mid = null) {
   const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = studies.length;
   const rowH = 24;
@@ -15631,13 +15781,14 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   const plotW = W - PL - PR;
   const colX1 = W - PR + 8, colX2 = W - 16;
   const hasPI = Array.isArray(pi);
+  const hasMid = mid != null && isFinite(mid);
   const diamondGap = 21;
   const dividerY = PT + k * rowH;
   const H = dividerY + diamondGap + (hasPI ? 3 : 2) * rowH + PB;
   const baseline = H - PB;
 
   const studyCIs = studies.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
-  const allVals = [...studyCIs.flat(), ...ciFE, ...ciRE, ...(hasPI ? pi : []), 0];
+  const allVals = [...studyCIs.flat(), ...ciFE, ...ciRE, ...(hasPI ? pi : []), 0, ...(hasMid ? [mid] : [])];
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   const pad = (hi - lo) * 0.12 || 1;
   lo -= pad; hi += pad;
@@ -15676,8 +15827,9 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   const feDiamond = diamond(ciFE[0], ciFE[1], pooledFE, yFE, 'Fixed-Effect', '#4E6EDB');
   const reDiamond = diamond(ciRE[0], ciRE[1], pooledRE, yRE, 'Random-Effects', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
+  const midRow = hasMid ? midLineSVG(toX, mid, PT - 4, baseline, fmt(mid)) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates, with ${measureText}, 95% CI, and weight columns">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates, with ${measureText}, 95% CI, and weight columns${hasMid ? ', plus a minimal important difference line' : ''}">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
   <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
@@ -15687,6 +15839,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   ${feDiamond}
   ${reDiamond}
   ${piRow}
+  ${midRow}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
   ${heterogeneityCaptionSVG(W / 2, H - 12, het)}
 </svg>`;
@@ -15699,7 +15852,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
 // the wider Hartung-Knapp-Sidik-Jonkman (t-based) CI — so the extra
 // width HKSJ adds is visually obvious at a glance, anchored to the
 // identical point both methods share.
-function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi, measureLabel) {
+function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi, measureLabel, mid = null) {
   const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = studies.length;
   const rowH = 24;
@@ -15712,12 +15865,13 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   // consistently.
   const diamondGap = 21;
   const hasPI = Array.isArray(pi);
+  const hasMid = mid != null && isFinite(mid);
   const dividerY = PT + k * rowH;
   const H = dividerY + diamondGap + (hasPI ? 3 : 2) * rowH + PB;
   const baseline = H - PB;
 
   const studyCIs = studies.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
-  const allVals = [...studyCIs.flat(), ...ciNormal, ...ciHKSJ, ...(hasPI ? pi : []), 0];
+  const allVals = [...studyCIs.flat(), ...ciNormal, ...ciHKSJ, ...(hasPI ? pi : []), 0, ...(hasMid ? [mid] : [])];
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   const pad = (hi - lo) * 0.12 || 1;
   lo -= pad; hi += pad;
@@ -15756,8 +15910,9 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   const normalDiamond = diamond(ciNormal[0], ciNormal[1], pooledRE, yNormal, 'Standard (Normal)', '#4E6EDB');
   const hksjDiamond = diamond(ciHKSJ[0], ciHKSJ[1], pooledRE, yHKSJ, 'HKSJ (t)', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
+  const midRow = hasMid ? midLineSVG(toX, mid, PT - 4, baseline, fmt(mid)) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate, with ${measureText}, 95% CI, and weight columns">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate, with ${measureText}, 95% CI, and weight columns${hasMid ? ', plus a minimal important difference line' : ''}">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
   <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
@@ -15767,6 +15922,7 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   ${normalDiamond}
   ${hksjDiamond}
   ${piRow}
+  ${midRow}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
   ${heterogeneityCaptionSVG(W / 2, H - 12, het)}
 </svg>`;
@@ -15962,7 +16118,7 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, 
 // unlike the per-study forest plots above — each row is already a
 // synthesized treatment-vs-reference estimate, not raw per-study
 // data, so a "% weight" wouldn't have the same meaning.
-function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabel) {
+function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabel, mid = null) {
   const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = items.length;
   const rowH = 24;
@@ -15972,9 +16128,10 @@ function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabe
   const colX1 = W - PR + 8;
   const H = PT + k * rowH + PB;
   const baseline = H - PB;
+  const hasMid = mid != null && isFinite(mid);
 
   const cis = items.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
-  const allVals = [...cis.flat(), 0];
+  const allVals = [...cis.flat(), 0, ...(hasMid ? [mid] : [])];
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   const pad = (hi - lo) * 0.12 || 1;
   lo -= pad; hi += pad;
@@ -15994,12 +16151,15 @@ function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabe
       ${forestSideColumns(colX1, W - 6, y, s.effect, ciLo, ciHi, null, transform)}`;
   }).join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment, with ${measureText} and 95% CI columns">
+  const midRow = hasMid ? midLineSVG(toX, mid, PT - 4, baseline, fmt(mid)) : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment, with ${measureText} and 95% CI columns${hasMid ? ', plus a minimal important difference line' : ''}">
   <text x="${PL}" y="14" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Reference: ${esc(referenceLabel)}</text>
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
   <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
   ${rows}
+  ${midRow}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
 </svg>`;
 }
@@ -17190,7 +17350,7 @@ const CALCULATOR_INDEX = [
   { id: 'weighted-average',     name: 'Weighted Average / Weighted Score', category: 'Descriptive Statistics', description: 'Combines several scores into one overall score using weights you assign directly — course grades, rubric items, or composite quality indices.', status: 'available' },
 
   // ── 2. PROBABILITY & DISTRIBUTIONS ───────────────────────────────────
-  { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution.',    status: 'available' },
+  { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution, with a shaded one- or two-tailed rejection region drawn on the curve itself.',    status: 'available' },
   { id: 't-table',              name: 't-Distribution Table',            category: 'Probability & Distributions', description: 'Returns critical t-values for one- and two-tailed tests at any df and alpha.',                status: 'available' },
   { id: 'binomial-probability', name: 'Binomial Probability Calculator', category: 'Probability & Distributions', description: 'Computes exact and cumulative binomial probabilities for given n, k, and p.',                 status: 'available' },
   { id: 'poisson-negbinom',     name: 'Poisson & Negative Binomial',     category: 'Probability & Distributions', description: 'Calculates Poisson and negative binomial probabilities and cumulative distributions.',         status: 'available' },
@@ -20011,9 +20171,11 @@ const GUIDES = [
     title: 'How to Read a Forest Plot',
     blurb: 'What the squares, lines, and diamonds mean — plus fixed vs. random effects, weights, and prediction intervals.',
     dek: `Every forest plot in this app &mdash; Meta-Analysis, HKSJ, GLMM/Proportions, and Network &mdash; draws from the same visual vocabulary. Learn it once here and you can read all of them.`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates, plus estimate/CI and weight columns">
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates, plus estimate/CI and weight columns, and an optional minimal important difference line">
   <line x1="260.9" y1="16" x2="260.9" y2="197" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="260.9" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">null = 0</text>
+  <line x1="320" y1="16" x2="320" y2="197" stroke="#23875B" stroke-width="1.25" stroke-dasharray="6,2" opacity=".7"/>
+  <text x="320" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#23875B">MID = 0.50</text>
   <text x="550" y="14" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">SMD [95% CI]</text>
   <text x="684" y="14" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   <text x="90" y="36" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 1</text>
@@ -20045,11 +20207,12 @@ const GUIDES = [
   <text x="331.9" y="176" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[-0.35, 1.55]</text>
   <line x1="100" y1="197" x2="680" y2="197" stroke="#CDD2E0" stroke-width="1.5"/>
 </svg>`,
-    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval — with estimate/CI and weight printed alongside each row, matching the calculators' own forest plots. The estimate column's header names whatever's actually being pooled (SMD here; RR/OR, r, etc. elsewhere).`,
+    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval — with estimate/CI and weight printed alongside each row, matching the calculators' own forest plots. The estimate column's header names whatever's actually being pooled (SMD here; RR/OR, r, etc. elsewhere). The green dashed line at SMD = 0.50 is the optional minimal important difference (MID) line described below — here, both the Fixed-Effect and Random-Effects diamonds straddle it, so this particular result is statistically significant (it clears the null line) without clearly clearing the MID either way.`,
     legendColumns: [
       [
         { colLabel: 'Reading a study row', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Horizontal line: that study's own 95% confidence interval.` },
         { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Dashed vertical line: the null value (0, or a ratio of 1 for RR/OR).` },
+        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#23875B" stroke-width="1.5" stroke-dasharray="5,2" opacity=".85"/></svg>`, text: `Green dashed vertical line, if present: an optional user-entered <strong>Minimal Important Difference (MID) / threshold</strong> &mdash; a second, independent reference value, not a second null.` },
         { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="2" y1="5" x2="22" y2="5" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/><line x1="2" y1="2" x2="2" y2="8" stroke="#7B8099" stroke-width="1.5"/><line x1="22" y1="2" x2="22" y2="8" stroke="#7B8099" stroke-width="1.5"/></svg>`, text: `Dashed whisker:<br><strong>95% prediction interval</strong>, the range a new study's true effect would plausibly fall in.` },
       ],
       [
@@ -20075,7 +20238,7 @@ const GUIDES = [
       },
       {
         heading: 'The dashed null line',
-        html: `<p>Marks "no effect" &mdash; 0 for a difference, or a ratio of 1 for a risk ratio/odds ratio. A pooled diamond that does not touch this line indicates a statistically significant result at the conventional &alpha; = .05 threshold; one that does touch it does not rule out no effect. It's common, and not a contradiction, for several individual studies' lines to cross the null while the pooled diamond does not &mdash; that's the entire point of pooling evidence.</p>`,
+        html: `<p>Marks "no effect" &mdash; 0 for a difference, or a ratio of 1 for a risk ratio/odds ratio. A pooled diamond that does not touch this line indicates a statistically significant result at the conventional &alpha; = .05 threshold; one that does touch it does not rule out no effect. It's common, and not a contradiction, for several individual studies' lines to cross the null while the pooled diamond does not &mdash; that's the entire point of pooling evidence.</p><p>This is the same CI&ndash;p-value duality covered in the Confidence Intervals guide, drawn out visually: the null line marks the exact H0 value, and any square, line, or diamond whose 95% CI doesn't touch it is precisely the rejection-region case of a two-sided test at &alpha; = .05 &mdash; a line crossing the null line is the visual equivalent of a hypothesized value (here, "no effect") falling inside the interval instead of outside it.</p><p>That equivalence is specifically about the "no difference" null &mdash; it doesn't automatically extend to a trial or pooled result being judged against a different threshold, such as a non-inferiority margin or a minimal important difference (MID). The Meta-Analysis, HKSJ, and Network Meta-Analysis calculators on this site let you optionally enter such a threshold, which draws a second, green dashed line on the plot at that value alongside the null line &mdash; so a result can be read against both questions at once: does it clear "no difference," and, separately, does it clear the value that's actually clinically meaningful for this outcome. A CI can cross one of these lines without crossing the other &mdash; a real, statistically significant effect that still falls short of the MID, for instance &mdash; and that's not a contradiction, it's the entire reason to plot both. Leave the field blank to draw only the null line, as every forest plot on this site did before this option existed.</p>`,
       },
       {
         heading: 'Prediction intervals: a different question than the CI',
@@ -20092,6 +20255,9 @@ const GUIDES = [
       { id: 'hksj-meta-analysis', why: 'Same forest-plot grammar, comparing the standard random-effects CI to the wider Hartung-Knapp-Sidik-Jonkman adjustment.' },
       { id: 'meta-analysis-proportions', why: 'Same grammar applied to pooled proportions, via Arcsine/Logit/Raw transforms or a one-stage GLMM.' },
       { id: 'network-meta-analysis', why: 'Extends the same forest-plot grammar to every treatment compared against a common reference.' },
+      { id: 'appraisal-confidence-intervals', why: "The general CI-p-value duality rule this guide's null-line section draws out visually — see its 'two views of the same test' section." },
+      { id: 'appraisal-non-inferiority-trial', why: 'Why a CI needs to be checked against a pre-specified margin, not just the null line, when the trial itself is a non-inferiority design.' },
+      { id: 'mid-calculator', why: 'Estimates a minimal important difference (MID) you can then enter as the optional threshold line described above.' },
     ],
   },
 
@@ -20738,6 +20904,74 @@ const GUIDES = [
   },
 
   {
+    id: 'reading-normal-distribution',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Normal Distribution (Bell Curve)',
+    blurb: 'The single most common chart shape in statistics — and the shape quietly underneath nearly every z-score, p-value, and confidence interval calculated on this site.',
+    dek: `A normal ("Gaussian") distribution is fully described by just two numbers &mdash; its mean and its standard deviation &mdash; yet a huge share of statistical inference is really just geometry done on this one curve: where a value sits on it, and how much area lies beyond that point. Learn to read the curve itself here, before the p-values and confidence intervals built on top of it.`,
+    figure: sdBellCurveSVG(0, 1, [-2.1, -1.6, -1.2, -0.9, -0.6, -0.4, -0.2, 0.1, 0.3, 0.5, 0.7, 0.9, 1.3, 1.7, 2.2]),
+    figureCaption: `A standard normal curve (mean = 0, SD = 1) with the classic ±1/2/3 SD shaded bands and 15 illustrative observations plotted as a dot strip beneath it. The same shape describes any normally distributed variable &mdash; only the axis labels (μ, σ) change; the percentages inside each band never do.`,
+    legendColumns: [
+      [
+        { colLabel: 'The curve itself', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Blue curve: the distribution's shape &mdash; tallest at the mean, falling off symmetrically toward either tail.` },
+        { swatchClass: 'is-line', swatchStyle: 'background:#E07B2C', text: `Orange dashed line: the <strong>mean (μ)</strong> &mdash; also the median and mode, since a normal distribution is perfectly symmetric.` },
+      ],
+      [
+        { colLabel: 'Reading the bands', swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;opacity:.35', text: `Shaded bands, darkest to lightest: ±1 SD (&asymp;68% of values), ±2 SD (&asymp;95%), ±3 SD (&asymp;99.7%) &mdash; the empirical rule.` },
+        { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;opacity:.55', text: `Dots below the axis: individual observations &mdash; here, purely illustrative; in the "Standard Deviation — Calculated & Visualized" calculator, your own entered data.` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'Shape and symmetry',
+        html: `<p>A normal distribution is a single-peaked (unimodal), perfectly symmetric curve: fold it in half at the center and the two sides match exactly. That symmetry is what makes the mean, median, and mode coincide at one point &mdash; unlike a skewed distribution (see the Concepts Glossary's skewness entry), where those three measures pull apart from each other. The tails extend infinitely in both directions in the idealized mathematical curve, getting closer and closer to zero probability without ever quite reaching it &mdash; in practice, values more than about 3-4 SDs from the mean are rare enough to be treated as effectively impossible for most purposes.</p>`,
+      },
+      {
+        heading: 'Mean as center, SD as spread',
+        html: `<p>Only two numbers fully describe a normal distribution: the mean (μ), which fixes <em>where</em> the curve is centered, and the standard deviation (σ), which fixes <em>how wide</em> it is. Moving the mean slides the whole curve left or right without changing its shape; increasing the SD flattens and widens it, while decreasing the SD makes it taller and narrower &mdash; the total area under the curve always stays exactly 1 (100% probability) either way, since a wider curve must get shorter to compensate. This is the same mean/SD pair reported by the <a href="#variance-sd">Variance &amp; Standard Deviation</a> calculator, now given a picture rather than just two numbers.</p>`,
+      },
+      {
+        heading: 'The empirical rule: 68-95-99.7',
+        html: `<p>For any normal distribution, regardless of its particular mean or SD, a fixed proportion of values falls within each SD-wide band around the mean: about 68% within ±1 SD, about 95% within ±2 SD, and about 99.7% within ±3 SD &mdash; visible directly as the three shaded bands in the figure above. This "68-95-99.7 rule" is a fast, no-calculation way to sanity-check whether an individual value is unusual: a lab result 2.5 SDs from the mean is already outside the middle 95% of a normal reference population, well before running any formal test.</p>`,
+      },
+      {
+        heading: 'z-scores: standardizing any normal value',
+        html: `<p>A z-score converts any normal value into "how many SDs above or below the mean is this," via z = (x &minus; μ) / σ. That single transformation is what lets one standard normal curve (μ = 0, σ = 1 &mdash; exactly the figure above) stand in for every possible normal distribution: a glucose reading, a birth weight, and a regression coefficient can all be converted to the same z-scale and read off the same curve, rather than needing a separate curve memorized for every possible μ and σ. The <a href="#z-table">z-Distribution Table</a> calculator performs this lookup directly &mdash; enter a z-score and it returns the cumulative probability Φ(z), the exact quantity the next section explains how to read.</p>`,
+      },
+      {
+        heading: 'Area under the curve is probability',
+        html: `<p>The curve's height at any single point is not itself a probability &mdash; only the <em>area</em> under the curve between two points is. The total area under the whole curve is exactly 1 (100%); the area to the left of a given z-score is Φ(z), the cumulative probability that a randomly drawn value falls at or below it. This is the conceptual bridge between "reading a bell curve" and nearly every inferential calculation on this site: a p-value is an area in a tail, a confidence interval's 95% is an area in the middle, and statistical power is an area under a shifted curve past a cutoff (see <a href="#power-with-graph">Power with Graph</a> for that shifted-curve case specifically).</p>`,
+      },
+      {
+        heading: 'Shading the rejection region: one-tailed vs. two-tailed alpha',
+        html: `<p>A hypothesis test's significance level (α) is itself an area &mdash; the region(s) of the curve considered "too extreme to be explained by chance alone" if the null hypothesis were true. Where that area sits depends on whether the test is one-tailed or two-tailed:</p>
+          <div style="display:grid;grid-template-columns:1fr;gap:12px;margin:12px 0;">
+            <div>${normalAlphaRegionSVG(0.05, 'two', 1.96)}<p style="text-align:center;font-size:0.85em;color:var(--text-3,#7B8099);margin-top:2px;">Two-tailed, α = 0.05: α/2 = 0.025 shaded in <em>each</em> tail.</p></div>
+            <div>${normalAlphaRegionSVG(0.05, 'one', 1.645)}<p style="text-align:center;font-size:0.85em;color:var(--text-3,#7B8099);margin-top:2px;">One-tailed, α = 0.05: the full α = 0.05 shaded in a single tail.</p></div>
+          </div>
+          <p>Notice the two critical values differ (±1.96 vs. 1.645) even though both tests use the same α = 0.05 &mdash; a two-tailed test splits its area between both tails, so each individual tail needs a more extreme cutoff (α/2 = 0.025) to enclose the same total shaded area as a one-tailed test's single, less extreme cutoff. A result landing in the shaded region is significant at that α; one landing outside it is not &mdash; the same "does the observed value fall in the tail" logic behind every p-value and critical-value comparison on this site, made visible directly on the curve rather than left as an abstract cutoff. Try it yourself, with any α and either tail choice, on the <a href="#z-table">z-Distribution Table</a> calculator above &mdash; its "Shade Which Rejection Region?" option redraws this exact chart live.</p>`,
+      },
+      {
+        heading: 'When real data isn\'t normal',
+        html: `<p>Everything above describes the idealized mathematical curve &mdash; real data is never perfectly normal, only more or less consistent with it. Real distributions can be skewed (asymmetric, with one tail longer than the other) or have heavier or lighter tails than a true normal curve (kurtosis) &mdash; both covered in the Concepts Glossary's shape-of-a-distribution entries. The <a href="#shapiro-wilk-test">Shapiro-Wilk Test</a> formally tests whether a sample is consistent with having come from a normal distribution, the assumption underneath a t-test, ANOVA, and Pearson correlation alike. And even when the underlying data isn't normal at all, the <a href="#clt-simulator">Central Limit Theorem Simulator</a> shows why the <em>sampling distribution of the mean</em> often turns approximately normal anyway as sample size grows &mdash; the reason this curve shows up so pervasively in statistics even for outcomes that individually look nothing like it.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports a z-score, a standardized effect size, or a p-value without showing the underlying curve, this is the picture being described in words: some value's distance from a center, measured in SDs, translated into an area under this exact shape. If the reported statistic instead comes from a t, F, or chi-square distribution rather than z, the same "area beyond a cutoff = probability" logic still applies &mdash; just on a curve shaped slightly differently (see the <a href="#t-table">t-Distribution Table</a> and the Concepts Glossary's non-centrality-parameter entry for how those other reference distributions relate back to this one).</p>`,
+      },
+    ],
+    related: [
+      { id: 'sd-visualized', why: 'Plots this exact bell curve, with ±1/2/3 SD bands, directly from your own entered data.' },
+      { id: 'z-table', why: 'The live version of the shaded-rejection-region figure above — pick any α and either tail and the chart redraws.' },
+      { id: 'clt-simulator', why: 'Shows why the sampling distribution of the mean tends toward this exact shape even when the underlying data isn\'t normal.' },
+      { id: 'shapiro-wilk-test', why: 'Formally tests whether a real sample is consistent with having come from a normal distribution.' },
+      { id: 'appraisal-p-values', why: 'What the shaded tail area from this guide actually means once it\'s attached to a real test statistic rather than a fixed illustrative α.' },
+      { id: 'power-with-graph', why: 'Extends this single-curve picture to two overlapping curves (H₀ and Hₐ), adding β and power to the same area-under-the-curve logic.' },
+      { id: 'type1-type2-errors', why: 'The decision-matrix framing of the same rejection-region concept introduced here.' },
+    ],
+  },
+
+  {
     id: 'appraisal-instrumental-variables',
     category: 'Critical Appraisal of the Literature',
     title: 'How Instrumental Variable Analysis Works (and What Makes a Valid Instrument)',
@@ -21010,6 +21244,7 @@ const GUIDES = [
       { id: 'appraisal-tails-and-multiplicity', why: 'Extends this guide\'s multiple-comparisons example into the formal family-wise error rate, and covers one-tailed vs. two-tailed testing.' },
       { id: 'appraisal-frequentist-bayesian', why: 'Generalizes this guide\'s P(data|null) vs. P(null|data) distinction into the full frequentist-vs-Bayesian divide.' },
       { id: 'appraisal-confidence-intervals', why: 'Covers the CI-p-value duality — why any value outside a 95% CI is exactly the set of values a p-value < 0.05 would reject.' },
+      { id: 'reading-normal-distribution', why: 'The area-under-the-curve picture a p-value is actually reading off, before it gets attached to a specific test statistic.' },
     ],
   },
 
@@ -21051,6 +21286,7 @@ const GUIDES = [
       { id: 'appraisal-subgroup-interaction', why: 'Applies the same multiplicity problem specifically to subgroup analyses, with the ISIS-2 astrological-sign example.' },
       { id: 'holm-sidak-test', why: 'Computes the step-down Holm-Šídák correction described here directly.' },
       { id: 'appraisal-post-hoc', why: 'Distinguishes the corrected, expected use of "post hoc" (pairwise comparisons) from the uncorrected, after-the-fact kind this multiplicity problem applies to.' },
+      { id: 'reading-normal-distribution', why: 'Shows one-tailed vs. two-tailed alpha shaded directly on the curve — why the two need different critical values for the same α.' },
     ],
   },
 
@@ -21087,6 +21323,7 @@ const GUIDES = [
       { id: 'confidence-interval-proportion', why: 'Same idea for a single sample proportion.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Uses interval width as the direct evidence that a striking effect size is still imprecisely estimated.' },
       { id: 'appraisal-p-values', why: 'The p-value companion guide — see the CI-p-value duality section above for why the two are two views of the same test.' },
+      { id: 'reading-forest-plots', why: 'Shows the CI-p-value duality visually — a study or pooled diamond whose CI doesn\'t touch the null line is the rejection-region case described above.' },
     ],
   },
 
@@ -21252,7 +21489,7 @@ const GUIDES = [
       },
       {
         heading: 'What determines power',
-        html: `<p>Four things trade off against each other in any power calculation: the sample size, the size of the effect the study is trying to detect, the amount of variability in the outcome being measured, and the chosen alpha level. Holding everything else fixed, a study can increase its power by enrolling more patients, by only trying to detect a larger effect, by measuring a less variable (noisier) outcome, or by accepting a more lenient alpha threshold. In practice, sample size is usually the only one of these that a research team can directly control after the outcome and population are already decided.</p>`,
+        html: `<p>Four things trade off against each other in any power calculation: the sample size, the size of the effect the study is trying to detect, the amount of variability in the outcome being measured, and the chosen alpha level. Holding everything else fixed, a study can increase its power by enrolling more patients, by only trying to detect a larger effect, by measuring a less variable (noisier) outcome, or by accepting a more lenient alpha threshold. In practice, sample size is usually the only one of these that a research team can directly control after the outcome and population are already decided.</p><p>Mathematically, all four combine into a single quantity called the non-centrality parameter, which measures how far the true-effect distribution is shifted away from the null distribution &mdash; a bigger shift is easier to detect, which is why sample size and effect size increase power while variability decreases it. See the <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts</a> if you want that mechanism spelled out.</p>`,
       },
       {
         heading: 'Worked example',
@@ -21270,6 +21507,7 @@ const GUIDES = [
       { id: 'type1-type2-errors', why: 'Interactive explorer for the Type I/Type II error trade-off described in this guide.' },
       { id: 'power-vs-es-alpha', why: 'Shows how power shifts as effect size and alpha change, holding sample size fixed.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Places this "no significant difference isn\'t no difference" trap within a broader checklist of ways a result gets overinterpreted.' },
+      { id: 'reference-glossary-concepts', why: 'Defines the non-centrality parameter (NCP) that mathematically ties the four factors above together.' },
     ],
   },
 
@@ -22995,7 +23233,7 @@ const GUIDES = [
       },
       {
         heading: 'Hypothesis Testing & Inference',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-alpha"></span>α (alpha)</td><td>Significance level</td><td style="text-align:left;">The pre-specified threshold (conventionally 0.05) for the Type I error rate &mdash; the chance of rejecting a true null hypothesis.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr><tr><td><span id="gloss-beta"></span>β (beta)</td><td>Type II error rate</td><td style="text-align:left;">The chance of failing to reject a false null hypothesis. Power = 1 &minus; β.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a>, <a href="#power-calculations">Power Calculations</a></td></tr><tr><td><span id="gloss-ci"></span>CI</td><td>Confidence Interval</td><td style="text-align:left;">A range constructed so that, over many repeated studies, that construction method would capture the true value a stated percentage (e.g., 95%) of the time.</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a></td></tr><tr><td><span id="gloss-cri"></span>CrI</td><td>Credible Interval</td><td style="text-align:left;">The Bayesian counterpart to a CI. Unlike a CI, it does support a direct probability statement &mdash; but only relative to the prior used.</td><td style="text-align:left;"><a href="#bayesian-cri">Bayesian Credible Intervals</a>; <a href="#learn/appraisal-interval-types">Confidence Interval, Credible Interval, or Prediction Interval? (Learn guide)</a></td></tr><tr><td><span id="gloss-h0-ha"></span>H0 / Ha (H1)</td><td>Null / Alternative Hypothesis</td><td style="text-align:left;">H0 typically states "no effect" or "no difference"; Ha (or H1) states the effect the study is designed to detect.</td><td style="text-align:left;">&mdash;</td></tr><tr><td><span id="gloss-ncp"></span>NCP (λ)</td><td>Non-Centrality Parameter</td><td style="text-align:left;">Quantifies how far a true alternative effect shifts a test statistic's null (central) distribution into its "non-central" form — the basis for computing power under the non-central t, F, or &chi;&sup2; distributions. This app builds it explicitly for the noncentral-F ANOVA sample-size search (&lambda; = f&sup2;&middot;N); the other power calculators here use a simpler z-based shift instead, which doesn't need a distinct non-central distribution.</td><td style="text-align:left;"><a href="#sample-size-anova-f">Sample Size — ANOVA (Cohen's f)</a>; <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts (plain-English explanation)</a></td></tr><tr><td><span id="gloss-p-value"></span>p</td><td>p-value</td><td style="text-align:left;">The probability of seeing a result at least as extreme as the observed one, if the null hypothesis were true. Not the probability that the null hypothesis is true &mdash; and a different p from the sample proportion in the Descriptive Statistics table above.</td><td style="text-align:left;"><a href="#learn/appraisal-p-values">What a P-Value Actually Means (Learn guide)</a></td></tr><tr><td><span id="gloss-pi"></span>PI</td><td>Prediction Interval</td><td style="text-align:left;">Where one new study or one new individual observation would plausibly fall &mdash; always at least as wide as the corresponding CI.</td><td style="text-align:left;"><a href="#meta-analysis">Meta-Analysis (Q, τ², I², PI)</a>; <a href="#learn/appraisal-interval-types">interval-types Learn guide</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-alpha"></span>α (alpha)</td><td>Significance level</td><td style="text-align:left;">The pre-specified threshold (conventionally 0.05) for the Type I error rate &mdash; the chance of rejecting a true null hypothesis.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr><tr><td><span id="gloss-beta"></span>β (beta)</td><td>Type II error rate</td><td style="text-align:left;">The chance of failing to reject a false null hypothesis. Power = 1 &minus; β.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a>, <a href="#power-calculations">Power Calculations</a></td></tr><tr><td><span id="gloss-ci"></span>CI</td><td>Confidence Interval</td><td style="text-align:left;">A range constructed so that, over many repeated studies, that construction method would capture the true value a stated percentage (e.g., 95%) of the time. Because a CI is built by inverting the same hypothesis test that produces a p-value, whether it contains H0's null value is equivalent to that test's rejection-region check (see H0/Ha row below).</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a>; <a href="#gloss-h0-ha">H0/Ha</a></td></tr><tr><td><span id="gloss-cri"></span>CrI</td><td>Credible Interval</td><td style="text-align:left;">The Bayesian counterpart to a CI. Unlike a CI, it does support a direct probability statement &mdash; but only relative to the prior used.</td><td style="text-align:left;"><a href="#bayesian-cri">Bayesian Credible Intervals</a>; <a href="#learn/appraisal-interval-types">Confidence Interval, Credible Interval, or Prediction Interval? (Learn guide)</a></td></tr><tr><td><span id="gloss-h0-ha"></span>H0 / Ha (H1)</td><td>Null / Alternative Hypothesis</td><td style="text-align:left;">H0 typically states "no effect" or "no difference"; Ha (or H1) states the effect the study is designed to detect. A confidence interval doubles as a rejection-region check: any hypothesized value falling <em>outside</em> a 95% CI is exactly the set of values a two-sided test would reject at &alpha; = 0.05 &mdash; checking whether a CI contains the null value is the same test as checking whether p &lt; 0.05.</td><td style="text-align:left;"><a href="#gloss-ci">CI</a>; <a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a></td></tr><tr><td><span id="gloss-ncp"></span>NCP (λ)</td><td>Non-Centrality Parameter</td><td style="text-align:left;">Quantifies how far a true alternative effect shifts a test statistic's null (central) distribution into its "non-central" form — the basis for computing power under the non-central t, F, or &chi;&sup2; distributions. This app builds it explicitly for the noncentral-F ANOVA sample-size search (&lambda; = f&sup2;&middot;N); the other power calculators here use a simpler z-based shift instead, which doesn't need a distinct non-central distribution.</td><td style="text-align:left;"><a href="#sample-size-anova-f">Sample Size — ANOVA (Cohen's f)</a>; <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts (plain-English explanation)</a></td></tr><tr><td><span id="gloss-p-value"></span>p</td><td>p-value</td><td style="text-align:left;">The probability of seeing a result at least as extreme as the observed one, if the null hypothesis were true. Not the probability that the null hypothesis is true &mdash; and a different p from the sample proportion in the Descriptive Statistics table above.</td><td style="text-align:left;"><a href="#learn/appraisal-p-values">What a P-Value Actually Means (Learn guide)</a></td></tr><tr><td><span id="gloss-pi"></span>PI</td><td>Prediction Interval</td><td style="text-align:left;">Where one new study or one new individual observation would plausibly fall &mdash; always at least as wide as the corresponding CI.</td><td style="text-align:left;"><a href="#meta-analysis">Meta-Analysis (Q, τ², I², PI)</a>; <a href="#learn/appraisal-interval-types">interval-types Learn guide</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Effect Measures (Epidemiology & Clinical Research)',
@@ -23106,8 +23344,8 @@ const GUIDES = [
         html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
           <tr><td><span id="gloss-related-samples"></span>Related / Paired / Matched Samples</td><td style="text-align:left;">Two sets of measurements linked observation-by-observation to the same underlying unit — the same patient before and after, or two subjects deliberately matched on age, sex, or severity.</td><td style="text-align:left;"><a href="#learn/data-paired-independent">Paired/Matched vs. Independent Samples (Learn guide)</a></td></tr>
           <tr><td><span id="gloss-independent-samples"></span>Independent Samples</td><td style="text-align:left;">Two sets of measurements with no such link — separate, unrelated subjects contributing to each group.</td><td style="text-align:left;"><a href="#unpaired-t-test">Unpaired t-Test (Welch's)</a></td></tr>
-          <tr><td><span id="gloss-concordant"></span>Concordant Pair</td><td style="text-align:left;">A matched pair, or a pair of paired binary measurements, where both members share the same outcome or classification — e.g., both the before and after measurement agree.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a>; <a href="#cohens-kappa">Cohen's Kappa</a></td></tr>
-          <tr><td><span id="gloss-discordant"></span>Discordant Pair</td><td style="text-align:left;">A matched pair where the two members disagree — the only pairs that carry any information in a McNemar's test, since concordant pairs cancel out of the comparison entirely.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a></td></tr>
+          <tr><td><span id="gloss-concordant"></span>Concordant Pair</td><td style="text-align:left;">A matched pair, or a pair of paired binary measurements, where both members share the same outcome or classification — e.g., both the before and after measurement agree. Note: "concordant" has a different meaning in rank-correlation contexts (Kendall's tau), where it describes whether two ranked observations move in the same or opposite direction rather than whether a matched pair agrees — see the <a href="#learn/reference-glossary-abbreviations">Kendall's tau glossary entry</a> for that usage.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a>; <a href="#cohens-kappa">Cohen's Kappa</a>; <a href="#kendalls-tau">Kendall's τ</a></td></tr>
+          <tr><td><span id="gloss-discordant"></span>Discordant Pair</td><td style="text-align:left;">A matched pair where the two members disagree — the only pairs that carry any information in a McNemar's test, since concordant pairs cancel out of the comparison entirely. Note: "discordant" carries the same alternate, rank-correlation meaning described in the Concordant Pair row above.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a>; <a href="#kendalls-tau">Kendall's τ</a></td></tr>
         </tbody></table></div>`,
       },
       {
@@ -23165,6 +23403,7 @@ const GUIDES = [
       { id: 'appraisal-homogeneity-sphericity', why: 'Full explanation of homoscedasticity under its other common name, homogeneity of variance.' },
       { id: 'data-paired-independent', why: 'Full explanation of related vs. independent samples, with worked examples of each.' },
       { id: 'mcnemars-test', why: 'Computes a result directly from concordant/discordant pair counts, the terms defined above.' },
+      { id: 'kendalls-tau', why: "Uses concordant/discordant pairs in their other sense — direction of pairwise rank movement, not matched-pair agreement — noted in the row above." },
       { id: 'shapiro-wilk-test', why: 'Tests the normality assumption defined above directly, on your own data.' },
       { id: 'appraisal-confidence-intervals', why: 'Full explanation of the interval estimate defined above, and what "95% confidence" actually covers.' },
       { id: 'reading-forest-plots', why: 'Reads the point-estimate-square-inside-interval-estimate-line convention defined above directly off a real chart.' },
