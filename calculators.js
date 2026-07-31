@@ -15049,15 +15049,25 @@ function sdBellCurveSVG(mean, sd, data, opts = {}) {
   // guide line from the baseline up to the curve's own height there,
   // distinct from the small translucent dots `data` always draws —
   // this is the ONE point the chart is asking the viewer to notice.
+  // The label's Y position isn't fixed — it tracks the curve's actual
+  // height at that x, which climbs toward the top margin whenever the
+  // marked score is anywhere near the mean (the curve is tallest
+  // there). Left unguarded, that collides with the critical-value
+  // label above, which IS fixed near the top (see critLine) — so once
+  // the mark's own label would climb within that same zone, it flips
+  // to sit BELOW the dot instead of above it, the same collision-
+  // avoidance idea powerExplorerSVG uses for its α/β/Power labels.
   const markHtml = (markScore != null && isFinite(markScore)) ? (() => {
     const xClamped = Math.min(Math.max(markScore, xMin), xMax);
     const px = toX(xClamped).toFixed(1);
-    const curveY = toY(rawPhi(xClamped)).toFixed(1);
+    const curveY = toY(rawPhi(xClamped));
+    const labelAbove = curveY > PT + 24;
+    const labelY = labelAbove ? curveY - 8 : curveY + 14;
     const z = (markScore - mean) / sd;
     return `
-    <line x1="${px}" y1="${curveY}" x2="${px}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.5" opacity=".8"/>
-    <circle cx="${px}" cy="${curveY}" r="4.5" fill="#1A1A2E"/>
-    <text x="${px}" y="${(Number(curveY) - 8).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" font-weight="700" fill="#1A1A2E">x=${fNum(markScore)} (z=${fNum(z)})</text>`;
+    <line x1="${px}" y1="${curveY.toFixed(1)}" x2="${px}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.5" opacity=".8"/>
+    <circle cx="${px}" cy="${curveY.toFixed(1)}" r="4.5" fill="#1A1A2E"/>
+    <text x="${px}" y="${labelY.toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" font-weight="700" fill="#1A1A2E">x=${fNum(markScore)} (z=${fNum(z)})</text>`;
   })() : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Normal distribution with SD bands and data points${hasShade ? ', plus a shaded rejection region' : ''}${markHtml ? ', with one score highlighted' : ''}">
