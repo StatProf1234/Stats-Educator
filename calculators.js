@@ -3644,6 +3644,142 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 34b. z-SCORE & STANDARD DEVIATION EXPLORER ─────────────────────────
+     Companion to 'sd-visualized': instead of computing a mean/SD from
+     pasted data, all three quantities (raw score, mean, SD) are
+     sliders — dragging any one recomputes z = (x-μ)/σ and its
+     percentile live (see attachSliderListeners in app.js), and
+     redraws the exact same bell curve via sdBellCurveSVG, just fed a
+     single-point "dataset" ([x]) instead of a pasted sample. Built
+     specifically to show what sliding σ alone does to a FIXED raw
+     score's position relative to the curve — the score doesn't move,
+     but its z-score and percentile do, because the ruler underneath
+     it just got longer or shorter.                                  */
+  {
+    id:          'zscore-sd-explorer',
+    name:        'z-Score & Standard Deviation Explorer',
+    hint:        'Drag the score, mean, or SD — watch z and percentile update live',
+    category:    'Probability & Distributions',
+    description: 'An interactive bell curve — drag the raw score, mean, or standard deviation and watch the z-score and percentile recompute live, showing directly how the SAME raw score can be many or few SDs from the mean depending on how spread out the population is.',
+
+    formulas: [
+      {
+        label: 'z-Score',
+        latex: 'z = \\dfrac{x-\\mu}{\\sigma}'
+      },
+      {
+        label: 'Percentile',
+        latex: '\\text{Percentile} = \\Phi(z)\\times100\\%'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'x',    type: 'slider', label: 'Raw Score (x)',              min: 40,  max: 160, step: 1, default: 130 },
+      { id: 'mean', type: 'slider', label: 'Mean (μ)',                   min: 40,  max: 160, step: 1, default: 100 },
+      { id: 'sd',   type: 'slider', label: 'Standard Deviation (σ)',     min: 1,   max: 40,  step: 1, default: 15  },
+    ],
+
+    example({ x, mean, sd }) {
+      if (!isFinite(x) || !isFinite(mean) || !isFinite(sd) || sd <= 0)
+        return 'Adjust the score, mean, and SD sliders to see a worked medical example here.';
+      const z = (x - mean) / sd;
+      const phi = 0.5 * (1 + erf(z / Math.SQRT2));
+      const f = v => +v.toFixed(2);
+      return `A patient's score on a standardized scale is x = ${x}, in a population with mean μ = ${mean} and SD σ = ${sd}. That score sits z = ${f(z)} SDs from the mean, placing it at roughly the ${(phi * 100).toFixed(1)}th percentile. Drag the SD slider alone, leaving the score fixed at ${x}, to see the same raw score reinterpreted as more or fewer SDs from the mean purely because the population's spread changed — nothing about the patient did.`;
+    },
+
+    calculate({ x, mean, sd }) {
+      if (!isFinite(x))     return [err('Raw Score is required')];
+      if (!isFinite(mean))  return [err('Mean is required')];
+      if (!isFinite(sd) || sd <= 0) return [err('Standard Deviation must be greater than 0')];
+
+      const z   = (x - mean) / sd;
+      const phi = 0.5 * (1 + erf(z / Math.SQRT2));
+      const f   = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'z-Score', value: f(z), ci: null, isRatio: false, highlight: true },
+        { label: 'Percentile', value: `${f(phi * 100, 2)}%`, ci: null, isRatio: false, highlight: true },
+        { label: 'Distribution', isSVG: true, svg: sdBellCurveSVG(mean, sd, [x]) },
+      ];
+    }
+  },
+
+  /* ── 34c. t-DISTRIBUTION EXPLORER (df & CRITICAL REGION) ────────────────
+     Companion to 't-table': draws the ACTUAL t-density (via
+     jStat.studentt.pdf), not a normal curve relabeled, alongside a
+     thin reference standard-normal curve for comparison — dragging
+     df live-redraws both the curve's shape and the shaded critical
+     region (see attachSliderListeners in app.js), making visible why
+     a small-sample critical value is more extreme than the
+     corresponding z, and why the two converge as df grows. Unlike
+     'zscore-sd-explorer', spread here is governed by df, not an SD
+     slider — a t-distribution's own SD isn't a free parameter the way
+     a normal distribution's is.                                     */
+  {
+    id:          't-distribution-explorer',
+    name:        't-Distribution Explorer (df & Critical Region)',
+    hint:        'Drag df — watch the tails fatten and converge toward z as df grows',
+    category:    'Probability & Distributions',
+    description: 'Draws the actual t-distribution curve at any degrees of freedom, alongside a reference standard normal curve, with the one- or two-tailed critical region shaded — shows directly why a t critical value is more extreme than z at low df, and why the two converge as df grows.',
+
+    formulas: [
+      {
+        label: 't Probability Density Function',
+        latex: 'f(t;\\,df) = \\dfrac{\\Gamma\\!\\left(\\frac{df+1}{2}\\right)}{\\sqrt{df\\pi}\\,\\Gamma\\!\\left(\\frac{df}{2}\\right)}\\left(1+\\dfrac{t^2}{df}\\right)^{-\\frac{df+1}{2}}'
+      },
+      {
+        label: 'Critical Value',
+        latex: 't_{\\alpha/2,\\,df}\\;\\text{(two-tailed)} \\qquad t_{\\alpha,\\,df}\\;\\text{(one-tailed)}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'df',    type: 'slider', label: 'Degrees of Freedom (df)', min: 1, max: 30, step: 1, default: 5 },
+      { id: 'alpha', label: 'Significance Level (α, two-tailed)', default: 0.05 },
+      { id: 'tails', type: 'select', label: 'Shade Which Rejection Region?', default: 'two',
+        note: 'The grey dashed curve is always the standard normal (z) for comparison — it never shades a region of its own.',
+        options: [
+          { value: 'two', label: 'Two-Tailed (α/2 in each tail)' },
+          { value: 'one', label: 'One-Tailed (all of α in the upper tail)' },
+        ] },
+    ],
+
+    example({ df, alpha }) {
+      const dfR = Math.round(df);
+      if (!isFinite(dfR) || dfR < 1 || !isFinite(alpha) || alpha <= 0 || alpha >= 1 ||
+          typeof jStat === 'undefined' || !jStat.studentt || !jStat.normal)
+        return 'Drag the df slider and enter a significance level to see a worked medical example here.';
+      const critT = jStat.studentt.inv(1 - alpha / 2, dfR);
+      const critZ = jStat.normal.inv(1 - alpha / 2, 0, 1);
+      const f = v => +v.toFixed(3);
+      return `A pilot trial enrolls only ${dfR + 1} patients (df = ${dfR}) and tests a mean difference at α = ${alpha}. Its two-tailed critical value is ±${f(critT)} &mdash; noticeably more extreme than the ±${f(critZ)} a much larger trial could rely on, because the t-distribution's fatter tails at low df demand stronger evidence before ruling out chance. Drag df up toward 30 to watch the blue t-curve settle onto the grey standard normal curve, and the critical value converge toward ${f(critZ)}.`;
+    },
+
+    calculate({ df, alpha, tails }) {
+      const dfR = Math.round(df);
+      if (!isFinite(dfR) || dfR < 1)                    return [err('Degrees of Freedom must be at least 1')];
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
+      if (typeof jStat === 'undefined' || !jStat.studentt || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const critTwo = jStat.studentt.inv(1 - alpha / 2, dfR);
+      const critOne = jStat.studentt.inv(1 - alpha, dfR);
+      const critZTwo = jStat.normal.inv(1 - alpha / 2, 0, 1);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true, highlight: true },
+        { label: `Critical Value (one-tailed, α = ${alpha}, df = ${dfR})`, value: f(critOne), ci: null, isRatio: false },
+        { label: `For Comparison — Standard Normal (z) Critical Value (two-tailed)`, value: `±${f(critZTwo)}`, ci: null, isRatio: false, isText: true },
+        { label: 'Curve & Rejection Region', isSVG: true, svg: tCurveRegionSVG(dfR, alpha, tails, tails === 'one' ? critOne : critTwo) },
+      ];
+    }
+  },
+
   /* ── 35. BINOMIAL HYPOTHESIS TEST ──────────────────────────────────────
      Exact two-sided binomial test of an observed count x (out of n)
      against a hypothesized proportion p₀, using R's binom.test
@@ -14926,6 +15062,100 @@ function normalAlphaRegionSVG(alpha, tails, critUpper) {
 </svg>`;
 }
 
+// The actual t-density (via jStat.studentt.pdf), not a normal curve
+// relabeled — its true shape at low df is visibly shorter-peaked and
+// fatter-tailed than normal, which is the whole point of drawing it
+// alongside a thin reference standard-normal curve (jStat.normal.pdf)
+// rather than alone. Same rejection-region shading convention as
+// normalAlphaRegionSVG above, so the two read consistently, but
+// `critUpper` here is a t critical value, not a z one, and only the
+// t curve (not the reference z curve) ever gets shaded — the z curve
+// is purely a fixed point of comparison. Like normalAlphaRegionSVG,
+// takes the already-computed critical value as an argument rather
+// than calling jStat.studentt.inv itself, for the same reason: this
+// function has no jStat dependency of its OWN, so it stays safe to
+// call eagerly (e.g. from a static Learn-guide figure) even before
+// jStat has necessarily finished loading — only the caller's
+// calculate(), which already runs after jStat is confirmed present,
+// needs to compute critUpper via jStat.studentt.inv first.
+function tCurveRegionSVG(df, alpha, tails, critUpper) {
+  const isTwoTailed = tails !== 'one';
+  const W = 560, H = 210;
+  const PL = 16, PR = 16, PT = 34, PB = 30;
+  const plotH = H - PT - PB;
+  const baseline = PT + plotH;
+
+  const xMin = -6, xMax = 6;
+  const toX = x => PL + ((x - xMin) / (xMax - xMin)) * (W - PL - PR);
+  const tPdf = x => jStat.studentt.pdf(x, df);
+  const zPdf = x => jStat.normal.pdf(x, 0, 1);
+  const peak = Math.max(tPdf(0), zPdf(0));
+  const toY = y => baseline - (y / peak) * plotH * 0.92;
+
+  const curvePts = fn => {
+    const pts = [];
+    for (let i = 0; i <= 300; i++) {
+      const x = xMin + (i / 300) * (xMax - xMin);
+      pts.push(`${toX(x).toFixed(1)},${toY(fn(x)).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  };
+
+  const band = (fn, lo, hi) => {
+    if (hi <= lo) return '';
+    const steps = 120;
+    const pts = [`${toX(lo).toFixed(1)},${baseline}`];
+    for (let i = 0; i <= steps; i++) {
+      const x = lo + (i / steps) * (hi - lo);
+      pts.push(`${toX(x).toFixed(1)},${toY(fn(x)).toFixed(1)}`);
+    }
+    pts.push(`${toX(hi).toFixed(1)},${baseline}`);
+    return pts.join(' ');
+  };
+
+  const critLower = isTwoTailed ? -critUpper : null;
+  const upperBand = band(tPdf, Math.max(critUpper, xMin), xMax);
+  const lowerBand = isTwoTailed ? band(tPdf, xMin, Math.min(critLower, xMax)) : '';
+
+  const shadeColor = '#2D4FBA';
+  const F = "font-family:'IBM Plex Mono',monospace";
+  const f = v => (+v.toFixed(3)).toString();
+
+  const critLine = value => {
+    const x = toX(value).toFixed(1);
+    return `
+    <line x1="${x}" y1="${(PT - 6).toFixed(1)}" x2="${x}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.25" stroke-dasharray="4,3" opacity=".55"/>
+    <text x="${x}" y="${(PT - 10).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" fill="#1A1A2E">t=${f(value)}</text>`;
+  };
+
+  const regionLabel = (center, text) =>
+    `<text x="${toX(center).toFixed(1)}" y="${(baseline - 14).toFixed(1)}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${shadeColor}">${text}</text>`;
+
+  const upperCenter = (Math.max(critUpper, xMin) + xMax) / 2;
+  const lowerCenter = isTwoTailed ? (xMin + Math.min(critLower, xMax)) / 2 : null;
+
+  const ticks = [-4, -2, 0, 2, 4].map(z => {
+    const px = toX(z).toFixed(1);
+    return `<line x1="${px}" y1="${baseline}" x2="${px}" y2="${(baseline + 4).toFixed(1)}" stroke="#CDD2E0" stroke-width="1"/>
+<text x="${px}" y="${H - 6}" text-anchor="middle" style="${F}" font-size="8.5" fill="#7B8099">${z}</text>`;
+  }).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="t-distribution curve at df=${df} with ${isTwoTailed ? 'two-tailed' : 'one-tailed'} rejection region shaded, alongside a reference standard normal curve">
+  <polygon points="${upperBand}" fill="${shadeColor}" opacity=".3"/>
+  ${lowerBand ? `<polygon points="${lowerBand}" fill="${shadeColor}" opacity=".3"/>` : ''}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <polyline points="${curvePts(zPdf)}" fill="none" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3" opacity=".7"/>
+  <polyline points="${curvePts(tPdf)}" fill="none" stroke="#4E6EDB" stroke-width="2.25" stroke-linejoin="round"/>
+  ${critLine(critUpper)}
+  ${isTwoTailed ? critLine(critLower) : ''}
+  ${regionLabel(upperCenter, isTwoTailed ? `α/2 = ${f(alpha / 2)}` : `α = ${f(alpha)}`)}
+  ${isTwoTailed ? regionLabel(lowerCenter, `α/2 = ${f(alpha / 2)}`) : ''}
+  <text x="${W - PR}" y="${(PT + 10).toFixed(1)}" text-anchor="end" style="${F}" font-size="8.5" fill="#7B8099">df = ${df}</text>
+  <text x="${W - PR}" y="${(PT + 22).toFixed(1)}" text-anchor="end" style="${F}" font-size="8" fill="#7B8099" opacity=".7">grey dashed = standard normal (z)</text>
+  ${ticks}
+</svg>`;
+}
+
 // Horizontal box-and-whisker plot for 'interquartile-range': box from
 // Q1 to Q3 with a median line, whiskers extending to the most
 // extreme NON-outlier data point on each side (the standard Tukey
@@ -17352,6 +17582,8 @@ const CALCULATOR_INDEX = [
   // ── 2. PROBABILITY & DISTRIBUTIONS ───────────────────────────────────
   { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution, with a shaded one- or two-tailed rejection region drawn on the curve itself.',    status: 'available' },
   { id: 't-table',              name: 't-Distribution Table',            category: 'Probability & Distributions', description: 'Returns critical t-values for one- and two-tailed tests at any df and alpha.',                status: 'available' },
+  { id: 'zscore-sd-explorer',   name: 'z-Score & Standard Deviation Explorer', category: 'Probability & Distributions', description: 'An interactive bell curve — drag the raw score, mean, or standard deviation and watch the z-score and percentile recompute live.', status: 'available' },
+  { id: 't-distribution-explorer', name: 't-Distribution Explorer (df & Critical Region)', category: 'Probability & Distributions', description: 'Draws the actual t-distribution curve at any degrees of freedom, alongside a reference standard normal curve, with the rejection region shaded.', status: 'available' },
   { id: 'binomial-probability', name: 'Binomial Probability Calculator', category: 'Probability & Distributions', description: 'Computes exact and cumulative binomial probabilities for given n, k, and p.',                 status: 'available' },
   { id: 'poisson-negbinom',     name: 'Poisson & Negative Binomial',     category: 'Probability & Distributions', description: 'Calculates Poisson and negative binomial probabilities and cumulative distributions.',         status: 'available' },
   { id: 'inverse-probability',  name: 'Inverse Probability',             category: 'Probability & Distributions', description: 'Finds the smallest count k such that the binomial cumulative probability P(X ≤ k) meets or exceeds a target probability, given n and p (the BINOM.INV equivalent).',  status: 'available' },
@@ -18564,6 +18796,8 @@ const SEARCH_KEYWORDS = {
   // Probability & Distributions
   'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve'],
   't-table':              ['t distribution', 't critical value table', "student's t table"],
+  'zscore-sd-explorer':   ['z score calculator', 'raw score to z score', 'sd slider', 'standard deviation slider', 'bell curve interactive', 'normal distribution explorer', 'percentile from z score'],
+  't-distribution-explorer': ['t distribution curve', 'degrees of freedom slider', 't vs z', 'fat tails', 't curve shape', 'interactive t distribution'],
   'binomial-probability': ['binomial distribution', 'probability of successes', 'coin flip probability', 'exact binomial probability'],
   'poisson-negbinom':     ['poisson distribution', 'rare events', 'count data', 'overdispersion', 'negative binomial'],
   'inverse-probability':  ['reverse lookup', 'binom inv', 'smallest count for a target probability', 'inverse binomial'],
@@ -20936,7 +21170,7 @@ const GUIDES = [
       },
       {
         heading: 'z-scores: standardizing any normal value',
-        html: `<p>A z-score converts any normal value into "how many SDs above or below the mean is this," via z = (x &minus; μ) / σ. That single transformation is what lets one standard normal curve (μ = 0, σ = 1 &mdash; exactly the figure above) stand in for every possible normal distribution: a glucose reading, a birth weight, and a regression coefficient can all be converted to the same z-scale and read off the same curve, rather than needing a separate curve memorized for every possible μ and σ. The <a href="#z-table">z-Distribution Table</a> calculator performs this lookup directly &mdash; enter a z-score and it returns the cumulative probability Φ(z), the exact quantity the next section explains how to read.</p>`,
+        html: `<p>A z-score converts any normal value into "how many SDs above or below the mean is this," via z = (x &minus; μ) / σ. That single transformation is what lets one standard normal curve (μ = 0, σ = 1 &mdash; exactly the figure above) stand in for every possible normal distribution: a glucose reading, a birth weight, and a regression coefficient can all be converted to the same z-scale and read off the same curve, rather than needing a separate curve memorized for every possible μ and σ. The <a href="#z-table">z-Distribution Table</a> calculator performs this lookup directly &mdash; enter a z-score and it returns the cumulative probability Φ(z), the exact quantity the next section explains how to read.</p><p>To see this the other way around &mdash; starting from a raw score rather than an already-computed z &mdash; try the <a href="#zscore-sd-explorer">z-Score &amp; Standard Deviation Explorer</a>: drag the raw score, the mean, or the SD independently, and watch the z-score and percentile update live. Holding the score fixed and dragging only σ is particularly worth trying &mdash; the patient's value never moves, but how many SDs from the mean it counts as does, purely because the population's spread changed.</p>`,
       },
       {
         heading: 'Area under the curve is probability',
@@ -20957,12 +21191,14 @@ const GUIDES = [
       },
       {
         heading: 'Reading tip',
-        html: `<p>When a paper reports a z-score, a standardized effect size, or a p-value without showing the underlying curve, this is the picture being described in words: some value's distance from a center, measured in SDs, translated into an area under this exact shape. If the reported statistic instead comes from a t, F, or chi-square distribution rather than z, the same "area beyond a cutoff = probability" logic still applies &mdash; just on a curve shaped slightly differently (see the <a href="#t-table">t-Distribution Table</a> and the Concepts Glossary's non-centrality-parameter entry for how those other reference distributions relate back to this one).</p>`,
+        html: `<p>When a paper reports a z-score, a standardized effect size, or a p-value without showing the underlying curve, this is the picture being described in words: some value's distance from a center, measured in SDs, translated into an area under this exact shape. If the reported statistic instead comes from a t, F, or chi-square distribution rather than z, the same "area beyond a cutoff = probability" logic still applies &mdash; just on a curve shaped slightly differently (see the <a href="#t-table">t-Distribution Table</a>, or drag degrees of freedom live on the <a href="#t-distribution-explorer">t-Distribution Explorer</a>, and the Concepts Glossary's non-centrality-parameter entry for how those other reference distributions relate back to this one).</p>`,
       },
     ],
     related: [
       { id: 'sd-visualized', why: 'Plots this exact bell curve, with ±1/2/3 SD bands, directly from your own entered data.' },
+      { id: 'zscore-sd-explorer', why: 'Drag the raw score, mean, or SD independently and watch the z-score and percentile recompute live — the interactive version of the z-score section above.' },
       { id: 'z-table', why: 'The live version of the shaded-rejection-region figure above — pick any α and either tail and the chart redraws.' },
+      { id: 't-distribution-explorer', why: 'The same shaded-rejection-region idea for the t-distribution, with df as a live slider instead of α — shows the fatter tails at low df directly.' },
       { id: 'clt-simulator', why: 'Shows why the sampling distribution of the mean tends toward this exact shape even when the underlying data isn\'t normal.' },
       { id: 'shapiro-wilk-test', why: 'Formally tests whether a real sample is consistent with having come from a normal distribution.' },
       { id: 'appraisal-p-values', why: 'What the shaded tail area from this guide actually means once it\'s attached to a real test statistic rather than a fixed illustrative α.' },
