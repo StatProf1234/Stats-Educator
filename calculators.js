@@ -3637,7 +3637,7 @@ const CALCULATORS = [
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
       return [
-        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true, highlight: true },
+        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, highlight: true },
         { label: `Critical Value (one-tailed, α = ${alpha}, df = ${dfR})`, value: f(critOne), ci: null, isRatio: false, highlight: true },
         { isSVG: true, svg: tTableHTML(dfR, alpha) },
       ];
@@ -3729,7 +3729,7 @@ const CALCULATORS = [
         if (alpha <= 0 || alpha >= 1) return [err('Significance Level (α) must be between 0 and 1 (exclusive)')];
         if (typeof jStat !== 'undefined' && jStat.normal) {
           critZ = tails === 'one' ? jStat.normal.inv(1 - alpha, 0, 1) : jStat.normal.inv(1 - alpha / 2, 0, 1);
-          rows.push({ label: `Critical z (${tails === 'one' ? 'one' : 'two'}-tailed, α = ${alpha})`, value: tails === 'one' ? f(critZ) : `±${f(critZ)}`, ci: null, isRatio: false, isText: tails !== 'one' });
+          rows.push({ label: `Critical z (${tails === 'one' ? 'one' : 'two'}-tailed, α = ${alpha})`, value: tails === 'one' ? f(critZ) : `±${f(critZ)}`, ci: null, isRatio: false });
         } else {
           rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
             value: 'The statistics library needed for the shaded rejection region failed to load — showing the curve without shading. Refresh the page and try again.' });
@@ -3811,9 +3811,9 @@ const CALCULATORS = [
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
       return [
-        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true, highlight: true },
+        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, highlight: true },
         { label: `Critical Value (one-tailed, α = ${alpha}, df = ${dfR})`, value: f(critOne), ci: null, isRatio: false },
-        { label: `For Comparison — Standard Normal (z) Critical Value (two-tailed)`, value: `±${f(critZTwo)}`, ci: null, isRatio: false, isText: true },
+        { label: `For Comparison — Standard Normal (z) Critical Value (two-tailed)`, value: `±${f(critZTwo)}`, ci: null, isRatio: false },
         { label: 'Curve & Rejection Region', isSVG: true, svg: tCurveRegionSVG(dfR, alpha, tails, tails === 'one' ? critOne : critTwo) },
       ];
     }
@@ -14973,30 +14973,6 @@ function sdBellCurveSVG(mean, sd, data, opts = {}) {
     return `<line x1="${px}" y1="${PT}" x2="${px}" y2="${baseline}" stroke="#4E6EDB" stroke-width="1" stroke-dasharray="3,3" opacity=".4"/>`;
   }).join('');
 
-  // Percentage labels — each is the probability of just its own
-  // one-sided, one-SD-wide slice (0 to 1σ, 1σ to 2σ, 2σ to 3σ), NOT
-  // the cumulative two-sided empirical-rule figures (68.27/95.45/
-  // 99.73%, which describe the FULL ±kσ band and are what the legend
-  // and prose elsewhere on this site quote) — since the same label is
-  // drawn on both sides of the mean, using the two-sided total here
-  // would double-count it. 34.13 + 34.13 = 68.27%, the usual band
-  // figure, split across its two mirrored halves. The 2-3 SD label
-  // sits ABOVE its (very low) curve height rather than below it,
-  // since the curve there is too close to the baseline to fit a label
-  // underneath — yFrac must clear that curve height (~0.044 at z=2.5)
-  // by enough margin that the text doesn't dip down into the line.
-  const pctLabels = [
-    { z: 0.5,  pct: '34.13%', yFrac: 0.38 },
-    { z: 1.5,  pct: '13.59%', yFrac: 0.15 },
-    { z: 2.5,  pct: '2.14%',  yFrac: 0.12 },
-  ].flatMap(({ z, pct, yFrac }) => {
-    const y = toY(yFrac).toFixed(1);
-    return [
-      `<text x="${toX(mean + z*sd).toFixed(1)}" y="${y}" text-anchor="middle" font-size="9" fill="#4E6EDB" opacity=".75">${pct}</text>`,
-      `<text x="${toX(mean - z*sd).toFixed(1)}" y="${y}" text-anchor="middle" font-size="9" fill="#4E6EDB" opacity=".75">${pct}</text>`,
-    ];
-  }).join('');
-
   // Data strip (dot plot below baseline)
   const stripY   = baseline + 8;
   const dotStack = {};
@@ -15029,18 +15005,31 @@ function sdBellCurveSVG(mean, sd, data, opts = {}) {
   const F = "font-family:'IBM Plex Mono',monospace";
   const fNum = v => (+v.toFixed(3)).toString();
 
+  // Collision boxes ({x, y, halfWidth} in SVG pixel space) for every
+  // label that outranks the fixed percentage-band labels below (the
+  // marked score, a critical-value cutoff, a shaded-region alpha
+  // label) — populated as those labels are built (all below, all
+  // before pctLabels), so pctLabels can skip any instance of itself
+  // that would land on top of one of them instead of drawing blind.
+  const priorityLabels = [];
+  const addPriorityLabel = (x, y, halfWidth) => priorityLabels.push({ x, y, halfWidth });
+
   const upperShade = hasShade ? band(Math.max(critHigh, xMin), xMax) : '';
   const lowerShade = (hasShade && isTwoTailed) ? band(xMin, Math.min(critLow, xMax)) : '';
 
   const critLine = value => {
-    const px = toX(value).toFixed(1);
+    const px = toX(value);
+    addPriorityLabel(px, PT - 4, 20);
     return `
-    <line x1="${px}" y1="${PT}" x2="${px}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.25" stroke-dasharray="4,3" opacity=".6"/>
-    <text x="${px}" y="${(PT - 4).toFixed(1)}" text-anchor="middle" style="${F}" font-size="8" fill="#1A1A2E">${fNum(value)}</text>`;
+    <line x1="${px.toFixed(1)}" y1="${PT}" x2="${px.toFixed(1)}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.25" stroke-dasharray="4,3" opacity=".6"/>
+    <text x="${px.toFixed(1)}" y="${(PT - 4).toFixed(1)}" text-anchor="middle" style="${F}" font-size="8" fill="#1A1A2E">${fNum(value)}</text>`;
   };
 
-  const shadeLabel = (center, text) =>
-    `<text x="${toX(center).toFixed(1)}" y="${(baseline - 12).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9.5" font-weight="700" fill="${shadeColor}">${text}</text>`;
+  const shadeLabel = (center, text) => {
+    const px = toX(center);
+    addPriorityLabel(px, baseline - 12, 28);
+    return `<text x="${px.toFixed(1)}" y="${(baseline - 12).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9.5" font-weight="700" fill="${shadeColor}">${text}</text>`;
+  };
 
   const shadeHtml = hasShade ? `
     <polygon points="${upperShade}" fill="${shadeColor}" opacity=".32"/>
@@ -15070,11 +15059,45 @@ function sdBellCurveSVG(mean, sd, data, opts = {}) {
     const labelAbove = curveY > PT + 24;
     const labelY = labelAbove ? curveY - 8 : curveY + 14;
     const z = (markScore - mean) / sd;
+    addPriorityLabel(+px, labelY, 34);
     return `
     <line x1="${px}" y1="${curveY.toFixed(1)}" x2="${px}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.5" opacity=".8"/>
     <circle cx="${px}" cy="${curveY.toFixed(1)}" r="4.5" fill="#1A1A2E"/>
     <text x="${px}" y="${labelY.toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" font-weight="700" fill="#1A1A2E">x=${fNum(markScore)} (z=${fNum(z)})</text>`;
   })() : '';
+
+  // Percentage labels — each is the probability of just its own
+  // one-sided, one-SD-wide slice (0 to 1σ, 1σ to 2σ, 2σ to 3σ), NOT
+  // the cumulative two-sided empirical-rule figures (68.27/95.45/
+  // 99.73%, which describe the FULL ±kσ band and are what the legend
+  // and prose elsewhere on this site quote) — since the same label is
+  // drawn on both sides of the mean, using the two-sided total here
+  // would double-count it. 34.13 + 34.13 = 68.27%, the usual band
+  // figure, split across its two mirrored halves. The 2-3 SD label
+  // sits ABOVE its (very low) curve height rather than below it,
+  // since the curve there is too close to the baseline to fit a label
+  // underneath — yFrac must clear that curve height (~0.044 at z=2.5)
+  // by enough margin that the text doesn't dip down into the line.
+  // Any instance that would land on top of a markHtml/critLine/
+  // shadeLabel box registered above (e.g. the dragged score landing
+  // near a ±1.5σ or ±2.5σ tick) is skipped rather than drawn over it —
+  // those dynamic, computed values take priority over this fixed
+  // reference annotation.
+  const pctLabels = [
+    { z: 0.5,  pct: '34.13%', yFrac: 0.38 },
+    { z: 1.5,  pct: '13.59%', yFrac: 0.15 },
+    { z: 2.5,  pct: '2.14%',  yFrac: 0.12 },
+  ].flatMap(({ z, pct, yFrac }) => {
+    const y = toY(yFrac);
+    const halfWidth = 17;
+    return [mean + z * sd, mean - z * sd].map(x => {
+      const px = toX(x);
+      const collides = priorityLabels.some(b =>
+        Math.abs(px - b.x) < (halfWidth + b.halfWidth) && Math.abs(y - b.y) < 12);
+      if (collides) return '';
+      return `<text x="${px.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="9" fill="#4E6EDB" opacity=".75">${pct}</text>`;
+    });
+  }).join('');
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Normal distribution with SD bands and data points${hasShade ? ', plus a shaded rejection region' : ''}${markHtml ? ', with one score highlighted' : ''}">
   <polygon points="${band(mean-3*sd, mean+3*sd)}" fill="#4E6EDB" opacity=".07"/>
