@@ -2017,6 +2017,16 @@ function exportSVGAsImage(svgEl, filename, format) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Belt-and-suspenders: paint white BEHIND whatever was just drawn,
+    // catching any transparency in the rasterized image itself (not
+    // just the canvas underneath it) — normal source-over compositing
+    // already shouldn't need this, but this costs nothing and removes
+    // any doubt if a browser's SVG-to-canvas rasterization ever leaves
+    // stray transparent pixels.
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-over';
     URL.revokeObjectURL(svgUrl);
 
     const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
