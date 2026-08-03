@@ -116,6 +116,24 @@ body {
   border-top: 1px solid var(--sidebar-border);
   font-size: 11px;
   color: var(--sidebar-text);
+  line-height: 1.6;
+}
+
+.sidebar-footer a {
+  color: var(--sidebar-text);
+  text-decoration: underline;
+}
+
+.footer-license {
+  display: block;
+  margin: 6px 0;
+}
+
+.footer-license-badge {
+  display: block;
+  background: #fff;
+  border-radius: 3px;
+  padding: 2px 4px;
 }
 
 .brand-abbr {
