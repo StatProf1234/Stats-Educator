@@ -558,10 +558,21 @@ function renderHome() {
 // the wizard (it's the URL hash), so a bare node id isn't enough to
 // navigate there. Cached per tree object, since neither WIZARD_TREE
 // nor LEARN_WIZARD_TREE changes at runtime.
+//
+// The same walk also accumulates each leaf's PATH TEXT: every
+// question asked plus the specific option label chosen at each step
+// leading to it (e.g. "What's your goal for these two groups? ...
+// Show that they differ ... Are the two groups paired ... Independent
+// (different subjects in each group)"). matchWizardDescription scores
+// this alongside the resolved calculator/guide's own name/keywords —
+// a free-text query describing a scenario ("independent samples,
+// want to know if they differ") often matches this wizard-authored
+// phrasing far better than it matches the destination item's own text.
 const wizardPathCache = new Map();
 function getWizardPaths(tree) {
   if (wizardPathCache.has(tree)) return wizardPathCache.get(tree);
   const paths = { start: [] };
+  const texts = { start: '' };
   const queue = ['start'];
   const seen = new Set(['start']);
   while (queue.length) {
@@ -572,11 +583,13 @@ function getWizardPaths(tree) {
       if (seen.has(opt.next)) continue;
       seen.add(opt.next);
       paths[opt.next] = [...paths[id], opt.next];
+      texts[opt.next] = `${texts[id]} ${node.question || ''} ${opt.label}`.trim();
       queue.push(opt.next);
     }
   }
-  wizardPathCache.set(tree, paths);
-  return paths;
+  const result = { paths, texts };
+  wizardPathCache.set(tree, result);
+  return result;
 }
 
 // Free-text descriptions are ordinary prose ("comparing an oral
@@ -602,6 +615,13 @@ const WIZARD_STOPWORDS = new Set([
   'out',
 ]);
 
+// Path-text weight sits below a calculator/guide's own name (10) or
+// curated SEARCH_KEYWORDS (12) but above its hint/blurb (4) — high
+// enough that a query written in the wizard's own question/option
+// phrasing can carry a leaf across the > 0 threshold on its own, not
+// so high that it drowns out a genuinely strong name/keyword match.
+const WIZARD_PATH_TEXT_WEIGHT = 8;
+
 // Scores a wizard "results" leaf against a free-text description by
 // taking the BEST individual match among everything that leaf
 // recommends (not the sum — a leaf with many results, like the plain
@@ -616,7 +636,20 @@ const WIZARD_STOPWORDS = new Set([
 // description/dek, category) the sidebar search already uses — so
 // the same phrase finds the same destination whether typed into the
 // sidebar or into this box.
-function scoreWizardLeaf(leaf, filter, filterWords, resolveItem, scoreItem) {
+//
+// On top of that item score, `pathText` — the question text and
+// chosen option labels leading to this leaf (see getWizardPaths) — is
+// scored the same way and added in. A free-text description often
+// describes the SCENARIO ("independent samples, want to know if they
+// differ") rather than naming the destination calculator/guide, and
+// that scenario language is exactly what the wizard's own questions
+// and option labels are written in — so a leaf whose destination item
+// scores 0 can still surface correctly on the strength of its path
+// alone. When no individual result ever beats 0, bestResult falls
+// back to the leaf's first (nominal "primary") result, same as the
+// Designs hub's own cards do, so there's still something sensible to
+// show and link to.
+function scoreWizardLeaf(leaf, pathText, filter, filterWords, resolveItem, scoreItem) {
   let best = 0, bestResult = null;
   for (const r of leaf.results) {
     const item = resolveItem(r.id);
@@ -624,7 +657,10 @@ function scoreWizardLeaf(leaf, filter, filterWords, resolveItem, scoreItem) {
     const s = scoreItem(item, filter, filterWords);
     if (s > best) { best = s; bestResult = r; }
   }
-  return { score: best, bestResult };
+  const pathScore = pathText
+    ? scoreWeightedFields([{ text: pathText, weight: WIZARD_PATH_TEXT_WEIGHT }], filter, filterWords)
+    : 0;
+  return { score: best + pathScore, bestResult: bestResult || leaf.results[0] };
 }
 
 // Ranks every reachable result node in `tree` against a free-text
@@ -648,11 +684,12 @@ function matchWizardDescription(tree, query, resolveItem, scoreItem, extraStopwo
   // apostrophes, so "case-control" and "don't" stay single tokens).
   const filterWords = (filter.match(/[a-z0-9]+(?:['-][a-z0-9]+)*/g) || [])
     .filter(w => w.length > 1 && !WIZARD_STOPWORDS.has(w) && !(extraStopwords && extraStopwords.has(w)));
-  const paths = getWizardPaths(tree);
+  const { paths, texts } = getWizardPaths(tree);
   return Object.keys(tree)
     .filter(key => tree[key].results && paths[key])
     .map(key => {
-      const { score, bestResult } = scoreWizardLeaf(tree[key], filter, filterWords, resolveItem, scoreItem);
+      const pathText = (texts[key] || '').toLowerCase();
+      const { score, bestResult } = scoreWizardLeaf(tree[key], pathText, filter, filterWords, resolveItem, scoreItem);
       return { key, path: paths[key], score, bestResult };
     })
     .filter(m => m.score > 0)
@@ -1043,7 +1080,7 @@ const DESIGN_GLANCE_CATEGORIES = [
   { category: 'Observational — Comparative', keys: ['cohortResult', 'caseControlResult'] },
   { category: 'Observational — Descriptive', keys: ['caseSeriesResult', 'prevalenceResult', 'ecologicalResult'] },
   { category: 'Diagnostic & Prognostic', keys: ['diagAccuracyResult', 'aiStudyResult', 'prognosisResult'] },
-  { category: 'Evidence Synthesis & Planning', keys: ['systematicReviewResult', 'scopingReviewResult', 'guidelineResult', 'pilotResult'] },
+  { category: 'Evidence Synthesis & Planning', keys: ['systematicReviewResult', 'scopingReviewResult', 'realistReviewResult', 'guidelineResult', 'pilotResult'] },
 ];
 
 // Tracks which Designs hub categories the user has explicitly opened
@@ -1315,6 +1352,7 @@ function renderCalculator(calc) {
   }
 
   attachSliderListeners(calc, run);
+  attachShowIfListeners(calc);
 
   // Auto-run with the defaults already populated into the inputs above,
   // so users see example output immediately without clicking Calculate.
@@ -1524,9 +1562,16 @@ function attachSliderListeners(calc, run) {
 function renderGrid(calc) {
   return `<div class="inputs-grid">` +
     calc.inputs.map(inp => {
+      // Fields with a `showIf(values)` predicate start rendered (visibility
+      // is corrected immediately by attachShowIfListeners, which runs right
+      // after this HTML is inserted) but carry a `field-<id>` wrapper id so
+      // that predicate can find and toggle them — e.g. a calculator with two
+      // entry modes ("group summary data" vs. "published estimate") whose
+      // mode select shows only the inputs the current mode actually uses.
+      const fieldId = ` id="field-${inp.id}"`;
       if (inp.type === 'textarea') {
         return `
-          <div class="input-field input-field-wide">
+          <div class="input-field input-field-wide"${fieldId}>
             <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
             <textarea class="input-el inputs-textarea" id="inp-${inp.id}"
                       data-id="${inp.id}" rows="3" spellcheck="false">${esc(String(inp.default))}</textarea>
@@ -1535,7 +1580,7 @@ function renderGrid(calc) {
       if (inp.type === 'slider') {
         const display = inp.format ? inp.format(inp.default) : String(inp.default);
         return `
-          <div class="input-field input-field-wide">
+          <div class="input-field input-field-wide"${fieldId}>
             <label class="input-label" for="inp-${inp.id}">
               ${esc(inp.label)} — <span class="slider-value" id="val-${inp.id}">${esc(display)}</span>
             </label>
@@ -1549,22 +1594,33 @@ function renderGrid(calc) {
         ).join('');
         const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
         return `
-          <div class="input-field input-field-wide">
+          <div class="input-field input-field-wide"${fieldId}>
             <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
             <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
             ${hint}
           </div>`;
       }
+      if (inp.type === 'checkbox') {
+        const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
+        return `
+          <div class="input-field input-field-wide"${fieldId}>
+            <label class="input-checkbox-label">
+              <input class="input-checkbox" type="checkbox" id="inp-${inp.id}" data-id="${inp.id}"${inp.default ? ' checked' : ''}>
+              ${esc(inp.label)}
+            </label>
+            ${hint}
+          </div>`;
+      }
       if (inp.type === 'text') {
         return `
-          <div class="input-field">
+          <div class="input-field"${fieldId}>
             <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
             <input class="input-el" type="text" id="inp-${inp.id}" data-id="${inp.id}"
                    value="${esc(String(inp.default))}"${inp.placeholder ? ` placeholder="${esc(inp.placeholder)}"` : ''} autocomplete="off" spellcheck="false">
           </div>`;
       }
       return `
-        <div class="input-field">
+        <div class="input-field"${fieldId}>
           <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
           <input class="input-el" type="number" id="inp-${inp.id}"
                  data-id="${inp.id}" value="${inp.default}" step="any">
@@ -1712,6 +1768,32 @@ function render2x2ExtraInputs(inputs) {
   }).join('');
 }
 
+// Shows/hides inputs whose definition carries a `showIf(values)` predicate
+// — e.g. a calculator with two entry modes, where the mode select should
+// reveal only the fields that mode actually uses. Re-evaluates every
+// showIf on every input's change (not just the mode select's own), since
+// a field can depend on more than one earlier answer (mode -> paired ->
+// only-if-paired sdChange). Hidden fields stay in the DOM and still feed
+// readInputs() — calculate() is expected to ignore whichever branch's
+// fields aren't relevant to the current mode, the same way it always has
+// to validate/branch on a mode value anyway.
+function attachShowIfListeners(calc) {
+  if (!calc.inputs.some(inp => typeof inp.showIf === 'function')) return;
+  const refresh = () => {
+    const values = readInputs(calc);
+    calc.inputs.forEach(inp => {
+      if (typeof inp.showIf !== 'function') return;
+      const field = document.getElementById('field-' + inp.id);
+      if (field) field.hidden = !inp.showIf(values);
+    });
+  };
+  calc.inputs.forEach(inp => {
+    const el = document.getElementById('inp-' + inp.id);
+    if (el) el.addEventListener('change', refresh);
+  });
+  refresh();
+}
+
 function attachTotalListeners() {
   ['a','b','c','d'].forEach(id => {
     const el = document.getElementById('inp-' + id);
@@ -1741,6 +1823,8 @@ function zeroInputs(calc) {
     if (!el) return;
     if (inp.type === 'textarea' || inp.type === 'text') {
       el.value = '';
+    } else if (inp.type === 'checkbox') {
+      el.checked = false;
     } else if (inp.type === 'slider') {
       el.value = (inp.min <= 0 && inp.max >= 0) ? 0 : inp.min;
       const label = document.getElementById('val-' + inp.id);
@@ -1759,7 +1843,9 @@ function readInputs(calc) {
     if (inp.type === 'button') continue; // an action trigger, not a value — e.g. explorer "re-flip" buttons
     const el = document.getElementById('inp-' + inp.id);
     if (!el) { vals[inp.id] = inp.default; continue; }
-    vals[inp.id] = (inp.type === 'textarea' || inp.type === 'select' || inp.type === 'text') ? el.value : parseFloat(el.value);
+    vals[inp.id] = (inp.type === 'textarea' || inp.type === 'select' || inp.type === 'text') ? el.value
+      : inp.type === 'checkbox' ? el.checked
+      : parseFloat(el.value);
   }
   return vals;
 }
@@ -1832,7 +1918,7 @@ function showResults(results, calcId) {
         const domain = r.isRatio ? ratioDomain : diffDomain;
         ciCell = `
           <div class="result-ci">
-            ${forestSVG(pt, lo, hi, r.isRatio, domain)}
+            ${forestSVG(pt, lo, hi, r.isRatio, domain, r.band)}
             <span class="ci-text">[${+lo.toFixed(4)}, ${+hi.toFixed(4)}]</span>
           </div>`;
       } else {
@@ -1907,7 +1993,7 @@ function showResults(results, calcId) {
 
 /* ── FOREST PLOT SVG ────────────────────────────────────── */
 
-function forestSVG(value, lo, hi, isRatio, domain) {
+function forestSVG(value, lo, hi, isRatio, domain, band) {
   const W = 200, H = 22, PAD = 14;
   const pw = W - 2*PAD;
 
@@ -1929,8 +2015,21 @@ function forestSVG(value, lo, hi, isRatio, domain) {
   const cy    = H/2;
   const dh    = 5;
 
+  // Optional shaded "trivial zone" band (e.g. +/-MID around the null),
+  // drawn first so the CI whisker and point estimate sit on top of it —
+  // same green (#23875B) used for the MID threshold line on multi-study
+  // forest plots, and the same shaded-region idea as the equivalence/
+  // non-inferiority zone plot, just folded into this single-study whisker.
+  let bandSvg = '';
+  if (band && isFinite(band[0]) && isFinite(band[1])) {
+    const bLoX = clamp(toX(band[0]));
+    const bHiX = clamp(toX(band[1]));
+    bandSvg = `<rect x="${bLoX}" y="2" width="${Math.max(bHiX-bLoX,0)}" height="${H-4}" fill="#23875B" opacity=".12"/>`;
+  }
+
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
                class="forest-svg" aria-hidden="true">
+    ${bandSvg}
     <line x1="${PAD}" y1="${cy}" x2="${W-PAD}" y2="${cy}"
           stroke="#CDD2E0" stroke-width="1"/>
     <rect x="${loX}" y="${cy-3}" width="${Math.max(hiX-loX,2)}" height="6"

@@ -92,8 +92,8 @@ const CALCULATORS = [
 
     formulas: [
       {
-        label: 'Absolute Risk (with 95% CI)',
-        latex: 'AR_{+} = \\dfrac{a}{a+b} \\;\\; AR_{-} = \\dfrac{c}{c+d} \\qquad CI_{AR} = AR \\pm 1.96\\sqrt{\\dfrac{AR(1-AR)}{n}}'
+        label: 'Absolute Risk (with 95% Wilson Score CI)',
+        latex: 'AR_{+} = \\dfrac{a}{a+b} \\;\\; AR_{-} = \\dfrac{c}{c+d} \\qquad CI_{AR} = \\dfrac{AR + \\frac{z^2}{2n}}{1+\\frac{z^2}{n}} \\pm \\dfrac{z}{1+\\frac{z^2}{n}}\\sqrt{\\dfrac{AR(1-AR)}{n}+\\dfrac{z^2}{4n^2}}'
       },
       {
         label: 'Relative Risk & Odds Ratio',
@@ -166,15 +166,16 @@ const CALCULATORS = [
       const NNX = Math.abs(ARD) < 1e-10 ? '∞' : Math.ceil(1 / Math.abs(ARD));
       const isBeneficial = ARD < 0;
 
-      const SE_ARp   = Math.sqrt(ARp*(1-ARp)/n1);
-      const SE_ARn   = Math.sqrt(ARn*(1-ARn)/n2);
       const SE_ARD   = Math.sqrt(ARp*(1-ARp)/n1 + ARn*(1-ARn)/n2);
       const SE_logRR = Math.sqrt(b/(a*n1) + d/(c*n2));
       const SE_logOR = Math.sqrt(1/a + 1/b + 1/c + 1/d);
 
-      const clip = v => Math.max(0, Math.min(1, v));
-      const CI_ARp = [clip(ARp - Z*SE_ARp), clip(ARp + Z*SE_ARp)];
-      const CI_ARn = [clip(ARn - Z*SE_ARn), clip(ARn + Z*SE_ARn)];
+      // Wilson score interval, not Wald — stays inside [0,1] and keeps
+      // better coverage than Wald at small n or when AR is near 0 or 1.
+      const wilson_ARp = wilsonCI(a, n1, Z);
+      const wilson_ARn = wilsonCI(c, n2, Z);
+      const CI_ARp = [wilson_ARp.lo, wilson_ARp.hi];
+      const CI_ARn = [wilson_ARn.lo, wilson_ARn.hi];
       const CI_ARD = [ARD - Z*SE_ARD,              ARD + Z*SE_ARD];
 
       // NNTB/NNTH's CI is only meaningful when the ARD CI excludes zero
@@ -12863,6 +12864,251 @@ const CALCULATORS = [
       rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
         value: `Distribution-based methods (SEM, half-SD, Cohen's thresholds) describe how large a change needs to be relative to measurement noise or the scale's own spread — they say nothing about whether patients themselves find that change meaningful. An anchor-based estimate answers that second question directly, but depends entirely on the quality of the external anchor used to classify "minimally improved" patients. Current guidance (e.g., Revicki et al., 2008) recommends triangulating multiple methods rather than reporting a single MID value, and treating any MID as specific to the instrument, population, and condition it was derived in — not a universal constant that transfers automatically to a different patient population or a modified version of the same instrument.` });
 
+      rows.push({ label: 'See Also', isText: true, isHtml: true, ci: null, isRatio: false,
+        value: `Have a result and this MID in hand? The <a href="#md-vs-mid">Is This Difference Important? (MD vs. MID)</a> calculator compares a mean difference's own confidence interval directly against it to reach a verdict.` });
+
+      return rows;
+    }
+  },
+
+  /* ── MD vs. MID: IS THIS DIFFERENCE CLINICALLY IMPORTANT? ─────────────
+     A different question than 'mid-calculator' above: that one asks
+     "what is the MID?"; this one asks "given a result and an MID, is
+     the difference clinically important?" — by comparing the mean
+     difference's own 95% CI against the MID, not just its point
+     estimate. That's what actually separates a precisely-estimated
+     trivial effect from an interval too wide to be informative — both
+     get reported in the literature as "no significant difference," and
+     they mean opposite things.                                        */
+  {
+    id:          'md-vs-mid',
+    name:        'Is This Difference Important? (MD vs. MID)',
+    hint:        'Compares a mean difference and its 95% CI against a minimal important difference',
+    category:    'Effect Sizes & Agreement',
+    description: "Judges whether a mean difference is clinically important by comparing its 95% confidence interval — not just its point estimate — against a minimal important difference (MID), distinguishing a precisely-estimated trivial effect from an interval too wide to be informative.",
+
+    formulas: [
+      {
+        label: 'Mean Difference & SE — Group Summary Data',
+        latex: 'MD = \\bar{x}_1-\\bar{x}_2, \\qquad SE = \\sqrt{\\dfrac{s_1^2}{n_1}+\\dfrac{s_2^2}{n_2}}\\;\\text{(independent)}, \\quad \\dfrac{s_{\\Delta}}{\\sqrt{n_1}}\\;\\text{(paired)}'
+      },
+      {
+        label: 'Mean Difference & SE — Published Estimate',
+        latex: 'SE = \\dfrac{CI_{hi}-CI_{lo}}{2\\times 1.96}'
+      },
+      {
+        label: "Pooled SD & Hedges' g",
+        latex: 's_{\\text{pooled}} = \\sqrt{\\dfrac{(n_1-1)s_1^2+(n_2-1)s_2^2}{n_1+n_2-2}}, \\qquad g = \\dfrac{MD}{s_{\\text{pooled}}}\\times J, \\quad J = 1-\\dfrac{3}{4(n_1+n_2)-9}'
+      },
+      {
+        label: 'Verdict Rule (the CI, not the point estimate, is compared to the MID)',
+        latex: '\\left|CI_{lo}\\right|\\!\\ge\\! MID \\text{ and } \\left|CI_{hi}\\right|\\!\\ge\\! MID \\Rightarrow \\text{Important} \\qquad \\left|CI_{lo}\\right|\\!\\le\\! MID \\text{ and } \\left|CI_{hi}\\right|\\!\\le\\! MID \\Rightarrow \\text{Trivial}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'mode', type: 'select', label: 'How is your data entered?', default: 'published',
+        options: [
+          { value: 'published', label: 'Published estimate — mean difference & its 95% CI' },
+          { value: 'summary',   label: 'Group summary data — means, SDs & Ns' },
+        ],
+        note: 'Pick "Published estimate" when a paper already reports the mean difference and CI. Pick "Group summary data" to compute both yourself from each group\'s own mean, SD, and N.' },
+
+      { id: 'm1', label: 'Group 1 Mean', default: 72, showIf: v => v.mode === 'summary' },
+      { id: 'sd1', label: 'Group 1 SD', default: 9, showIf: v => v.mode === 'summary' },
+      { id: 'n1', label: 'Group 1 N', default: 40, showIf: v => v.mode === 'summary' },
+      { id: 'm2', label: 'Group 2 Mean', default: 78, showIf: v => v.mode === 'summary' },
+      { id: 'sd2', label: 'Group 2 SD', default: 10, showIf: v => v.mode === 'summary' },
+      { id: 'n2', label: 'Group 2 N', default: 42, showIf: v => v.mode === 'summary' },
+      { id: 'paired', type: 'select', label: 'Design', default: 'independent',
+        showIf: v => v.mode === 'summary',
+        options: [
+          { value: 'independent', label: 'Independent groups' },
+          { value: 'paired',      label: 'Paired (same subjects, before/after)' },
+        ],
+        note: "Paired data needs the SD of each patient's own within-person change below to get the standard error right — plugging in either group's raw SD instead overstates the precision." },
+      { id: 'sdChange', label: 'SD of the Within-Person Change (paired only)', default: '',
+        showIf: v => v.mode === 'summary' && v.paired === 'paired',
+        note: "The SD of each patient's own before-after change score — not the SD of either group's raw values. This only means something for paired data, which is why it's hidden for independent groups." },
+
+      { id: 'md', label: 'Mean Difference (published)', default: -0.18, showIf: v => v.mode === 'published' },
+      { id: 'ciLo', label: '95% CI Bound #1', default: -0.08, showIf: v => v.mode === 'published',
+        note: "Enter the two published CI bounds in either order — they're sorted automatically, since papers occasionally print them backwards." },
+      { id: 'ciHi', label: '95% CI Bound #2', default: -0.27, showIf: v => v.mode === 'published' },
+      { id: 'sdPooled', label: 'Pooled Within-Group SD (optional)', default: '', showIf: v => v.mode === 'published',
+        note: "Enables the standardized mean difference (Hedges' g) row and the 0.5-SD MID fallback below. Leave blank if the source doesn't report it — those two features simply won't be available, rather than being guessed at." },
+
+      { id: 'mid', label: 'Minimal Important Difference (MID, optional)', default: 1,
+        note: "A published, anchor-based MID for this outcome, in the same units as the mean difference — see this site's MID calculator to estimate one. Leave blank to rely on the 0.5-SD fallback below instead." },
+      { id: 'useHalfSD', type: 'checkbox', label: 'If no MID is entered, fall back to 0.5 × pooled within-group SD', default: false,
+        note: "A distribution-based substitute for a real MID, only used when the field above is blank. Always applied to the POOLED WITHIN-GROUP SD, never to the standard error of the difference — the SE shrinks as a study gets larger, so using it there would make the threshold smaller in bigger trials and silently reclassify large studies' findings as important." },
+      { id: 'direction', type: 'select', label: 'Which direction is better for this outcome?', default: 'lower',
+        options: [
+          { value: 'higher', label: 'Higher score is better' },
+          { value: 'lower',  label: 'Lower score is better' },
+        ],
+        note: 'Required to say which group the result favors — it does not change the verdict itself, only which group gets named as favored.' },
+    ],
+
+    example(values) {
+      const f = (n, dp = 2) => +(n.toFixed(dp));
+      const { mode } = values;
+      if (mode === 'summary') {
+        const { m1, sd1, n1, m2, sd2, n2 } = values;
+        if (!isFinite(m1) || !isFinite(m2) || !isFinite(sd1) || sd1 <= 0 || !isFinite(sd2) || sd2 <= 0 ||
+            !isFinite(n1) || n1 < 2 || !isFinite(n2) || n2 < 2)
+          return "Enter both groups' mean, SD (> 0), and N (≥ 2) to see a worked medical example here.";
+        const MD = m1 - m2;
+        return `Two groups are compared directly from their own summary statistics: Group 1 (mean ${m1}, SD ${sd1}, n=${n1}) vs. Group 2 (mean ${m2}, SD ${sd2}, n=${n2}), giving a mean difference of ${f(MD)}. Enter an MID to see whether that difference — and its confidence interval, not just its point estimate — is safely inside the range that would count as clinically important, or wide enough to reach beyond it.`;
+      }
+      const { md, ciLo, ciHi, mid } = values;
+      if (!isFinite(md) || !isFinite(ciLo) || !isFinite(ciHi))
+        return 'Enter a published mean difference and its 95% CI to see a worked medical example here.';
+      const lo = Math.min(ciLo, ciHi), hi = Math.max(ciLo, ciHi);
+      const excludesZero = !(lo < 0 && hi > 0);
+      const midVal = isFinite(mid) && mid > 0 ? mid : null;
+      if (midVal == null)
+        return `A trial reports a mean difference of ${md} (95% CI ${f(lo)} to ${f(hi)}) — for instance, a gingival-index study comparing clear aligners with fixed orthodontic appliances. Enter an MID (e.g., the 1-point shift marking a change between defined states of gingival health) to see whether this difference is large enough to matter to patients, not just detectable at all.`;
+      const insideBand = Math.abs(lo) <= midVal && Math.abs(hi) <= midVal;
+      return `A trial compares gingival index under clear aligners vs. fixed appliances: mean difference ${md} (95% CI ${f(lo)} to ${f(hi)}), against an MID of ${midVal} marking a shift between defined states of gingival health. This interval ${excludesZero ? 'excludes zero, so the difference would conventionally be called "statistically significant"' : 'crosses zero, so this would usually be reported as "no significant difference"'} — and yet ${insideBand ? 'the entire interval sits inside the MID band: a precisely estimated, but clinically trivial, difference' : 'whether it counts as clinically important still depends on where the interval falls relative to the MID, not on that label alone'}.`;
+    },
+
+    calculate(values) {
+      const { mode, m1, sd1, n1, m2, sd2, n2, paired, sdChange,
+              md, ciLo, ciHi, sdPooled,
+              mid: midInput, useHalfSD, direction } = values;
+      const Z = 1.96;
+      const f = (n, dp = 4) => +(n.toFixed(dp));
+
+      let MD, loCI, hiCI, pooledSD = null, nKnown = false, nSum = null;
+
+      if (mode === 'summary') {
+        if (!isFinite(m1) || !isFinite(m2) || !isFinite(sd1) || sd1 <= 0 || !isFinite(sd2) || sd2 <= 0 ||
+            !isFinite(n1) || n1 < 2 || !isFinite(n2) || n2 < 2)
+          return [err("Enter both groups' mean, SD (> 0), and N (≥ 2)")];
+
+        MD = m1 - m2;
+        pooledSD = Math.sqrt(((n1 - 1) * sd1 ** 2 + (n2 - 1) * sd2 ** 2) / (n1 + n2 - 2));
+        nKnown = true;
+        nSum = n1 + n2;
+
+        let SE;
+        if (paired === 'paired') {
+          if (!isFinite(sdChange) || sdChange <= 0)
+            return [err('Enter the SD of the within-person change (> 0) for paired data')];
+          SE = sdChange / Math.sqrt(n1);
+        } else {
+          SE = Math.sqrt(sd1 ** 2 / n1 + sd2 ** 2 / n2);
+        }
+        loCI = MD - Z * SE;
+        hiCI = MD + Z * SE;
+      } else {
+        if (!isFinite(md) || !isFinite(ciLo) || !isFinite(ciHi))
+          return [err('Enter the mean difference and both 95% CI bounds')];
+        MD = md;
+        loCI = Math.min(ciLo, ciHi);
+        hiCI = Math.max(ciLo, ciHi);
+        if (isFinite(sdPooled) && sdPooled > 0) pooledSD = sdPooled;
+      }
+
+      // MID: the entered value takes priority; otherwise fall back to
+      // 0.5 x the POOLED WITHIN-GROUP SD — never the SE of the
+      // difference, which shrinks as n grows and would make the
+      // threshold smaller (and studies falsely "important") as trials
+      // get bigger — when the fallback box is checked and a pooled SD
+      // is actually known.
+      let mid = null, midSource = null, usedHalfSDFallback = false;
+      if (isFinite(midInput) && midInput > 0) {
+        mid = midInput;
+        midSource = 'entered value';
+      } else if (useHalfSD && pooledSD != null) {
+        mid = 0.5 * pooledSD;
+        midSource = 'fallback: 0.5 × pooled within-group SD';
+        usedHalfSDFallback = true;
+      }
+
+      const rows = [];
+
+      rows.push({ label: 'Mean Difference (MD)', value: f(MD), ci: [f(loCI), f(hiCI)], isRatio: false, highlight: true,
+        band: mid != null ? [-mid, mid] : undefined });
+
+      if (pooledSD != null)
+        rows.push({ label: 'Pooled Within-Group SD', value: f(pooledSD), ci: null, isRatio: false });
+
+      if (pooledSD != null) {
+        const J   = nKnown ? 1 - 3 / (4 * nSum - 9) : 1;
+        const g   = (MD   / pooledSD) * J;
+        const gLo = (loCI / pooledSD) * J;
+        const gHi = (hiCI / pooledSD) * J;
+        rows.push({ label: "Standardized Mean Difference (Hedges' g)", value: f(g), ci: [f(gLo), f(gHi)], isRatio: false,
+          band: mid != null ? [f(-mid / pooledSD), f(mid / pooledSD)] : undefined });
+      } else {
+        rows.push({ label: 'Note — Standardized Mean Difference', isText: true, ci: null, isRatio: false,
+          value: "Not shown: no pooled within-group SD was entered for this published estimate, so Hedges' g can't be computed — and the 0.5-SD MID fallback below is unavailable for the same reason." });
+      }
+
+      if (mid != null) {
+        rows.push({ label: `Minimal Important Difference Used (${midSource})`, value: f(mid), ci: null, isRatio: false, highlight: true });
+        if (pooledSD != null)
+          rows.push({ label: 'MID in SD Units', value: f(mid / pooledSD), ci: null, isRatio: false });
+      } else {
+        rows.push({ label: 'Note — No MID Available', isText: true, ci: null, isRatio: false,
+          value: 'Enter an MID above, or check the 0.5-SD fallback box with a pooled SD available, to get a verdict below — without either, only the raw mean difference and its CI can be shown.' });
+      }
+
+      if (pooledSD != null) {
+        const small = 0.2 * pooledSD, medium = 0.5 * pooledSD, large = 0.8 * pooledSD;
+        rows.push({ label: "Reference — Cohen's Effect-Size Bands (a statistical convention, not a clinical threshold)", isText: true, ci: null, isRatio: false,
+          value: `Small ≈ ${f(small,2)}, Medium ≈ ${f(medium,2)}, Large ≈ ${f(large,2)} (0.2 / 0.5 / 0.8 × pooled SD) — these describe how unusual an effect size is statistically, not whether it matters to a patient.` });
+        if (usedHalfSDFallback)
+          rows.push({ label: 'Note — A Real Coincidence', isText: true, ci: null, isRatio: false,
+            value: "The 0.5-SD MID fallback used above and Cohen's \"medium\" effect size just above it are the same number (0.5 × pooled SD) by definition — that's not a bug, just two different traditions landing on the same distribution-based rule of thumb." });
+      }
+
+      if (mid != null) {
+        const crossesZero = loCI < 0 && hiCI > 0;
+        const insideBand   = Math.abs(loCI) <= mid && Math.abs(hiCI) <= mid;
+        const beyondBand   = Math.abs(loCI) >= mid && Math.abs(hiCI) >= mid && !crossesZero;
+
+        let verdict;
+        if (beyondBand)                      verdict = 'Important effect, confidently';
+        else if (insideBand && crossesZero)  verdict = 'No important effect, confidently';
+        else if (insideBand)                 verdict = 'Confidently trivial — a precise, unimportant effect';
+        else if (crossesZero)                verdict = 'Uninformative — could be important, could be nothing';
+        else                                  verdict = 'Possibly important — imprecise';
+
+        const higherIsBetter = direction === 'higher';
+        let favored;
+        if (MD > 0)      favored = higherIsBetter ? 'Group 1' : 'Group 2';
+        else if (MD < 0) favored = higherIsBetter ? 'Group 2' : 'Group 1';
+        else              favored = 'neither group — exactly tied';
+
+        rows.push({ label: 'Verdict', value: verdict, ci: null, isRatio: false, isText: true, highlight: true });
+
+        let interpretation;
+        switch (verdict) {
+          case 'Important effect, confidently':
+            interpretation = `The entire 95% CI (${f(loCI,2)} to ${f(hiCI,2)}) lies beyond ±${f(mid,2)}, favoring ${favored} — large enough to matter to a patient, not just to a significance test.`;
+            break;
+          case 'No important effect, confidently':
+            interpretation = `The 95% CI (${f(loCI,2)} to ${f(hiCI,2)}) crosses zero but stays within ±${f(mid,2)} on both sides — the data are precise enough to rule out an important difference in either direction.`;
+            break;
+          case 'Confidently trivial — a precise, unimportant effect':
+            interpretation = `The entire 95% CI (${f(loCI,2)} to ${f(hiCI,2)}) sits inside ±${f(mid,2)}, favoring ${favored} — a precisely estimated difference too small to matter, even where it is statistically significant.`;
+            break;
+          case 'Uninformative — could be important, could be nothing':
+            interpretation = `The 95% CI (${f(loCI,2)} to ${f(hiCI,2)}) both crosses zero and extends beyond ±${f(mid,2)} — this result can't yet distinguish a clinically important effect from no effect at all. That's a precision problem, not evidence of "no difference."`;
+            break;
+          default:
+            interpretation = `The 95% CI (${f(loCI,2)} to ${f(hiCI,2)}) partly overlaps ±${f(mid,2)}, favoring ${favored} if the effect is real — the point estimate may or may not be important, and the interval is too wide to say for sure.`;
+        }
+        rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false, value: interpretation });
+      }
+
+      rows.push({ label: 'See Also', isText: true, isHtml: true, ci: null, isRatio: false,
+        value: `Need an MID for this outcome first? The <a href="#mid-calculator">Minimal Important Difference (MID)</a> calculator estimates one from distribution-based or anchor-based methods.` });
+
       return rows;
     }
   },
@@ -13854,9 +14100,10 @@ function fitProportionGLMMFixed(studies) {
   return { mu: muHat, tau2: 0, seMu };
 }
 
-// Wilson score interval for a single study's raw proportion — used
-// only for the GLMM forest plot, since a one-stage model has no
-// per-study (effect, SE) the way the two-stage methods do. Unlike a
+// Wilson score interval for a raw proportion — used for the GLMM
+// forest plot's per-study proportion (a one-stage model has no
+// per-study (effect, SE) the way the two-stage methods do) and for
+// 'measures-of-association's per-group Absolute Risk CIs. Unlike a
 // naive Wald interval, it stays inside [0,1] and behaves sensibly at
 // x=0 or x=n.
 function wilsonCI(x, n, z = 1.96) {
@@ -17838,6 +18085,7 @@ const CALCULATOR_INDEX = [
   // ── 8. EFFECT SIZES & AGREEMENT ──────────────────────────────────────
   { id: 'cohens-d',             name: "Cohen's d",                       category: 'Effect Sizes & Agreement',    description: "Quantifies the standardized difference between two group means using pooled standard deviation.", status: 'available' },
   { id: 'hedges-g',             name: "Hedges' g",                       category: 'Effect Sizes & Agreement',    description: "Bias-corrected Cohen's d with a confidence interval — the standardized mean difference typically used as meta-analysis input.", status: 'available' },
+  { id: 'md-vs-mid',            name: 'Is This Difference Important? (MD vs. MID)', category: 'Effect Sizes & Agreement', description: "Judges whether a mean difference is clinically important by comparing its 95% CI — not just its point estimate — against a minimal important difference (MID).", status: 'available' },
   { id: 'cramers-v',            name: "Cramer's V",                      category: 'Effect Sizes & Agreement',    description: 'Measures the strength of association in contingency tables larger than 2×2.',                   status: 'available' },
   { id: 'phi-coefficient',      name: 'Phi Coefficient (2×2)',           category: 'Effect Sizes & Agreement',    description: 'Measures the association between two binary variables in a 2×2 table.',                        status: 'available' },
   { id: 'cohens-kappa',         name: "Cohen's Kappa",                   category: 'Effect Sizes & Agreement',    description: 'Measures inter-rater agreement for categorical data, corrected for chance.',                    status: 'available' },
@@ -18051,10 +18299,12 @@ const WIZARD_TREE = {
     options: [
       { label: 'Show that they differ (standard hypothesis test)',                     next: 'twoGroupContinuous' },
       { label: "Show they're equivalent or non-inferior (e.g., generic vs. brand-name drug)", next: 'equivalenceResult' },
+      { label: 'Judge whether the difference is clinically important (vs. a minimal important difference)', next: 'mdVsMidResult' },
       { label: 'Adjust the comparison for a baseline/covariate measurement (e.g., a trial with a pre-treatment score)', next: 'ancovaResult' },
     ]
   },
   equivalenceResult: { results: [ { id: 'equivalence-test', why: 'The two one-sided tests (TOST) procedure for equivalence or non-inferiority against a pre-set margin.' } ] },
+  mdVsMidResult: { results: [ { id: 'md-vs-mid', why: "Compares the mean difference's own 95% CI against a minimal important difference to judge clinical importance — not just statistical significance." } ] },
   ancovaResult: {
     results: [
       { id: 'ancova', why: 'Compares the two groups on the outcome while statistically adjusting for each subject\'s own baseline/covariate value — generally more powerful and less bias-prone than comparing raw post-scores or change scores alone.' },
@@ -19051,6 +19301,7 @@ const SEARCH_KEYWORDS = {
   // Effect Sizes & Agreement
   'cohens-d':        ["cohen's d", 'effect size for a mean difference'],
   'hedges-g':        ["hedges' g", "hedges g", 'bias-corrected cohen\'s d', 'standardized mean difference', 'smd'],
+  'md-vs-mid':       ['minimal important difference', 'mid', 'clinically important', 'clinical significance', 'clinical vs statistical significance', 'is this difference meaningful', 'mcid', 'imprecision', 'mean difference vs mid', 'confidence interval vs mid', 'trivial effect', 'equivalence zone', "hedges' g", 'smd'],
   'cramers-v':       ["cramer's v", 'effect size for chi-square', 'association strength categorical', 'r by c table'],
   'phi-coefficient': ['phi coefficient', 'effect size for a 2x2 table', 'case-control study'],
   'cohens-kappa':    ["cohen's kappa", 'inter-rater agreement', 'agreement between two raters categorical', 'unordered categories'],
@@ -19783,6 +20034,15 @@ const NOTATION = {
     { symbol: 'J', meaning: 'Correction factor (always slightly less than 1) that shrinks d toward zero to remove its small-sample bias.' },
     { symbol: 'g', meaning: "Hedges' g — the bias-corrected effect size, g = J·d." },
     { symbol: 'V_g', meaning: "Variance of g, used to build its confidence interval and as the inverse-variance weight if this study is later pooled in a meta-analysis." },
+  ],
+  'md-vs-mid': [
+    { symbol: 'MD', meaning: 'The mean difference — computed as x̄₁ − x̄₂ from group summary data, or entered directly as a published estimate.' },
+    { symbol: 's_{\\text{pooled}}', meaning: 'Pooled within-group standard deviation — the shared spread used to scale MD into SD units and to derive the 0.5-SD MID fallback.' },
+    { symbol: 's_{\\Delta}', meaning: "SD of each patient's own within-person change, for paired data only — never a between-group SD." },
+    { symbol: 'MID', meaning: 'Minimal important difference — the smallest change in this outcome patients or clinicians would consider meaningful, in the same units as MD.' },
+    { symbol: 'g', meaning: "Hedges' g — MD expressed in pooled-SD units, with the small-sample correction J applied." },
+    { symbol: 'J', meaning: "Small-sample correction factor applied to MD/s_{pooled} to obtain Hedges' g." },
+    { symbol: 'CI_{lo}, CI_{hi}', meaning: "The mean difference's 95% CI bounds — compared directly against the MID to reach a verdict, not just MD's own point estimate." },
   ],
   'cramers-v': [
     { symbol: '\\chi^2', meaning: 'Chi-square statistic summarizing how far the observed table counts deviate from what independence would predict.' },
@@ -21888,6 +22148,7 @@ const GUIDES = [
       },
     ],
     related: [
+      { id: 'md-vs-mid', why: 'Turns "is this significant" into "is this important" directly — comparing a mean difference\'s own confidence interval against a minimal important difference rather than its point estimate.' },
       { id: 'fragility-index', why: 'Quantifies exactly how many patients a "significant" result depends on — a concrete way to weigh whether statistical significance reflects a robust finding.' },
       { id: 'sample-size-2mean', why: 'Calculates the sample size needed to detect a given effect size — directly relevant to whether a "significant" result was ever a fair test.' },
       { id: 'posthoc-power', why: 'Estimates the power an already-completed study had to detect a given effect.' },
@@ -22426,6 +22687,7 @@ const GUIDES = [
       { id: 'appraisal-appraising-guidelines', why: 'Covers appraising the recommendation this framework ultimately feeds into.' },
       { id: 'appraisal-meta-analysis-reading', why: 'Covers the heterogeneity and precision concepts that feed directly into the inconsistency and imprecision domains here.' },
       { id: 'appraisal-effect-measures', why: 'Covers the relative vs. absolute effect distinction referenced in a GRADE Summary of Findings table.' },
+      { id: 'md-vs-mid', why: "Operationalizes the imprecision domain's core question — whether a confidence interval is narrow enough, relative to a meaningful threshold, to trust the estimate." },
     ],
   },
 
