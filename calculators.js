@@ -55,6 +55,24 @@ function checkEffectMeasureBound(studies, measureInfo, describe = s => s.label) 
   if (!offender) return null;
   return [err(`${measureInfo.label} must be between -${measureInfo.bound} and ${measureInfo.bound} (it's a difference of two proportions) — check ${esc(describe(offender))} for a data-entry error, such as entering a percentage instead of a proportion.`)];
 }
+// Parses the optional "Minimal Important Difference (MID) / Threshold"
+// field shared by the additive/ratio meta-analysis calculators
+// (Meta-Analysis, HKSJ, Network) into the internal (log, for a ratio
+// measure) scale the forest plot functions position everything else
+// on. Entered on the natural/display scale (e.g. an RR of 1.25), not
+// the log scale a ratio measure's own study-level effect inputs use —
+// a reader thinks of a clinical threshold as "an RR of 1.25," not
+// "ln(1.25)" — so this is the one place that natural-scale value gets
+// converted, rather than asking users to log-transform a threshold
+// themselves the way they already must for each study's effect.
+function parseMidThreshold(raw, measureInfo) {
+  const provided = raw !== '' && raw != null && isFinite(raw);
+  if (!provided) return { mid: null, error: null };
+  if (measureInfo.isRatio && raw <= 0) {
+    return { mid: null, error: [err('Minimal Important Difference / Threshold must be a positive number on the natural scale (e.g. 1.25 for RR/OR/HR) — enter the raw threshold, not its log value.')] };
+  }
+  return { mid: measureInfo.isRatio ? Math.log(raw) : raw, error: null };
+}
 
 const CALCULATORS = [
 
@@ -717,7 +735,11 @@ const CALCULATORS = [
      (fixed case:control ratio breaks the row-margin assumption RR
      needs; OR is invariant to which margin is fixed and stays valid).
      Small-sample tables are pointed at 'Fisher's Exact Test' rather
-     than duplicating its exact hypergeometric computation here.      */
+     than duplicating its exact hypergeometric computation here. The
+     Yates-corrected row is kept for reproducing older/published
+     analyses, but current guidance (Campbell, Stat Med 2007) is to
+     skip the correction rather than lean on it — see the caveat row
+     calculate() appends below.                                      */
   {
     id:          'chi-square-2x2',
     name:        'Chi-Square 2×2',
@@ -811,6 +833,8 @@ const CALCULATORS = [
           ci: null, isRatio: false, isText: true },
         { label: 'χ² — When to Use', isText: true, ci: null, isRatio: false,
           value: 'χ² only tests whether exposure and outcome are statistically associated — it says nothing about the size or direction of the effect. Use RR or OR below for that.' },
+        { label: "Note on Yates' Correction", isText: true, ci: null, isRatio: false,
+          value: "Yates-corrected χ² is shown for reproducing older or published analyses, but current guidance (Campbell, Stat Med 2007) generally advises against applying it at all — it was designed to approximate Fisher's Exact Test but tends to overcorrect and lose power by comparison. If the minimum expected count below is adequate (≥5), prefer the uncorrected χ² above; if it's below 5, go straight to Fisher's Exact Test rather than relying on this correction." },
       ];
 
       if (minExpected < 5) {
@@ -1624,7 +1648,7 @@ const CALCULATORS = [
 
       const rows = [
         { label: 'Pooled SD (s_pooled)',                        value: f(sp),       ci: null, isRatio: false },
-        { label: 'SE of Mean Difference (Pooled)',              value: f(sePooled), ci: null, isRatio: false, highlight: true },
+        { label: 'SE of Mean Difference (Pooled)',              value: f(sePooled), ci: null, isRatio: false },
         { label: 'SE of Mean Difference (Welch, unequal var.)', value: f(seWelch),  ci: null, isRatio: false, highlight: true },
       ];
 
@@ -1636,6 +1660,9 @@ const CALCULATORS = [
           ci: [f(diff - margin), f(diff + margin)], isRatio: false, highlight: true
         });
       }
+
+      rows.push({ label: 'Which SE to use?', isText: true, ci: null, isRatio: false,
+        value: "Current guidance favors using the Welch SE by default for the t-test and CI, even when the two groups' variances look similar — it performs about as well as the pooled SE when variances are truly equal, and considerably better when they aren't, so there's little reason to condition the choice on a preliminary equal-variance test. The pooled SE is shown mainly for reproducing analyses that specifically call for it." });
 
       return rows;
     }
@@ -1649,7 +1676,7 @@ const CALCULATORS = [
     name:        "Unpaired t-Test (Welch's)",
     hint:        't = (x̄₁−x̄₂) / SE_Welch',
     category:    'T-Tests & Z-Tests',
-    description: 'Compares means of two independent groups without assuming equal variances.',
+    description: "Compares means of two independent groups without assuming equal variances — the recommended default over the classic pooled-variance (Student's) t-test, since it performs about as well when variances are equal and considerably better when they aren't.",
 
     formulas: [
       {
@@ -2754,7 +2781,7 @@ const CALCULATORS = [
 
     formulas: [
       {
-        label: 'Noncentrality Parameter',
+        label: 'Noncentrality Parameter (NCP)',
         latex: '\\lambda = f^{2} \\times N_{total}'
       },
       {
@@ -2807,11 +2834,11 @@ const CALCULATORS = [
         { label: 'Required Total Sample Size (N)',  value: res.totalN,   ci: null, isRatio: false, highlight: true },
         { label: 'Achieved Power at This N',        value: f(res.power, 4), ci: null, isRatio: false },
         { label: 'Degrees of Freedom (df₁, df₂)',   isText: true, ci: null, isRatio: false, value: `${levels - 1}, ${res.df2}` },
-        { label: 'Noncentrality Parameter (λ)',     value: f(res.lambda), ci: null, isRatio: false },
+        { label: 'Noncentrality Parameter (NCP, λ)', value: f(res.lambda), ci: null, isRatio: false },
         { label: 'F-Critical Value',                value: f(res.fCrit),  ci: null, isRatio: false },
         { label: 'Design', isText: true, ci: null, isRatio: false, value: designNote },
         { label: 'Method', isText: true, ci: null, isRatio: false,
-          value: "Searches increasing per-cell n until the achieved power (from the noncentral F distribution, λ=f²N) reaches the target. Matches standard ANOVA sample-size procedures (e.g. G*Power); for a simple one-way ANOVA, set Total Cells equal to Levels. Minor discrepancies vs. other software can arise from differing df₂ conventions — report the df₁/df₂ shown alongside the sample size." },
+          value: "Searches increasing per-cell n until the achieved power (from the noncentral F distribution, λ=f²N) reaches the target. Matches standard ANOVA sample-size procedures (e.g. G*Power); for a simple one-way ANOVA, set Total Cells equal to Levels. Minor discrepancies vs. other software can arise from differing df₂ conventions — report the df₁/df₂ shown alongside the sample size. NCP (λ) is the general concept behind every power calculation on this site: it's the amount by which a real effect shifts the null distribution — see the Glossary of Statistical Concepts for the plain-English version." },
       ];
     }
   },
@@ -3106,22 +3133,26 @@ const CALCULATORS = [
   },
 
   /* ── 29b. LEVENE'S TEST (BROWN-FORSYTHE) ────────────────────────────────
-     Tests the equal-variance assumption behind 1-Way ANOVA and the
-     pooled-variance t-test — i.e. it's a PRECONDITION check, not a
-     test of the means themselves. Uses the Brown-Forsythe variant
-     (absolute deviations from each group's MEDIAN, not its mean),
-     which is the standard robust default since it holds up much
-     better than the original Levene formulation when the underlying
-     data is skewed. Mechanically: transform each observation to
-     z_ij = |x_ij − median_i|, then simply run a 1-way ANOVA F-test on
-     the z's instead of the raw values — a large F means the groups'
-     spreads (not their centers) differ.                             */
+     Tests the equal-variance assumption behind 1-Way ANOVA — a
+     PRECONDITION check, not a test of the means themselves. Uses the
+     Brown-Forsythe variant (absolute deviations from each group's
+     MEDIAN, not its mean), which is the standard robust default since
+     it holds up much better than the original Levene formulation when
+     the underlying data is skewed. Mechanically: transform each
+     observation to z_ij = |x_ij − median_i|, then simply run a 1-way
+     ANOVA F-test on the z's instead of the raw values — a large F
+     means the groups' spreads (not their centers) differ. Still
+     relevant for the k ≥ 3 ANOVA case (this app has no Welch's-ANOVA
+     equivalent implemented), but current guidance is to skip this
+     test entirely for the plain two-group case and simply use
+     Welch's t-test by default — see the k=2 note calculate() appends
+     below and 'Unpaired t-Test (Welch's)' itself.                   */
   {
     id:          'levenes-test',
     name:        "Levene's Test (Brown-Forsythe)",
     hint:        'W = F-statistic on |xᵢⱼ − medianᵢ|',
     category:    'ANOVA',
-    description: "Tests whether two or more groups have equal variances — the assumption behind ANOVA and the pooled-variance t-test.",
+    description: "Tests whether two or more groups have equal variances — the precondition check for a standard (pooled-variance) ANOVA. For the two-group case, current guidance is to skip this test and simply use Welch's t-test by default instead.",
 
     formulas: [
       {
@@ -3154,8 +3185,8 @@ const CALCULATORS = [
       const pValue = 1 - jStat.centralF.cdf(F, dfB, dfW);
       const f = v => +v.toFixed(2);
       const tail = pValue < 0.05
-        ? 'their variances differ significantly — a standard (pooled-variance) ANOVA or t-test would not be appropriate here; consider Welch\'s correction instead'
-        : 'no significant difference in spread was detected, so the equal-variance assumption behind a standard ANOVA/t-test looks reasonable';
+        ? 'their variances differ significantly — a standard (pooled-variance) ANOVA would not be appropriate here; consider a non-parametric alternative such as Kruskal-Wallis instead'
+        : 'no significant difference in spread was detected, so the equal-variance assumption behind a standard ANOVA looks reasonable';
       return `Before comparing mean pain scores across ${k} treatment groups (N = ${N}) with a standard ANOVA, Levene's test first checks whether the groups are even similarly variable to begin with — since ANOVA assumes equal variances across groups. W = ${f(F)}, ${formatPText(pValue)} — ${tail}.`;
     },
 
@@ -3187,9 +3218,18 @@ const CALCULATORS = [
         { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant
-            ? 'Reject H₀ — variances differ significantly across groups; a standard pooled-variance ANOVA/t-test is not appropriate here (consider Welch\'s correction or a non-parametric test instead)'
-            : 'Fail to reject H₀ — no significant difference in variances; the equal-variance assumption behind a standard ANOVA/t-test is reasonable' },
+            ? (k === 2
+                ? 'Reject H₀ — the two groups\' variances differ significantly; a standard pooled-variance t-test is not appropriate here (though see the note below on why that\'s rarely the deciding factor)'
+                : 'Reject H₀ — variances differ significantly across groups; a standard pooled-variance ANOVA is not appropriate here (consider a non-parametric alternative such as Kruskal-Wallis instead)')
+            : (k === 2
+                ? 'Fail to reject H₀ — no significant difference in variances between the two groups (see the note below on why this result rarely needs to change which t-test you run)'
+                : 'Fail to reject H₀ — no significant difference in variances; the equal-variance assumption behind a standard ANOVA is reasonable') },
       );
+
+      if (k === 2) {
+        rows.push({ label: 'Note for the two-group case', isText: true, ci: null, isRatio: false,
+          value: "When comparing exactly two groups, current guidance (e.g. Delacre, Lakens & Leys 2017) is to skip this pre-test and simply use Welch's t-test by default regardless of the result above — it performs about as well as a pooled-variance (Student's) t-test when variances are truly equal, and considerably better when they aren't, so there's little to gain from conditioning the choice on this test. This check remains relevant before a standard (pooled-variance) ANOVA with 3 or more groups, which has no equally simple unequal-variance default in this app." });
+      }
       return rows;
     }
   },
@@ -3510,9 +3550,9 @@ const CALCULATORS = [
   {
     id:          'z-table',
     name:        'z-Distribution Table',
-    hint:        'Φ(z) lookup + full z-table + critical values',
+    hint:        'Φ(z) lookup + full z-table + critical values + shaded rejection region',
     category:    'Probability & Distributions',
-    description: 'Looks up cumulative probabilities and critical values for the standard normal distribution.',
+    description: 'Looks up cumulative probabilities and critical values for the standard normal distribution, with a shaded one- or two-tailed rejection region drawn on the curve itself.',
 
     formulas: [
       {
@@ -3533,6 +3573,12 @@ const CALCULATORS = [
     inputs: [
       { id: 'z',     label: 'z-Value to Look Up',              default: 1.96 },
       { id: 'alpha', label: 'Significance Level (α, two-tailed)', default: 0.05 },
+      { id: 'tails', type: 'select', label: 'Shade Which Rejection Region?', default: 'two',
+        note: 'Draws the standard normal curve below with this region shaded at the chosen α, alongside the reference table.',
+        options: [
+          { value: 'two', label: 'Two-Tailed (α/2 in each tail)' },
+          { value: 'one', label: 'One-Tailed (all of α in the upper tail)' },
+        ] },
     ],
 
     example({ z, alpha }) {
@@ -3543,7 +3589,7 @@ const CALCULATORS = [
       return `A newborn's birth weight is z = ${z} standard deviations from the population mean on a standard growth chart. Φ(z) = ${(+phi.toFixed(4))} means about ${(phi * 100).toFixed(1)}% of newborns weigh less than this one. The two-tailed p-value (${formatPValue(twoTailedP)}) tells you how unusual a deviation this large is if this baby truly came from the reference population.`;
     },
 
-    calculate({ z, alpha }) {
+    calculate({ z, alpha, tails }) {
       if (!isFinite(z))                                 return [err('z-value is required')];
       if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
 
@@ -3566,6 +3612,7 @@ const CALCULATORS = [
           { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true },
           { label: `Critical Value (one-tailed, α = ${alpha})`, value: f(critOne), ci: null, isRatio: false },
         );
+        rows.push({ label: 'Rejection Region', isSVG: true, svg: normalAlphaRegionSVG(alpha, tails, tails === 'one' ? critOne : critTwo) });
       }
 
       rows.push({ isSVG: true, svg: zTableHTML(z) });
@@ -3622,9 +3669,184 @@ const CALCULATORS = [
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
       return [
-        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true, highlight: true },
+        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, highlight: true },
         { label: `Critical Value (one-tailed, α = ${alpha}, df = ${dfR})`, value: f(critOne), ci: null, isRatio: false, highlight: true },
         { isSVG: true, svg: tTableHTML(dfR, alpha) },
+      ];
+    }
+  },
+
+  /* ── 34b. z-SCORE & STANDARD DEVIATION EXPLORER ─────────────────────────
+     Companion to 'sd-visualized': instead of computing a mean/SD from
+     pasted data, all three quantities (raw score, mean, SD) are
+     sliders — dragging any one recomputes z = (x-μ)/σ and its
+     percentile live (see attachSliderListeners in app.js), and
+     redraws the exact same bell curve via sdBellCurveSVG, just fed a
+     single-point "dataset" ([x]) instead of a pasted sample. Built
+     specifically to show what sliding σ alone does to a FIXED raw
+     score's position relative to the curve — the score doesn't move,
+     but its z-score and percentile do, because the ruler underneath
+     it just got longer or shorter.                                  */
+  {
+    id:          'zscore-sd-explorer',
+    name:        'z-Score & Standard Deviation Explorer',
+    hint:        'Drag the score, mean, or SD — watch z and percentile update live',
+    category:    'Probability & Distributions',
+    description: 'An interactive bell curve — drag the raw score, mean, or standard deviation and watch the z-score and percentile recompute live, showing directly how the SAME raw score can be many or few SDs from the mean depending on how spread out the population is. Optionally target an exact z-score directly, or shade a one-/two-tailed rejection region at a chosen α.',
+
+    formulas: [
+      {
+        label: 'z-Score',
+        latex: 'z = \\dfrac{x-\\mu}{\\sigma}'
+      },
+      {
+        label: 'Percentile',
+        latex: '\\text{Percentile} = \\Phi(z)\\times100\\%'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'x',    type: 'slider', label: 'Raw Score (x)',              min: 40,  max: 160, step: 1, default: 130 },
+      { id: 'mean', type: 'slider', label: 'Mean (μ)',                   min: 40,  max: 160, step: 1, default: 100 },
+      { id: 'sd',   type: 'slider', label: 'Standard Deviation (σ)',     min: 1,   max: 40,  step: 1, default: 15  },
+      { id: 'targetZ', label: 'Target z-Score (optional — overrides Raw Score above)', default: '',
+        note: 'Fill this in to jump straight to an exact z (e.g. 1.96), computed against the current Mean/SD sliders — the implied Raw Score (μ + z×σ) is shown below and marked on the curve instead of the slider\'s own value. Leave blank to use the Raw Score slider as usual.' },
+      { id: 'alpha', label: 'Shade Rejection Region — Significance Level (α, optional)', default: '',
+        note: 'Leave blank to hide the shaded region. When filled in (e.g. 0.05), pick one- or two-tailed below — this shades the SAME kind of region as the z-Distribution Table calculator, but drawn on this curve\'s own raw (μ, σ) scale.' },
+      { id: 'tails', type: 'select', label: 'Tails for the Shaded Region', default: 'two',
+        options: [
+          { value: 'two', label: 'Two-Tailed (α/2 in each tail)' },
+          { value: 'one', label: 'One-Tailed (all of α in the upper tail)' },
+        ] },
+    ],
+
+    example({ x, mean, sd, targetZ }) {
+      if (!isFinite(mean) || !isFinite(sd) || sd <= 0)
+        return 'Adjust the score, mean, and SD sliders to see a worked medical example here.';
+      const usingTarget = targetZ !== '' && targetZ != null && isFinite(targetZ);
+      const z = usingTarget ? targetZ : (isFinite(x) ? (x - mean) / sd : NaN);
+      if (!isFinite(z)) return 'Adjust the score, mean, and SD sliders to see a worked medical example here.';
+      const effectiveX = usingTarget ? mean + targetZ * sd : x;
+      const phi = 0.5 * (1 + erf(z / Math.SQRT2));
+      const f = v => +v.toFixed(2);
+      return `A patient's score on a standardized scale is x = ${f(effectiveX)}, in a population with mean μ = ${mean} and SD σ = ${sd}. That score sits z = ${f(z)} SDs from the mean, placing it at roughly the ${(phi * 100).toFixed(1)}th percentile. Drag the SD slider alone, leaving the score fixed, to see the same raw score reinterpreted as more or fewer SDs from the mean purely because the population's spread changed — nothing about the patient did.`;
+    },
+
+    calculate({ x, mean, sd, targetZ, alpha, tails }) {
+      if (!isFinite(mean))  return [err('Mean is required')];
+      if (!isFinite(sd) || sd <= 0) return [err('Standard Deviation must be greater than 0')];
+
+      const usingTarget = targetZ !== '' && targetZ != null && isFinite(targetZ);
+      if (!usingTarget && !isFinite(x)) return [err('Raw Score is required (or fill in Target z-Score instead)')];
+
+      const z = usingTarget ? targetZ : (x - mean) / sd;
+      const effectiveX = usingTarget ? mean + targetZ * sd : x;
+      const phi = 0.5 * (1 + erf(z / Math.SQRT2));
+      const f  = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [];
+      if (usingTarget) {
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: `Using Target z-Score override — the Raw Score slider is ignored. Implied Raw Score = μ + z×σ = ${mean} + ${f(targetZ, 3)}×${sd} = ${f(effectiveX, 2)}.` });
+      }
+      rows.push(
+        { label: 'z-Score', value: f(z), ci: null, isRatio: false, highlight: true },
+        { label: 'Percentile', value: `${f(phi * 100, 2)}%`, ci: null, isRatio: false, highlight: true },
+      );
+
+      const alphaProvided = alpha !== '' && alpha != null && isFinite(alpha);
+      let critZ = null;
+      if (alphaProvided) {
+        if (alpha <= 0 || alpha >= 1) return [err('Significance Level (α) must be between 0 and 1 (exclusive)')];
+        if (typeof jStat !== 'undefined' && jStat.normal) {
+          critZ = tails === 'one' ? jStat.normal.inv(1 - alpha, 0, 1) : jStat.normal.inv(1 - alpha / 2, 0, 1);
+          rows.push({ label: `Critical z (${tails === 'one' ? 'one' : 'two'}-tailed, α = ${alpha})`, value: tails === 'one' ? f(critZ) : `±${f(critZ)}`, ci: null, isRatio: false });
+        } else {
+          rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+            value: 'The statistics library needed for the shaded rejection region failed to load — showing the curve without shading. Refresh the page and try again.' });
+        }
+      }
+
+      rows.push({
+        label: 'Distribution', isSVG: true,
+        svg: sdBellCurveSVG(mean, sd, [effectiveX], { markScore: effectiveX, alpha: alphaProvided ? alpha : null, tails, critZ }),
+      });
+
+      return rows;
+    }
+  },
+
+  /* ── 34c. t-DISTRIBUTION EXPLORER (df & CRITICAL REGION) ────────────────
+     Companion to 't-table': draws the ACTUAL t-density (via
+     jStat.studentt.pdf), not a normal curve relabeled, alongside a
+     thin reference standard-normal curve for comparison — dragging
+     df live-redraws both the curve's shape and the shaded critical
+     region (see attachSliderListeners in app.js), making visible why
+     a small-sample critical value is more extreme than the
+     corresponding z, and why the two converge as df grows. Unlike
+     'zscore-sd-explorer', spread here is governed by df, not an SD
+     slider — a t-distribution's own SD isn't a free parameter the way
+     a normal distribution's is.                                     */
+  {
+    id:          't-distribution-explorer',
+    name:        't-Distribution Explorer (df & Critical Region)',
+    hint:        'Drag df — watch the tails fatten and converge toward z as df grows',
+    category:    'Probability & Distributions',
+    description: 'Draws the actual t-distribution curve at any degrees of freedom, alongside a reference standard normal curve, with the one- or two-tailed critical region shaded — shows directly why a t critical value is more extreme than z at low df, and why the two converge as df grows.',
+
+    formulas: [
+      {
+        label: 't Probability Density Function',
+        latex: 'f(t;\\,df) = \\dfrac{\\Gamma\\!\\left(\\frac{df+1}{2}\\right)}{\\sqrt{df\\pi}\\,\\Gamma\\!\\left(\\frac{df}{2}\\right)}\\left(1+\\dfrac{t^2}{df}\\right)^{-\\frac{df+1}{2}}'
+      },
+      {
+        label: 'Critical Value',
+        latex: 't_{\\alpha/2,\\,df}\\;\\text{(two-tailed)} \\qquad t_{\\alpha,\\,df}\\;\\text{(one-tailed)}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'df',    type: 'slider', label: 'Degrees of Freedom (df)', min: 1, max: 30, step: 1, default: 5 },
+      { id: 'alpha', label: 'Significance Level (α, two-tailed)', default: 0.05 },
+      { id: 'tails', type: 'select', label: 'Shade Which Rejection Region?', default: 'two',
+        note: 'The grey dashed curve is always the standard normal (z) for comparison — it never shades a region of its own.',
+        options: [
+          { value: 'two', label: 'Two-Tailed (α/2 in each tail)' },
+          { value: 'one', label: 'One-Tailed (all of α in the upper tail)' },
+        ] },
+    ],
+
+    example({ df, alpha }) {
+      const dfR = Math.round(df);
+      if (!isFinite(dfR) || dfR < 1 || !isFinite(alpha) || alpha <= 0 || alpha >= 1 ||
+          typeof jStat === 'undefined' || !jStat.studentt || !jStat.normal)
+        return 'Drag the df slider and enter a significance level to see a worked medical example here.';
+      const critT = jStat.studentt.inv(1 - alpha / 2, dfR);
+      const critZ = jStat.normal.inv(1 - alpha / 2, 0, 1);
+      const f = v => +v.toFixed(3);
+      return `A pilot trial enrolls only ${dfR + 1} patients (df = ${dfR}) and tests a mean difference at α = ${alpha}. Its two-tailed critical value is ±${f(critT)} &mdash; noticeably more extreme than the ±${f(critZ)} a much larger trial could rely on, because the t-distribution's fatter tails at low df demand stronger evidence before ruling out chance. Drag df up toward 30 to watch the blue t-curve settle onto the grey standard normal curve, and the critical value converge toward ${f(critZ)}.`;
+    },
+
+    calculate({ df, alpha, tails }) {
+      const dfR = Math.round(df);
+      if (!isFinite(dfR) || dfR < 1)                    return [err('Degrees of Freedom must be at least 1')];
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
+      if (typeof jStat === 'undefined' || !jStat.studentt || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const critTwo = jStat.studentt.inv(1 - alpha / 2, dfR);
+      const critOne = jStat.studentt.inv(1 - alpha, dfR);
+      const critZTwo = jStat.normal.inv(1 - alpha / 2, 0, 1);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: `Critical Value (two-tailed, α = ${alpha}, df = ${dfR})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, highlight: true },
+        { label: `Critical Value (one-tailed, α = ${alpha}, df = ${dfR})`, value: f(critOne), ci: null, isRatio: false },
+        { label: `For Comparison — Standard Normal (z) Critical Value (two-tailed)`, value: `±${f(critZTwo)}`, ci: null, isRatio: false },
+        { label: 'Curve & Rejection Region', isSVG: true, svg: tCurveRegionSVG(dfR, alpha, tails, tails === 'one' ? critOne : critTwo) },
       ];
     }
   },
@@ -5861,7 +6083,230 @@ const CALCULATORS = [
     }
   },
 
-  /* ── 51a. MULTIVARIABLE OUTCOME PREDICTOR ──────────────────────────────
+  /* ── 51a. MULTIPLE LOGISTIC REGRESSION ──────────────────────────────────
+     The multivariable extension of 'Logistic Regression (2×2)': 2+
+     predictors at once, fit by Newton-Raphson/IRLS (fitLogisticRegression()
+     above) since 2+ predictors have no closed form. Each predictor's
+     exponentiated coefficient is its ADJUSTED odds ratio (aOR) — holding
+     every other predictor in the model constant — as opposed to the
+     CRUDE/unadjusted OR a single 2×2 table or 'Measures of Association'
+     gives for that same exposure alone. This is the calculator that
+     actually produces the "aOR" figure a Table 2 reports, and the Table 2
+     Fallacy guide's caveat applies directly: only the coefficient for the
+     exposure the model was built around should be read as a clean
+     adjusted effect — the other predictors' own coefficients aren't
+     necessarily unconfounded for their own exposure-outcome relationships. */
+  {
+    id:          'multiple-logistic-regression',
+    name:        'Multiple Logistic Regression',
+    hint:        'logit(P)=β₀+β₁x₁+…+βₖxₖ, aOR=e^β (adjusted)',
+    category:    'Correlation & Regression',
+    description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor in the model constant — plus its 95% CI, Wald test, and the model's overall likelihood-ratio test.",
+
+    formulas: [
+      {
+        label: 'Logistic Model',
+        latex: '\\text{logit}\\big(P(Y=1)\\big) = \\beta_0+\\beta_1X_1+\\cdots+\\beta_kX_k'
+      },
+      {
+        label: 'Fitting: Newton-Raphson / IRLS (no closed form for k ≥ 2)',
+        latex: '\\hat\\beta^{(t+1)} = \\hat\\beta^{(t)} + (X^\\top WX)^{-1}X^\\top(y-\\hat p), \\quad W=\\text{diag}\\big(\\hat p_i(1-\\hat p_i)\\big)'
+      },
+      {
+        label: 'Adjusted Odds Ratio',
+        latex: '\\text{aOR}_j = e^{\\hat\\beta_j}, \\quad 95\\%\\ CI = e^{\\hat\\beta_j \\,\\pm\\, 1.96\\,SE(\\hat\\beta_j)}'
+      },
+      {
+        label: 'Likelihood-Ratio Test (Overall Model)',
+        latex: 'G^2 = 2(LL-LL_0) \\sim \\chi^2_k'
+      },
+      {
+        label: "Firth's Penalized Score (bias-reduced fitting option, below)",
+        latex: 'X^\\top\\big(y-\\hat p+h\\,(\\tfrac12-\\hat p)\\big)=0, \\quad h_i = \\hat p_i(1-\\hat p_i)\\,x_i^\\top(X^\\top WX)^{-1}x_i'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'data', type: 'textarea',
+        label: 'Data — Y (0/1), X₁, X₂, … (comma-separated, one row per subject, at least 2 predictor columns)',
+        default: '0,1,40\n0,1,45\n0,1,48\n0,1,50\n0,1,52\n0,1,55\n0,1,58\n0,1,60\n0,1,62\n1,1,64\n0,1,66\n1,1,68\n1,1,70\n0,1,72\n1,1,75\n0,0,55\n0,0,58\n1,0,60\n0,0,62\n0,0,65\n1,0,68\n0,0,70\n1,0,72\n1,0,74\n1,0,76\n1,0,78\n1,0,80\n1,0,82\n1,0,84\n1,0,86'
+      },
+      {
+        id: 'method', type: 'select', label: 'Fitting Method', default: 'mle',
+        note: "Firth's method penalizes the likelihood to shrink coefficients slightly toward 0, which reduces small-sample bias and — unlike standard MLE — still converges to a finite estimate even when a predictor perfectly or near-perfectly separates the outcome. Switch to it if standard MLE reports non-convergence, or whenever events per predictor (EPV) is low.",
+        options: [
+          { value: 'mle',   label: 'Standard (Maximum Likelihood)' },
+          { value: 'firth', label: "Firth's Penalized Likelihood (bias-reduced)" },
+        ]
+      },
+    ],
+
+    example({ data, method }) {
+      const matrix = parseMatrix(data);
+      if (matrix.length < 2) return 'Enter a Y (0/1) column and at least 2 predictor columns to see a worked medical example here.';
+      const cols = matrix[0].length;
+      if (matrix.some(row => row.length !== cols) || matrix.some(row => row.some(v => !isFinite(v))))
+        return 'Enter numeric data with a consistent number of columns to see a worked medical example here.';
+      const k = cols - 1;
+      if (k < 2) return 'Enter at least 2 predictor columns to see a worked medical example here.';
+      const n = matrix.length;
+      const yVals = matrix.map(row => row[0]);
+      if (yVals.some(v => v !== 0 && v !== 1)) return 'The Y column must be 0/1 to see a worked medical example here.';
+      if (n < 5 * (k + 1)) return 'Enter more subjects relative to the number of predictors to see a worked medical example here.';
+
+      const useFirth = method === 'firth';
+      const X = matrix.map(row => [1, ...row.slice(1)]);
+      const fit = fitLogisticRegression(X, yVals, useFirth);
+      if (!fit) return useFirth
+        ? 'The model still did not converge even with Firth’s method — check the data for other numeric issues (e.g. a constant predictor).'
+        : 'Enter data where the model actually converges (avoid a predictor that perfectly separates the outcome), or switch to Firth’s Penalized Likelihood below, to see a worked medical example here.';
+
+      const aOR1 = Math.exp(fit.beta[1]);
+      // Crude (unadjusted) OR for surgery type alone, ignoring age
+      // entirely — the "before adjustment" number this worked example
+      // contrasts against the model's actual adjusted aOR.
+      let a2 = 0, b2 = 0, c2 = 0, d2 = 0;
+      matrix.forEach(([Y, X1]) => {
+        if (X1 === 1 && Y === 1) a2++; else if (X1 === 1 && Y === 0) b2++;
+        else if (X1 === 0 && Y === 1) c2++; else if (X1 === 0 && Y === 0) d2++;
+      });
+      const crudeOR = (a2 * d2) / (b2 * c2);
+      const f = v => +v.toFixed(2);
+      return `${n} patients each have their surgery type (X₁: minimally invasive = 1, open = 0) and age (X₂) recorded, along with whether a complication occurred (Y). Ignoring age entirely, minimally invasive surgery looks strongly protective — a crude odds ratio of ${f(crudeOR)} from a plain 2×2 table of surgery type and complication alone (see 'Measures of Association' or 'Logistic Regression (2×2)'). But older patients in this sample were both more likely to receive open surgery and more likely to have a complication — once age is held constant, the adjusted odds ratio for surgery type shrinks to aOR = ${f(aOR1)}, with a confidence interval comfortably including 1: most of that crude "protective" effect was really just age, not the surgery itself.`;
+    },
+
+    calculate({ data, method }) {
+      const matrix = parseMatrix(data);
+      if (matrix.length < 2) return [err('Enter at least 2 rows of data')];
+      const cols = matrix[0].length;
+      if (matrix.some(row => row.length !== cols)) return [err('Every row must have the same number of columns')];
+      if (matrix.some(row => row.some(v => !isFinite(v)))) return [err('All values must be numeric')];
+      const k = cols - 1;
+      if (k < 2) return [err(`This calculator needs at least 2 predictor columns (found ${k}) — use Logistic Regression (2×2) for exactly 1`)];
+      const n = matrix.length;
+
+      const yVals = matrix.map(row => row[0]);
+      if (yVals.some(v => v !== 0 && v !== 1)) return [err('The first column (Y) must be exactly 0 or 1 for every row')];
+      const nEvents = yVals.reduce((s, v) => s + v, 0);
+      if (nEvents === 0 || nEvents === n) return [err('Y must include at least one 0 and at least one 1 — there is nothing to model if every outcome is identical')];
+      if (n < 5 * (k + 1))
+        return [err(`Need at least ${5 * (k + 1)} subjects to fit ${k} predictors reasonably stably (currently ${n}) — logistic regression needs more data per parameter than linear regression does`)];
+
+      const useFirth = method === 'firth';
+      const X = matrix.map(row => [1, ...row.slice(1)]);
+      const fit = fitLogisticRegression(X, yVals, useFirth);
+      if (!fit)
+        return [err(useFirth
+          ? 'The model still did not converge, even with Firth’s penalized likelihood — check for a constant or duplicate predictor column, or other data-entry issues beyond ordinary separation.'
+          : 'The model did not converge — this almost always means one predictor (or a combination of predictors) perfectly or near-perfectly separates the outcome, which sends its true coefficient toward infinity. Check for a predictor value present in only one outcome group, or switch Fitting Method above to Firth’s Penalized Likelihood, which is designed to still produce a finite estimate in exactly this situation.')];
+
+      const { beta, cov, LL, LL0 } = fit;
+      const seBeta = beta.map((_, j) => Math.sqrt(cov[j][j]));
+      const zStats = beta.map((b, j) => b / seBeta[j]);
+      const pStats = zStats.map(z => normalTwoTailedP(z));
+      const Zcrit = 1.96;
+      const ciBeta = beta.map((b, j) => [b - Zcrit * seBeta[j], b + Zcrit * seBeta[j]]);
+
+      const G2 = 2 * (LL - LL0);
+      const dfModel = k;
+      const pG2 = typeof jStat !== 'undefined' && jStat.chisquare ? 1 - jStat.chisquare.cdf(G2, dfModel) : null;
+      const mcFaddenR2 = 1 - LL / LL0;
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const nEventsMinority = Math.min(nEvents, n - nEvents);
+      const epv = nEventsMinority / k;
+
+      const rows = [
+        { label: 'Sample Size (n) / Predictors (k)', value: `${n} / ${k}`, ci: null, isRatio: false, isText: true },
+        { label: 'Events (Y=1) / Non-Events (Y=0)', value: `${nEvents} / ${n - nEvents}`, ci: null, isRatio: false, isText: true },
+        { label: 'Fitting Method', isText: true, ci: null, isRatio: false, value: useFirth
+          ? "Firth's penalized likelihood — every coefficient below is shrunk slightly toward 0 relative to standard MLE, correcting small-sample bias and guaranteeing convergence even under (quasi-)complete separation, at the cost of a small amount of bias in the opposite direction. Prefer this whenever EPV is low or standard MLE reports non-convergence."
+          : 'Standard maximum likelihood (MLE). Switch to Firth’s Penalized Likelihood above if this reports non-convergence, or if events per predictor (EPV, below) is low.' },
+        { label: 'Intercept (β₀) — log-odds when every predictor is 0', value: f(beta[0]), ci: [f(ciBeta[0][0]), f(ciBeta[0][1])], isRatio: false },
+        { label: 'z(β₀) & p-value', isText: true, ci: null, isRatio: false, value: `z = ${f(zStats[0])}, ${formatPText(pStats[0])}` },
+      ];
+
+      // Each predictor's own CRUDE (univariable) odds ratio — fit from
+      // that single predictor and Y alone via the same IRLS routine
+      // (just with k=1, which for a binary predictor reduces to the
+      // identical closed-form 2×2 OR) — computed directly here rather
+      // than sending the user elsewhere to compute it by hand, so the
+      // crude-vs-adjusted comparison this calculator exists to
+      // demonstrate is visible in one place, for every predictor.
+      const crudeSummaries = [];
+      for (let j = 1; j <= k; j++) {
+        const aOR = Math.exp(beta[j]);
+        const ciOR = [Math.exp(ciBeta[j][0]), Math.exp(ciBeta[j][1])];
+        const Xuni = matrix.map(row => [1, row[j]]);
+        const crudeFit = fitLogisticRegression(Xuni, yVals, useFirth);
+
+        if (crudeFit) {
+          const seCrude = Math.sqrt(crudeFit.cov[1][1]);
+          const crudeOR = Math.exp(crudeFit.beta[1]);
+          const ciCrudeOR = [Math.exp(crudeFit.beta[1] - Zcrit * seCrude), Math.exp(crudeFit.beta[1] + Zcrit * seCrude)];
+          rows.push({ label: `Crude Odds Ratio (${subscriptLabel('X', j)} alone, ignoring other predictors)`, value: f(crudeOR),
+            ci: [f(ciCrudeOR[0]), f(ciCrudeOR[1])], isRatio: true });
+          crudeSummaries.push({ j, crudeOR, crudeBeta: crudeFit.beta[1], aOR, beta: beta[j], hasCrudeOR: true });
+        } else {
+          rows.push({ label: `Crude Odds Ratio (${subscriptLabel('X', j)} alone, ignoring other predictors)`, isText: true, ci: null, isRatio: false,
+            value: `Not shown — ${subscriptLabel('X', j)} alone perfectly separates Y, so its own crude coefficient has no finite MLE.` });
+          crudeSummaries.push({ j, aOR, beta: beta[j], hasCrudeOR: false });
+        }
+
+        rows.push(
+          { label: `Coefficient ${subscriptLabel('β', j)} (${subscriptLabel('X', j)}, adjusted)`, value: f(beta[j]),
+            ci: [f(ciBeta[j][0]), f(ciBeta[j][1])], isRatio: false },
+          { label: `z(${subscriptLabel('β', j)}) & p-value`, isText: true, ci: null, isRatio: false,
+            value: `z = ${f(zStats[j])}, ${formatPText(pStats[j])}` },
+          { label: `Adjusted Odds Ratio (${subscriptLabel('aOR', j)}) = e^${subscriptLabel('β', j)}`, value: f(aOR),
+            ci: [f(ciOR[0]), f(ciOR[1])], isRatio: true, highlight: true },
+        );
+      }
+
+      rows.push(
+        { label: `Likelihood-Ratio Test (Overall Model) — G²(${dfModel})`, isText: true, ci: null, isRatio: false, highlight: pG2 !== null && pG2 < 0.05,
+          value: pG2 !== null
+            ? `G² = ${f(G2)}, ${formatPText(pG2)}${pG2 < 0.05 ? ' — the model as a whole predicts Y significantly better than the intercept alone' : ' — the model does not significantly outperform the intercept alone'}`
+            : `G² = ${f(G2)} (statistics library unavailable for the χ² p-value)` },
+        { label: "McFadden's Pseudo-R²", value: f(mcFaddenR2), ci: null, isRatio: false },
+      );
+
+      if (epv < 10) {
+        rows.push({ label: 'Note on Sample Size', isText: true, ci: null, isRatio: false,
+          value: `Only about ${f(epv, 1)} events per predictor (the rarer of Y=1/Y=0, divided by k) — below the conventional rule-of-thumb minimum of 10 events per variable (EPV). Coefficients and CIs above may be unstable; treat them cautiously and consider this exploratory until replicated in a larger sample.` });
+      }
+
+      // A dynamic, per-predictor explanation built from THIS model's
+      // own numbers (not generic prose) — what β_j actually is, and
+      // how far adjustment moved it from the crude, unadjusted version.
+      // "Closer to/further from the null" is judged on the log-odds
+      // (β) scale, since that's the scale the OR's distance from 1 is
+      // symmetric on — a raw OR ratio (e.g. aOR/crudeOR) would give
+      // the wrong direction whenever an OR sits below 1.
+      const explanationParts = crudeSummaries.map(s => {
+        const Xj = subscriptLabel('X', s.j);
+        const betaj = subscriptLabel('β', s.j);
+        if (!s.hasCrudeOR) {
+          return `${betaj} (${Xj}) = ${f(s.beta, 2)} is ${Xj}'s adjusted log-odds coefficient, holding every other predictor constant — e^${betaj} = ${f(s.aOR, 2)} is its adjusted odds ratio (${Xj}'s own crude OR isn't shown above, since it alone perfectly separates Y).`;
+        }
+        const distCrude = Math.abs(s.crudeBeta), distAdj = Math.abs(s.beta);
+        const pctShrink = distCrude > 0 ? (1 - distAdj / distCrude) * 100 : 0;
+        const direction = pctShrink > 0
+          ? `moved ${f(Math.abs(pctShrink), 0)}% closer to the null (OR = 1) after adjustment`
+          : `moved ${f(Math.abs(pctShrink), 0)}% further from the null after adjustment`;
+        return `For ${Xj}: ignoring the other predictor(s), the crude odds ratio is ${f(s.crudeOR, 2)}. Adjusting for the other predictor(s) gives ${betaj} = ${f(s.beta, 2)} (the log-odds change per unit of ${Xj}, holding everything else constant), an adjusted odds ratio of ${subscriptLabel('aOR', s.j)} = e^${f(s.beta, 2)} = ${f(s.aOR, 2)} — the association ${direction}, evidence the other predictor(s) were confounding ${Xj}'s crude association with Y.`;
+      });
+
+      rows.push({ label: 'Crude vs. Adjusted, in This Model', isText: true, ci: null, isRatio: false,
+        value: `${explanationParts.join(' ')} As the Table 2 Fallacy notes, only the exposure this model was actually built around should be read as a clean adjusted estimate — the other predictors' own aORs above aren't necessarily unconfounded for their own relationships with Y.` });
+
+      return rows;
+    }
+  },
+
+  /* ── 51b. MULTIVARIABLE OUTCOME PREDICTOR ──────────────────────────────
      Scores a NEW individual from a linear or logistic equation the
      user already has — an intercept plus a coefficient and a value
      for each predictor (e.g. diet, health behavior, medication use) —
@@ -6859,7 +7304,7 @@ const CALCULATORS = [
           { label: '1−α (Correct Retain)',    value: f(1 - alpha) },
           { label: 'Power (Correct Reject)',  value: f(power) },
         ],
-        footnote: `α and Power above are set independently so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The chart below makes that constraint concrete: for the standardized effect size (d) you've set, moving the decision threshold can only trade α against β, never lower both — at your chosen α, this effect size implies β ≈ ${f(impliedBeta * 100, 1)}% (Power ≈ ${f((1 - impliedBeta) * 100, 1)}%), shown as the amber marker, versus the dashed green line marking the β your Power slider asked for (${f(beta * 100, 1)}%) — the two coincide only when the Power slider's value matches what your chosen α and effect size actually deliver. The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out.`,
+        footnote: `α and Power above are set independently so you can see each outcome on its own — but in an actual study they're not free to pick separately: for a fixed sample size, tightening α (to cut Type I error risk) mechanically lowers power (raising Type II error risk). The chart below makes that constraint concrete: for the standardized effect size (d) you've set, moving the decision threshold can only trade α against β, never lower both — at your chosen α, this effect size implies β ≈ ${f(impliedBeta * 100, 1)}% (Power ≈ ${f((1 - impliedBeta) * 100, 1)}%), shown as the amber marker, versus the dashed green line marking the β your Power slider asked for (${f(beta * 100, 1)}%) — the two coincide only when the Power slider's value matches what your chosen α and effect size actually deliver. The only way to lower both errors at once is a bigger sample size — see the sample-size calculators in this category, or drag n directly in Power with Graph, to see that trade-off play out. The distance d is sliding the alternative curve away from the null curve above — conceptually the same shift a non-centrality parameter (NCP) quantifies for a t, F, or χ² test (see the Sample Size — ANOVA calculator for a case where that non-central distribution is built explicitly, and the Glossary of Statistical Concepts for the general idea); here it's a simple normal-vs-normal shift, so no separate non-central distribution is needed.`,
       };
     }
   },
@@ -6912,6 +7357,8 @@ const CALCULATORS = [
       { id: 'measure', type: 'select', label: 'Effect Measure', default: 'md',
         note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as the effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
         options: EFFECT_MEASURE_OPTIONS },
+      { id: 'mid', label: 'Minimal Important Difference / Threshold (optional)', default: '',
+        note: 'Draws a second, green dashed line on the forest plot at this value, in addition to the null line — enter it on the natural scale (e.g. 1.25 for an RR/OR/HR threshold, or 4 for an MD threshold), not as a log value even for ratio measures. Leave blank to draw only the null line.' },
       { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.45 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.12 },
@@ -6965,6 +7412,9 @@ const CALCULATORS = [
       const measureInfo = effectMeasureInfo(values.measure);
       const boundError = checkEffectMeasureBound(studies, measureInfo);
       if (boundError) return boundError;
+
+      const { mid, error: midError } = parseMidThreshold(values.mid, measureInfo);
+      if (midError) return midError;
 
       const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
@@ -7021,7 +7471,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot', isSVG: true,
-        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio, { Q, df, pQ, I2, tau2 }, pi, transform, measureLabel)
+        svg: metaForestPlotSVG(studies, w, pooledFE, [pooledFE - Z * seFE, pooledFE + Z * seFE], pooledRE, [pooledRE - Z * seRE, pooledRE + Z * seRE], isRatio, { Q, df, pQ, I2, tau2 }, pi, transform, measureLabel, mid)
       });
 
       rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
@@ -9386,6 +9836,125 @@ const CALCULATORS = [
     }
   },
 
+  /* ── MANOVA (2 OUTCOMES) ─────────────────────────────────────────────
+     Multivariate extension of 1-Way ANOVA to two correlated outcome
+     variables analyzed jointly, from k independent groups' summary
+     statistics (same per-group Mean/SD/N shape as gatherGroups(),
+     extended with a second outcome's Mean/SD and the within-group
+     Y1-Y2 correlation). Deliberately scoped to exactly 2 outcomes so
+     E⁻¹H's eigenvalues are exact and closed-form (a 2×2 quadratic,
+     see manovaStats() above) rather than needing a general numerical
+     eigensolver this app has no other use for. Reports Wilks' Lambda
+     with its EXACT F-transform at p=2 (Rao 1951) and Pillai's Trace
+     with the standard F-approximation (Olson 1976), plus each group's
+     Mahalanobis D² from the grand centroid — the same pooled-
+     covariance distance metric Wilks'/Pillai's are themselves built
+     from, reported per group rather than as one omnibus number.     */
+  {
+    id:          'manova',
+    name:        'MANOVA (2 Outcomes)',
+    hint:        "Wilks' Λ = |E|/|E+H|, Pillai V = Σλᵢ/(1+λᵢ)",
+    category:    'ANOVA',
+    description: "Tests whether k independent groups differ on two correlated outcome variables analyzed jointly, using Wilks' Lambda and Pillai's Trace — the multivariate extension of 1-Way ANOVA to two outcomes at once.",
+
+    formulas: [
+      {
+        label: 'Hypothesis (H) & Error (E) SSCP Matrices',
+        latex: 'H = \\sum_i n_i(\\bar y_i-\\bar y)(\\bar y_i-\\bar y)^{\\top} \\qquad E = \\sum_i (n_i-1)\\,S_i'
+      },
+      {
+        label: "Wilks' Lambda",
+        latex: '\\Lambda = \\dfrac{|E|}{|E+H|}'
+      },
+      {
+        label: 'Exact F-Transform (p = 2)',
+        latex: 'F = \\dfrac{1-\\sqrt{\\Lambda}}{\\sqrt{\\Lambda}}\\cdot\\dfrac{df_E-1}{df_H}, \\quad df_1=2\\,df_H,\\ \\ df_2=2(df_E-1)'
+      },
+      {
+        label: "Pillai's Trace",
+        latex: 'V = \\dfrac{\\lambda_1}{1+\\lambda_1}+\\dfrac{\\lambda_2}{1+\\lambda_2}, \\quad \\lambda_1,\\lambda_2 = \\text{eigenvalues of } E^{-1}H'
+      },
+      {
+        label: "Mahalanobis D² (Group i from the Grand Centroid)",
+        latex: 'D_i^2 = df_E\\,(\\bar y_i-\\bar y)^{\\top} E^{-1} (\\bar y_i-\\bar y)'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupFields: [
+      { prefix: 'mean1_', label: 'Y₁ Mean' },
+      { prefix: 'sd1_',   label: 'Y₁ SD' },
+      { prefix: 'mean2_', label: 'Y₂ Mean' },
+      { prefix: 'sd2_',   label: 'Y₂ SD' },
+      { prefix: 'r_',     label: 'Within-Group r(Y₁,Y₂)' },
+      { prefix: 'n_',     label: 'Size (n)' },
+    ],
+    inputs: manovaGroupInputs([
+      { mean1: 138, sd1: 12, mean2: 88, sd2: 8, r: 0.6,  n: 15 },
+      { mean1: 130, sd1: 11, mean2: 84, sd2: 7, r: 0.55, n: 15 },
+      { mean1: 122, sd1: 10, mean2: 78, sd2: 7, r: 0.5,  n: 15 },
+    ]),
+
+    example(values) {
+      const { groups, error } = gatherManovaGroups(values);
+      if (error || groups.length < 2) return 'Enter Y₁/Y₂ mean, SD, within-group r, and n for at least 2 groups to see a worked medical example here.';
+      if (groups.some(g => g.sd1 <= 0 || g.sd2 <= 0)) return 'Both outcome SDs must be greater than 0 to see a worked medical example here.';
+      if (groups.some(g => g.r <= -1 || g.r >= 1)) return 'Within-group r must be strictly between -1 and 1 to see a worked medical example here.';
+      if (groups.some(g => g.n < 2) || typeof jStat === 'undefined' || !jStat.centralF)
+        return 'Enter at least 2 subjects per group to see a worked medical example here.';
+      const stats = manovaStats(groups);
+      if (!stats) return 'Enter data where the pooled within-group covariance matrix is not singular to see a worked medical example here.';
+      const pWilks = 1 - jStat.centralF.cdf(stats.wilksF, stats.wilksDf1, stats.wilksDf2);
+      const f = v => +v.toFixed(3);
+      const tail = pWilks < 0.05
+        ? 'the groups differ jointly across both measurements, considered together'
+        : 'no significant joint difference across both measurements was detected';
+      return `${stats.k} treatment groups (N = ${stats.N}) are compared on systolic and diastolic blood pressure at once, rather than running two separate t-tests that ignore how correlated those two measurements are within each patient. Wilks' Λ = ${f(stats.wilksLambda)}, F(${stats.wilksDf1},${stats.wilksDf2}) = ${f(stats.wilksF)}, ${formatPText(pWilks)} — ${tail}.`;
+    },
+
+    calculate(values) {
+      const { groups, error } = gatherManovaGroups(values);
+      if (error) return [err(error)];
+      if (groups.length < 2) return [err('Enter Y₁/Y₂ mean, SD, within-group r, and n for at least 2 groups')];
+      if (groups.some(g => g.sd1 <= 0 || g.sd2 <= 0)) return [err('Both outcome SDs must be greater than 0 for every group')];
+      if (groups.some(g => g.r <= -1 || g.r >= 1)) return [err('Within-group r must be strictly between -1 and 1 for every group')];
+      if (groups.some(g => g.n < 2)) return [err('Every group needs a size (n) of at least 2')];
+      if (typeof jStat === 'undefined' || !jStat.centralF)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const stats = manovaStats(groups);
+      if (!stats) return [err('The pooled within-group covariance matrix is singular for this data — check for a group with r = ±1 or otherwise degenerate spread')];
+      if (stats.dfE - 1 <= 0) return [err('Need more total subjects relative to the number of groups (df_E − 1 must be positive) — increase group sizes')];
+
+      const pWilks  = 1 - jStat.centralF.cdf(stats.wilksF, stats.wilksDf1, stats.wilksDf2);
+      const pPillai = 1 - jStat.centralF.cdf(stats.pillaiF, stats.pillaiDf1, stats.pillaiDf2);
+      const isSignificant = pWilks < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Groups (k) / Total N', value: `${stats.k} / ${stats.N}`, ci: null, isRatio: false, isText: true },
+        { label: 'df (Hypothesis, Error)', value: `${stats.dfH}, ${stats.dfE}`, ci: null, isRatio: false, isText: true },
+        { label: 'Hypothesis SSCP (H₁₁, H₂₂, H₁₂)', value: `${f(stats.H11,2)}, ${f(stats.H22,2)}, ${f(stats.H12,2)}`, ci: null, isRatio: false, isText: true },
+        { label: 'Error SSCP (E₁₁, E₂₂, E₁₂)', value: `${f(stats.E11,2)}, ${f(stats.E22,2)}, ${f(stats.E12,2)}`, ci: null, isRatio: false, isText: true },
+        { label: 'Eigenvalues of E⁻¹H (λ₁, λ₂)', value: `${f(stats.lambda1)}, ${f(stats.lambda2)}`, ci: null, isRatio: false, isText: true },
+        { label: "Wilks' Lambda (Λ)", value: f(stats.wilksLambda), ci: null, isRatio: false, highlight: true },
+        { label: 'F (Wilks) & p-value', isText: true, ci: null, isRatio: false, highlight: isSignificant,
+          value: `F(${stats.wilksDf1},${stats.wilksDf2}) = ${f(stats.wilksF)}, ${formatPText(pWilks)}${isSignificant ? ' — significant' : ''}` },
+        { label: "Pillai's Trace (V)", value: f(stats.pillaiV), ci: null, isRatio: false },
+        { label: 'F (Pillai) & p-value', isText: true, ci: null, isRatio: false, highlight: pPillai < 0.05,
+          value: `F(${f(stats.pillaiDf1,2)},${f(stats.pillaiDf2,2)}) = ${f(stats.pillaiF)}, ${formatPText(pPillai)}${pPillai < 0.05 ? ' — significant' : ''}` },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? "Reject H₀ — the groups differ significantly on Y₁ and Y₂ considered jointly (Wilks' Λ). Follow up with univariate ANOVAs on each outcome, or discriminant analysis, to see which outcome(s) drive the difference."
+            : "Fail to reject H₀ — no significant joint difference across Y₁ and Y₂ detected." },
+        { label: 'Mahalanobis D² — Each Group\'s Centroid from the Grand Centroid', isText: true, ci: null, isRatio: false,
+          value: stats.groupDistances.map(gd => `${gd.label}: ${f(gd.d2, 2)}`).join('; ') },
+        { label: 'Method', isText: true, ci: null, isRatio: false,
+          value: "Scoped to exactly 2 outcome variables, so E⁻¹H's eigenvalues are exact (closed-form), and Wilks' Λ uses its exact F-transform for p = 2 (Rao 1951) rather than an approximation. Pillai's Trace is generally more robust than Wilks' Λ when the groups' covariance matrices or normality are in doubt — Hotelling-Lawley Trace and Roy's Largest Root are two further MANOVA statistics not computed here. Mahalanobis D² above uses the pooled within-group covariance matrix (Σ = E/df_E) — the same distance metric Hotelling's T² and Wilks' Λ are themselves built from, reported per group instead of as a single omnibus statistic." },
+      ];
+    }
+  },
+
   /* ── 84. REPEATED MEASURES ANOVA ───────────────────────────────────────
      Within-subjects ANOVA from a subjects × conditions matrix (same
      input shape as Cronbach's Alpha, ICC, and Friedman) — matches the
@@ -9486,6 +10055,101 @@ const CALCULATORS = [
         { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant ? 'Reject H₀ — at least one condition differs significantly' : 'Fail to reject H₀ — no significant difference among conditions' },
+      ];
+    }
+  },
+
+  /* ── 109. MAUCHLY'S TEST OF SPHERICITY ───────────────────────────────────
+     Tests the assumption underneath 'Repeated Measures ANOVA' — same
+     subjects × conditions input shape. Transforms the k×k sample
+     covariance matrix onto k-1 orthonormal (reverse-Helmert) contrasts
+     to get S*, then Mauchly's (1940) W = |S*|/(tr(S*)/(k-1))^(k-1)
+     with Box's (1954) chi-square approximation, plus the
+     Greenhouse-Geisser epsilon correction factor. See
+     mauchlySphericityTest() in the MATRIX/SPHERICITY HELPERS above.  */
+  {
+    id:          'mauchlys-test',
+    name:        "Mauchly's Test of Sphericity",
+    hint:        'W = |S*| / [tr(S*)/(k−1)]^(k−1)',
+    category:    'ANOVA',
+    description: 'Tests whether the variances of the differences between every pair of repeated-measures conditions are equal — the sphericity assumption a standard Repeated Measures ANOVA depends on.',
+
+    formulas: [
+      {
+        label: 'Orthonormal Contrast Transform',
+        latex: 'S^{\\ast} = C\\,S\\,C^{\\top}, \\quad S = \\text{sample covariance of the } k \\text{ conditions}'
+      },
+      {
+        label: "Mauchly's W",
+        latex: 'W = \\dfrac{|S^{\\ast}|}{\\left(\\dfrac{\\operatorname{tr}(S^{\\ast})}{k-1}\\right)^{k-1}}'
+      },
+      {
+        label: 'Chi-Square Approximation',
+        latex: '\\chi^2 = -\\left[(n-1)-\\dfrac{2(k-1)^2+(k-1)+2}{6(k-1)}\\right]\\ln W, \\quad df=\\dfrac{k(k-1)}{2}-1'
+      },
+      {
+        label: 'Greenhouse-Geisser Epsilon',
+        latex: '\\hat\\varepsilon = \\dfrac{\\left[\\operatorname{tr}(S^{\\ast})\\right]^{2}}{(k-1)\\operatorname{tr}(S^{\\ast 2})}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      {
+        id: 'data', type: 'textarea',
+        label: 'Measurements — one row per subject, one column per condition (comma-separated)',
+        default: '11,11,7\n5,3,0\n13,10,9\n7,4,1\n6,5,4\n11,7,8'
+      },
+    ],
+
+    example({ data }) {
+      const matrix = parseMatrix(data);
+      const n = matrix.length;
+      if (n < 2) return 'Enter at least 2 subject rows to see a worked medical example here.';
+      const k = matrix[0].length;
+      if (k < 3 || matrix.some(row => row.length !== k) || matrix.some(row => row.some(v => !isFinite(v))) || n < k ||
+          typeof jStat === 'undefined' || !jStat.chisquare)
+        return 'Enter numeric data for at least 3 matched conditions, with at least as many subjects as conditions, to see a worked medical example here.';
+      const stats = mauchlySphericityTest(matrix);
+      if (!stats) return 'Enter numeric data for at least 3 matched conditions, with at least as many subjects as conditions, to see a worked medical example here.';
+      const pValue = 1 - jStat.chisquare.cdf(stats.chi2, stats.df);
+      const f = v => +v.toFixed(2);
+      const tail = pValue < 0.05
+        ? "sphericity looks violated here — a Greenhouse-Geisser or Huynh-Feldt correction to the RM ANOVA's degrees of freedom is warranted before trusting its p-value"
+        : 'no significant departure from sphericity was detected, so the standard Repeated Measures ANOVA can be trusted uncorrected';
+      return `${n} patients each have their symptom severity measured under ${k} different conditions. Before trusting a Repeated Measures ANOVA on this data, Mauchly's test checks whether every pair of conditions' score differences is equally variable (sphericity): W = ${f(stats.W)}, χ²(${stats.df}) = ${f(stats.chi2)}, ${formatPText(pValue)} — ${tail}.`;
+    },
+
+    calculate({ data }) {
+      const matrix = parseMatrix(data);
+      const n = matrix.length;
+      if (n < 2) return [err('Enter at least 2 subjects')];
+      const k = matrix[0].length;
+      if (k < 3) return [err('Enter at least 3 conditions (columns) — with only 2, sphericity is automatically satisfied')];
+      if (matrix.some(row => row.length !== k)) return [err('Every subject must have the same number of measurements')];
+      if (matrix.some(row => row.some(v => !isFinite(v)))) return [err('All values must be numeric')];
+      if (n < k) return [err(`Need at least as many subjects as conditions to estimate the covariance matrix (currently ${n} subjects for ${k} conditions)`)];
+      if (typeof jStat === 'undefined' || !jStat.chisquare)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const stats = mauchlySphericityTest(matrix);
+      if (!stats) return [err('The transformed covariance matrix is singular — check for duplicate or perfectly correlated conditions')];
+
+      const pValue = 1 - jStat.chisquare.cdf(stats.chi2, stats.df);
+      const isSignificant = pValue < 0.05;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Subjects (n) / Conditions (k)', value: `${n} / ${k}`, ci: null, isRatio: false, isText: true },
+        { label: "Mauchly's W", value: f(stats.W), ci: null, isRatio: false, highlight: true },
+        { label: 'Chi-Square Approximation (χ²)', value: f(stats.chi2), ci: null, isRatio: false },
+        { label: 'Degrees of Freedom', value: stats.df, ci: null, isRatio: false, isText: true },
+        { label: 'p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: true },
+        { label: 'Greenhouse-Geisser ε', value: f(stats.epsilonGG, 3), ci: null, isRatio: false },
+        { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
+          value: isSignificant
+            ? 'Reject H₀ — sphericity is violated. Do not trust the standard Repeated Measures ANOVA p-value uncorrected — apply a Greenhouse-Geisser (ε above) or Huynh-Feldt correction to its degrees of freedom, or use a multivariate/mixed-model alternative.'
+            : 'Fail to reject H₀ — no evidence against sphericity. The standard (uncorrected) Repeated Measures ANOVA degrees of freedom are appropriate.' },
       ];
     }
   },
@@ -9842,6 +10506,8 @@ const CALCULATORS = [
       { id: 'measure', type: 'select', label: 'Effect Measure', default: 'rr',
         note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as each comparison\'s effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
         options: EFFECT_MEASURE_OPTIONS },
+      { id: 'mid', label: 'Minimal Important Difference / Threshold vs Reference (optional)', default: '',
+        note: 'Draws a second, green dashed line on the "Forest Plot vs Reference" below at this value, in addition to the null line — enter it on the natural scale (e.g. 1.25 for an RR/OR/HR threshold, or 4 for an MD threshold), not as a log value even for ratio measures. Leave blank to draw only the null line.' },
       { id: 'direction', type: 'select', label: 'For This Outcome, Which Direction Is Better?', default: 'higher', options: [
         { value: 'higher', label: 'Higher values are better (e.g., cure rate, response rate)' },
         { value: 'lower',  label: 'Lower values are better (e.g., mortality, relapse, adverse events)' },
@@ -9945,6 +10611,9 @@ const CALCULATORS = [
         c => `${treatmentLabel(values, c.t1)} vs ${treatmentLabel(values, c.t2)}`);
       if (boundError) return boundError;
 
+      const { mid, error: midError } = parseMidThreshold(values.mid, measureInfo);
+      if (midError) return midError;
+
       const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
       const Z = 1.96;
@@ -10001,7 +10670,7 @@ const CALCULATORS = [
 
       rows.push({
         label: 'Forest Plot vs Reference', isSVG: true,
-        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment), transform, measureLabel)
+        svg: networkForestSVG(fit.params.map(t => ({ label: labelFor(t), effect: fit.betaOfRE(t), se: Math.sqrt(fit.varOfRE(t)) })), isRatio, labelFor(referenceTreatment), transform, measureLabel, mid)
       });
 
       rows.push({ label: 'League Table — All Pairwise Comparisons', isSVG: true, svg: networkLeagueTableSVG(fit, isRatio, nameFor) });
@@ -10629,6 +11298,8 @@ const CALCULATORS = [
       { id: 'measure', type: 'select', label: 'Effect Measure', default: 'md',
         note: 'Ratio measures (RR/OR/HR) are pooled on the log scale — enter ln(RR), ln(OR), or ln(HR) as the effect. Risk Difference is validated to stay within [-1, 1] since it\'s a difference of two proportions; the other measures have no such fixed bound to check.',
         options: EFFECT_MEASURE_OPTIONS },
+      { id: 'mid', label: 'Minimal Important Difference / Threshold (optional)', default: '',
+        note: 'Draws a second, green dashed line on the forest plot at this value, in addition to the null line — enter it on the natural scale (e.g. 1.25 for an RR/OR/HR threshold, or 4 for an MD threshold), not as a log value even for ratio measures. Leave blank to draw only the null line.' },
       { id: 'name1',   type: 'text', label: 'Study 1 Name / Date (optional)', default: '' },
       { id: 'effect1', label: 'Study 1 Effect Estimate', default: 0.40 },
       { id: 'se1',     label: 'Study 1 SE',               default: 0.15 },
@@ -10696,6 +11367,9 @@ const CALCULATORS = [
       const measureInfo = effectMeasureInfo(values.measure);
       const boundError = checkEffectMeasureBound(studies, measureInfo);
       if (boundError) return boundError;
+
+      const { mid, error: midError } = parseMidThreshold(values.mid, measureInfo);
+      if (midError) return midError;
 
       const { isRatio, label: measureLabel } = measureInfo;
       const transform = v => isRatio ? Math.exp(v) : v;
@@ -10781,7 +11455,7 @@ const CALCULATORS = [
         }
 
         rows.push({ label: 'Forest Plot — Standard vs HKSJ', isSVG: true,
-          svg: hksjForestPlotSVG(studies, w, pooledRE, ciNormal, ciHKSJ, isRatio, transform, { Q, df, pQ, I2, tau2 }, pi, measureLabel) });
+          svg: hksjForestPlotSVG(studies, w, pooledRE, ciNormal, ciHKSJ, isRatio, transform, { Q, df, pQ, I2, tau2 }, pi, measureLabel, mid) });
 
         const widthNormal = transform(ciNormal[1]) - transform(ciNormal[0]);
         const widthHKSJ = transform(ciHKSJ[1]) - transform(ciHKSJ[0]);
@@ -11248,6 +11922,10 @@ const CALCULATORS = [
         label: 'Method', isText: true, ci: null, isRatio: false,
         value: `Pooled-variance t-tests (using the ANOVA's MSW and dfW) with Holm-Šídák step-down correction across all pairs. The ${ciPct}% CI shown on each mean difference uses the unadjusted t critical value for context — significance (highlighted) is judged against α = ${alpha.toFixed(2)} using the Holm-Šídák-adjusted p-value instead.`
       });
+      rows.push({
+        label: 'Note on unequal variances', isText: true, ci: null, isRatio: false,
+        value: "Every pairwise comparison here shares the ANOVA's single pooled MSW, so if Levene's Test flagged unequal variances across groups, that same limitation carries into each pair — unlike the two-group case, where Welch's t-test is simply the default regardless. A Welch-based post-hoc procedure (e.g. Games-Howell, not currently implemented in this app) would be the more appropriate choice once variances are notably unequal."
+      });
 
       // C(6,2) = 15 — the most pairwise comparisons this calculator can
       // ever produce, since it runs all-pairs comparisons capped at 6
@@ -11272,7 +11950,12 @@ const CALCULATORS = [
      the assumption behind t-tests, ANOVA, and Pearson correlation.
      Paired in practice with Levene's/Brown-Forsythe test: Levene's
      checks equal variance across groups, Shapiro-Wilk checks the
-     shape of each group's (or the residuals') distribution.          */
+     shape of each group's (or the residuals') distribution. Royston's
+     (1995) AS R94 normalizing approximation — computed here for any
+     3 ≤ n ≤ 5000, matching R's shapiro.test() — was itself validated
+     by Royston only up to n = 2000; above that, treat the p-value with
+     more caution and corroborate with 'Kolmogorov-Smirnov Test
+     (One-Sample)' or a Q-Q plot, per the caveat calculate() appends.  */
   {
     id:          'shapiro-wilk-test',
     name:        'Shapiro-Wilk Test',
@@ -11321,7 +12004,7 @@ const CALCULATORS = [
       const isSignificant = pValue < 0.05;
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
-      return [
+      const rows = [
         { label: 'Sample Size (n)', value: n, ci: null, isRatio: false },
         { label: 'Mean',            value: f(mean, 3), ci: null, isRatio: false },
         { label: 'SD',              value: f(sd, 3),   ci: null, isRatio: false },
@@ -11333,8 +12016,15 @@ const CALCULATORS = [
             ? 'Reject H₀ — the sample departs significantly from a normal distribution.'
             : 'Fail to reject H₀ — no significant departure from normality detected.' },
         { label: 'Method', isText: true, ci: null, isRatio: false,
-          value: "Royston's (1995) algorithm AS R94 — the same approximation used internally by R's shapiro.test() — is most accurate for n ≥ 12 and valid up to n = 5000." },
+          value: "Royston's (1995) algorithm AS R94 — the same approximation used internally by R's shapiro.test() — is most accurate for n ≥ 12, and computes here for any 3 ≤ n ≤ 5000." },
       ];
+
+      if (n > 2000) {
+        rows.push({ label: 'Note on Large Samples', isText: true, ci: null, isRatio: false,
+          value: `Royston's (1995) normalizing approximation was validated by its author only up to n = 2000 — this result (n = ${n}) still computes, matching R's shapiro.test(), but its p-value is less rigorously validated at this size. Consider corroborating with the Kolmogorov-Smirnov Test (One-Sample) or a Q-Q plot rather than relying on this p-value alone.` });
+      }
+
+      return rows;
     }
   },
 
@@ -11440,7 +12130,12 @@ const CALCULATORS = [
      Normal(μ₀, σ₀) — parameters fixed in advance, not estimated from
      the same sample (that variant needs a Lilliefors correction, which
      this calculator doesn't apply — use Shapiro-Wilk instead if the
-     reference mean/SD should come from the sample itself).           */
+     reference mean/SD should come from the sample itself). Even
+     setting that aside, Shapiro-Wilk is generally the more powerful
+     default for testing normality specifically, for any n it remains
+     validated for (up to 2000, per Royston 1995) — this test's usual
+     role is comparing against an externally fixed reference
+     distribution, not as a general normality check.                 */
   {
     id:          'ks-test-one-sample',
     name:        'Kolmogorov-Smirnov Test (One-Sample)',
@@ -11500,7 +12195,7 @@ const CALCULATORS = [
             ? `Reject H₀ — the sample is not consistent with a Normal(${mu0}, ${sigma0}) distribution.`
             : `Fail to reject H₀ — the sample is consistent with a Normal(${mu0}, ${sigma0}) distribution.` },
         { label: 'Note', isText: true, ci: null, isRatio: false,
-          value: "This test assumes μ₀ and σ₀ were fixed in advance, not estimated from this same sample — to test normality using the sample's own mean and SD, use the Shapiro-Wilk Test instead." },
+          value: "This test assumes μ₀ and σ₀ were fixed in advance, not estimated from this same sample — to test normality using the sample's own mean and SD, use the Shapiro-Wilk Test instead. Shapiro-Wilk is also generally the more powerful default for a normality check in the first place, for any sample size it remains validated for (up to n = 2000, per Royston 1995)." },
       ];
     }
   },
@@ -11581,8 +12276,12 @@ const CALCULATORS = [
      classical sums-of-squares route (Huitema, "The Analysis of
      Covariance"): a pooled within-group slope adjusts the between-
      groups sum of squares, rather than fitting the equivalent GLM via
-     matrix regression. Also reports a homogeneity-of-regression-
-     slopes check, the assumption a common-slope ANCOVA depends on.  */
+     matrix regression. The homogeneity-of-regression-slopes check —
+     the assumption a common-slope ANCOVA depends on — is deliberately
+     surfaced FIRST, with a prominent isError warning if it's violated,
+     rather than appended as an easy-to-miss note after the main
+     adjusted-difference result (which still computes regardless, but
+     shouldn't be trusted as the trial's summary comparison if so).   */
   {
     id:          'ancova',
     name:        'ANCOVA (2-Group, One Covariate)',
@@ -11657,6 +12356,7 @@ const CALCULATORS = [
       const tCrit = jStat.studentt.inv(0.975, r.dfE);
       const diffCI = [r.adjDiff - tCrit * r.seDiff, r.adjDiff + tCrit * r.seDiff];
       const pSlopes = r.dfSep > 0 ? 1 - jStat.centralF.cdf(r.Fslopes, 1, r.dfSep) : null;
+      const slopesViolated = pSlopes !== null && pSlopes < 0.05;
 
       const isSignificant = pF < 0.05;
       const f = (v, dp = 4) => +(v.toFixed(dp));
@@ -11665,6 +12365,27 @@ const CALCULATORS = [
         { label: 'Group Sizes (n₁, n₂)', value: `${r.n1}, ${r.n2}`, ci: null, isRatio: false },
         { label: 'Group 1 — Raw Mean Baseline / Outcome', value: `${f(r.x1m, 2)} / ${f(r.y1m, 2)}`, ci: null, isRatio: false },
         { label: 'Group 2 — Raw Mean Baseline / Outcome', value: `${f(r.x2m, 2)} / ${f(r.y2m, 2)}`, ci: null, isRatio: false },
+      ];
+
+      // Checked FIRST and surfaced prominently — a common-slope ANCOVA's
+      // adjusted difference below isn't a valid summary at all if this
+      // fails, so it shouldn't be discoverable only after scrolling past
+      // that result. Mirrors how e.g. Chi-Square 2×2 flags an invalid RR
+      // for a case-control design: isError on the specific row, not a
+      // blocking error for the whole calculator.
+      if (pSlopes !== null) {
+        rows.push({ label: 'Homogeneity of Regression Slopes — F-Statistic & p-value', isText: true, ci: null, isRatio: false,
+          value: `F(1,${r.dfSep}) = ${f(r.Fslopes)}, ${formatPText(pSlopes)}` });
+        if (slopesViolated) {
+          rows.push({ label: 'Assumption Violated — Common-Slope ANCOVA Is Questionable', isText: true, ci: null, isRatio: false, isError: true,
+            value: "The two groups' own covariate-outcome slopes differ significantly — the relationship between baseline and outcome itself depends on group, which a single common adjusted difference can't capture. The adjusted mean difference below is still computed, but shouldn't be trusted as this trial's summary comparison; consider reporting group-specific slopes instead, or a model that allows a group × covariate interaction term." });
+        } else {
+          rows.push({ label: 'Homogeneity of Regression Slopes', isText: true, ci: null, isRatio: false,
+            value: "No significant difference between the two groups' own slopes — supports the common-slope assumption the ANCOVA below relies on." });
+        }
+      }
+
+      rows.push(
         { label: 'Common Slope (b) — Covariate → Outcome', value: f(r.b), ci: null, isRatio: false },
         { label: 't-Statistic (slope) & p-value', isText: true, ci: null, isRatio: false,
           value: `t = ${f(r.tB)}, ${formatPText(pB)}` },
@@ -11678,15 +12399,7 @@ const CALCULATORS = [
           value: isSignificant
             ? 'Reject H₀ — the groups differ significantly on the outcome after adjusting for the covariate.'
             : 'Fail to reject H₀ — no significant group difference once the covariate is accounted for.' },
-      ];
-
-      if (pSlopes !== null) {
-        rows.push({ label: 'Homogeneity of Regression Slopes — F-Statistic', value: f(r.Fslopes), ci: null, isRatio: false });
-        rows.push({ label: 'Homogeneity of Regression Slopes — p-value', isText: true, ci: null, isRatio: false,
-          value: `F(1,${r.dfSep}) = ${f(r.Fslopes)}, ${formatPText(pSlopes)} — ${pSlopes < 0.05
-            ? 'the two groups\' own slopes differ significantly, so the common-slope ANCOVA above is questionable; the covariate-outcome relationship itself may depend on group, which a common adjusted difference can\'t capture'
-            : 'no significant difference between the two groups\' own slopes, supporting the common-slope assumption this ANCOVA relies on'}` });
-      }
+      );
 
       rows.push({ label: 'Scatter Plot with Adjusted Regression Lines', isSVG: true,
         svg: ancovaScatterSVG(X1, Y1, X2, Y2, r.b, r.y1m - r.b * r.x1m, r.y2m - r.b * r.x2m, r.xGrand) });
@@ -14080,6 +14793,134 @@ function anovaStats(groups) {
   return { k, N, grandMean, ssb, ssw, dfB, dfW, msb, msw, F: msb / msw };
 }
 
+/* ── BIVARIATE MANOVA HELPERS ────────────────────────────────────────────
+   Same per-group-summary shape as groupInputs()/gatherGroups() above,
+   extended to two correlated outcome variables per group (mean/SD for
+   each, plus the within-group Y1-Y2 correlation, which is all that's
+   needed to reconstruct each group's own 2x2 covariance matrix without
+   raw subject-level data). Deliberately scoped to exactly 2 outcomes —
+   a general p-outcome MANOVA needs a numerical eigenvalue solver for an
+   arbitrary p×p matrix, which this app has no other use for and would
+   be a much larger, riskier addition than anything else here. At p=2,
+   E⁻¹H is a 2×2 matrix, so its eigenvalues are exact and closed-form
+   (the quadratic formula on its trace/determinant) rather than an
+   approximation. */
+
+function manovaGroupInputs(defaults) {
+  const inputs = [];
+  for (let i = 1; i <= 6; i++) {
+    const d = defaults[i - 1] || { mean1: '', sd1: '', mean2: '', sd2: '', r: '', n: '' };
+    inputs.push({ id: `mean1_${i}`, label: `Y₁ Mean`,                 default: d.mean1 });
+    inputs.push({ id: `sd1_${i}`,   label: `Y₁ SD`,                   default: d.sd1 });
+    inputs.push({ id: `mean2_${i}`, label: `Y₂ Mean`,                 default: d.mean2 });
+    inputs.push({ id: `sd2_${i}`,   label: `Y₂ SD`,                   default: d.sd2 });
+    inputs.push({ id: `r_${i}`,     label: `Within-Group r(Y₁,Y₂)`,   default: d.r });
+    inputs.push({ id: `n_${i}`,     label: `Size (n)`,                default: d.n });
+  }
+  return inputs;
+}
+
+// Reads mean1_{i}/sd1_{i}/mean2_{i}/sd2_{i}/r_{i}/n_{i} for i = 1..6,
+// returning only the fully-filled-in groups — same all-or-nothing rule
+// per group as gatherGroups().
+function gatherManovaGroups(values) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const groups = [];
+  for (let i = 1; i <= 6; i++) {
+    const mean1 = values[`mean1_${i}`], sd1 = values[`sd1_${i}`];
+    const mean2 = values[`mean2_${i}`], sd2 = values[`sd2_${i}`];
+    const r = values[`r_${i}`], n = values[`n_${i}`];
+    const fields = [mean1, sd1, mean2, sd2, r, n];
+    const any = fields.some(provided);
+    const all = fields.every(provided);
+    if (all) {
+      groups.push({ label: `Group ${i}`, mean1, sd1, mean2, sd2, r, n: Math.round(n) });
+    } else if (any) {
+      return { error: `Group ${i}: enter all six fields (Y₁/Y₂ mean & SD, r, and n) together, or leave the group entirely blank` };
+    }
+  }
+  return { groups };
+}
+
+// Bivariate (2-outcome) MANOVA from k independent groups' summary
+// statistics. Builds the 2×2 Hypothesis (H, between-groups) and Error
+// (E, pooled within-groups) SSCP matrices, gets E⁻¹H's exact eigenvalues
+// via the 2×2 characteristic polynomial (quadratic formula on its
+// trace/determinant — no numerical eigensolver needed at p=2), then
+// reports Wilks' Lambda with its EXACT F-transform for p=2 (valid for
+// any number of groups — Rao 1951) and Pillai's Trace with the standard
+// s/m/n F-approximation (Olson 1976).
+function manovaStats(groups) {
+  const p = 2;
+  const k = groups.length;
+  const N = groups.reduce((s, g) => s + g.n, 0);
+
+  const grandMean1 = groups.reduce((s, g) => s + g.n * g.mean1, 0) / N;
+  const grandMean2 = groups.reduce((s, g) => s + g.n * g.mean2, 0) / N;
+
+  const H11 = groups.reduce((s, g) => s + g.n * (g.mean1 - grandMean1) ** 2, 0);
+  const H22 = groups.reduce((s, g) => s + g.n * (g.mean2 - grandMean2) ** 2, 0);
+  const H12 = groups.reduce((s, g) => s + g.n * (g.mean1 - grandMean1) * (g.mean2 - grandMean2), 0);
+
+  const E11 = groups.reduce((s, g) => s + (g.n - 1) * g.sd1 ** 2, 0);
+  const E22 = groups.reduce((s, g) => s + (g.n - 1) * g.sd2 ** 2, 0);
+  const E12 = groups.reduce((s, g) => s + (g.n - 1) * g.r * g.sd1 * g.sd2, 0);
+
+  const dfH = k - 1;
+  const dfE = N - k;
+
+  const detE = E11 * E22 - E12 * E12;
+  const detEplusH = (E11 + H11) * (E22 + H22) - (E12 + H12) ** 2;
+  if (!(detE > 0) || !(detEplusH > 0)) return null;
+
+  const wilksLambda = detE / detEplusH;
+
+  const invE11 = E22 / detE, invE12 = -E12 / detE, invE22 = E11 / detE;
+  const M11 = invE11 * H11 + invE12 * H12;
+  const M12 = invE11 * H12 + invE12 * H22;
+  const M21 = invE12 * H11 + invE22 * H12;
+  const M22 = invE12 * H12 + invE22 * H22;
+
+  // Squared Mahalanobis distance of each group's own centroid from the
+  // grand centroid, using the pooled within-group covariance matrix
+  // Σ = E/dfE (so Σ⁻¹ = dfE·E⁻¹) — the same "how far apart, accounting
+  // for the outcomes' own variance and correlation" idea Wilks' Λ and
+  // Pillai's V are themselves built from, just reported per group
+  // rather than as a single omnibus statistic.
+  const groupDistances = groups.map(g => {
+    const d1 = g.mean1 - grandMean1, d2 = g.mean2 - grandMean2;
+    const d2sq = dfE * (invE11 * d1 * d1 + 2 * invE12 * d1 * d2 + invE22 * d2 * d2);
+    return { label: g.label, d2: Math.max(d2sq, 0) };
+  });
+
+  const traceM = M11 + M22;
+  const detM = M11 * M22 - M12 * M21;
+  const disc = Math.max(traceM * traceM - 4 * detM, 0);
+  const sqrtDisc = Math.sqrt(disc);
+  const lambda1 = Math.max((traceM + sqrtDisc) / 2, 0);
+  const lambda2 = Math.max((traceM - sqrtDisc) / 2, 0);
+
+  const sqrtLambda = Math.sqrt(wilksLambda);
+  const wilksF = ((1 - sqrtLambda) / sqrtLambda) * ((dfE - 1) / dfH);
+  const wilksDf1 = 2 * dfH;
+  const wilksDf2 = 2 * (dfE - 1);
+
+  const pillaiV = lambda1 / (1 + lambda1) + lambda2 / (1 + lambda2);
+  const s = Math.min(p, dfH);
+  const m = (Math.abs(p - dfH) - 1) / 2;
+  const n = (dfE - p - 1) / 2;
+  const pillaiF = ((2 * n + s + 1) / (2 * m + s + 1)) * (pillaiV / (s - pillaiV));
+  const pillaiDf1 = s * (2 * m + s + 1);
+  const pillaiDf2 = s * (2 * n + s + 1);
+
+  return {
+    k, N, dfH, dfE, H11, H22, H12, E11, E22, E12,
+    lambda1, lambda2, groupDistances,
+    wilksLambda, wilksF, wilksDf1, wilksDf2,
+    pillaiV, pillaiF, pillaiDf1, pillaiDf2,
+  };
+}
+
 // Critical value of the studentized range distribution at α = 0.05.
 // k = 2 is exact (q = √2 · t_{0.025,df}); k = 3..6 is linearly
 // interpolated by df from the standard published q-table (valid for
@@ -14110,7 +14951,22 @@ function tukeyQCritical(k, df) {
   return col[col.length - 1];
 }
 
-function sdBellCurveSVG(mean, sd, data) {
+// `opts` (all optional):
+//   markScore — a single raw value to highlight distinctly (bigger dot
+//     + a solid guide line up to the curve + an "x = ... (z = ...)"
+//     label), separate from `data`'s own small dots. Used by
+//     'zscore-sd-explorer' to call out THE score being explored,
+//     without affecting 'sd-visualized', which never sets it.
+//   alpha, tails, critZ — draws the same one-/two-tailed rejection-
+//     region shading as normalAlphaRegionSVG, but on THIS curve's raw
+//     (mean, sd) scale rather than the standard normal's fixed z
+//     scale. `critZ` is the already-computed z critical value (e.g.
+//     from jStat.normal.inv) — passed in rather than computed here,
+//     for the same jStat-independence reason as normalAlphaRegionSVG:
+//     this function is also called from a static Learn-guide figure,
+//     which must not assume jStat has finished loading yet.
+function sdBellCurveSVG(mean, sd, data, opts = {}) {
+  const { markScore = null, alpha = null, tails = null, critZ = null } = opts;
   const W = 560, H = 185;
   const PL = 12, PR = 12, PT = 16;
   const plotH = 118;
@@ -14126,6 +14982,7 @@ function sdBellCurveSVG(mean, sd, data) {
 
   // Filled band polygon
   const band = (lo, hi) => {
+    if (hi <= lo) return '';
     const pts = [`${toX(lo).toFixed(1)},${baseline}`];
     for (let i = 0; i <= 120; i++) {
       const x = lo + (i / 120) * (hi - lo);
@@ -14146,24 +15003,6 @@ function sdBellCurveSVG(mean, sd, data) {
   const sdLines = [-3,-2,-1,1,2,3].map(z => {
     const px = toX(mean + z * sd).toFixed(1);
     return `<line x1="${px}" y1="${PT}" x2="${px}" y2="${baseline}" stroke="#4E6EDB" stroke-width="1" stroke-dasharray="3,3" opacity=".4"/>`;
-  }).join('');
-
-  // Percentage labels (68.27-95.45-99.73 rule) — inside the shaded
-  // bands. The 2-3 SD label sits ABOVE its (very low) curve height
-  // rather than below it, since the curve there is too close to the
-  // baseline to fit a label underneath — yFrac must clear that curve
-  // height (~0.044 at z=2.5) by enough margin that the text doesn't
-  // dip down into the line.
-  const pctLabels = [
-    { z: 0.5,  pct: '68.27%', yFrac: 0.38 },
-    { z: 1.5,  pct: '13.59%', yFrac: 0.15 },
-    { z: 2.5,  pct: '2.14%',  yFrac: 0.12 },
-  ].flatMap(({ z, pct, yFrac }) => {
-    const y = toY(yFrac).toFixed(1);
-    return [
-      `<text x="${toX(mean + z*sd).toFixed(1)}" y="${y}" text-anchor="middle" font-size="9" fill="#4E6EDB" opacity=".75">${pct}</text>`,
-      `<text x="${toX(mean - z*sd).toFixed(1)}" y="${y}" text-anchor="middle" font-size="9" fill="#4E6EDB" opacity=".75">${pct}</text>`,
-    ];
   }).join('');
 
   // Data strip (dot plot below baseline)
@@ -14187,17 +15026,315 @@ function sdBellCurveSVG(mean, sd, data) {
 <text x="${px}" y="${H - 3}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${lbl}</text>`;
   }).join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Normal distribution with SD bands and data points">
+  // Optional rejection-region shading, on this curve's own raw scale
+  // (mean + critZ*sd), rather than the fixed z-scale normalAlphaRegionSVG
+  // uses — so it lines up with the ticks/bands already drawn above.
+  const hasShade = alpha != null && isFinite(alpha) && critZ != null && isFinite(critZ);
+  const isTwoTailed = tails !== 'one';
+  const critHigh = hasShade ? mean + critZ * sd : null;
+  const critLow  = hasShade && isTwoTailed ? mean - critZ * sd : null;
+  const shadeColor = '#2D4FBA';
+  const F = "font-family:'IBM Plex Mono',monospace";
+  const fNum = v => (+v.toFixed(3)).toString();
+
+  // Collision boxes ({x, y, halfWidth} in SVG pixel space) for every
+  // label that outranks the fixed percentage-band labels below (the
+  // marked score, a critical-value cutoff, a shaded-region alpha
+  // label) — populated as those labels are built (all below, all
+  // before pctLabels), so pctLabels can skip any instance of itself
+  // that would land on top of one of them instead of drawing blind.
+  const priorityLabels = [];
+  const addPriorityLabel = (x, y, halfWidth) => priorityLabels.push({ x, y, halfWidth });
+
+  const upperShade = hasShade ? band(Math.max(critHigh, xMin), xMax) : '';
+  const lowerShade = (hasShade && isTwoTailed) ? band(xMin, Math.min(critLow, xMax)) : '';
+
+  const critLine = value => {
+    const px = toX(value);
+    addPriorityLabel(px, PT - 4, 20);
+    return `
+    <line x1="${px.toFixed(1)}" y1="${PT}" x2="${px.toFixed(1)}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.25" stroke-dasharray="4,3" opacity=".6"/>
+    <text x="${px.toFixed(1)}" y="${(PT - 4).toFixed(1)}" text-anchor="middle" style="${F}" font-size="8" fill="#1A1A2E">${fNum(value)}</text>`;
+  };
+
+  const shadeLabel = (center, text) => {
+    const px = toX(center);
+    addPriorityLabel(px, baseline - 12, 28);
+    return `<text x="${px.toFixed(1)}" y="${(baseline - 12).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9.5" font-weight="700" fill="${shadeColor}">${text}</text>`;
+  };
+
+  const shadeHtml = hasShade ? `
+    <polygon points="${upperShade}" fill="${shadeColor}" opacity=".32"/>
+    ${lowerShade ? `<polygon points="${lowerShade}" fill="${shadeColor}" opacity=".32"/>` : ''}
+    ${critLine(critHigh)}
+    ${isTwoTailed ? critLine(critLow) : ''}
+    ${shadeLabel((Math.max(critHigh, xMin) + xMax) / 2, isTwoTailed ? `α/2=${fNum(alpha / 2)}` : `α=${fNum(alpha)}`)}
+    ${isTwoTailed ? shadeLabel((xMin + Math.min(critLow, xMax)) / 2, `α/2=${fNum(alpha / 2)}`) : ''}
+  ` : '';
+
+  // The single highlighted score (if any): a bold dot plus a solid
+  // guide line from the baseline up to the curve's own height there,
+  // distinct from the small translucent dots `data` always draws —
+  // this is the ONE point the chart is asking the viewer to notice.
+  // The label is two stacked, centered lines (x on top, z below)
+  // rather than one wide "x=.. (z=..)" line — narrower horizontally,
+  // so it clears the curve and the band labels more reliably. Its Y
+  // position isn't fixed — it tracks the curve's actual height at
+  // that x, which climbs toward the top margin whenever the marked
+  // score is anywhere near the mean (the curve is tallest there).
+  // Left unguarded, that collides with the critical-value label
+  // above, which IS fixed near the top (see critLine) — so once the
+  // mark's own label would climb within that same zone, it flips to
+  // sit BELOW the dot instead of above it, the same collision-
+  // avoidance idea powerExplorerSVG uses for its α/β/Power labels.
+  const markHtml = (markScore != null && isFinite(markScore)) ? (() => {
+    const xClamped = Math.min(Math.max(markScore, xMin), xMax);
+    const px = toX(xClamped).toFixed(1);
+    const curveY = toY(rawPhi(xClamped));
+    const labelAbove = curveY > PT + 24;
+    const lineH = 10;
+    let xLineY, zLineY;
+    if (labelAbove) { zLineY = curveY - 8; xLineY = zLineY - lineH; }
+    else            { xLineY = curveY + 14; zLineY = xLineY + lineH; }
+    const z = (markScore - mean) / sd;
+    addPriorityLabel(+px, (xLineY + zLineY) / 2, 34);
+    return `
+    <line x1="${px}" y1="${curveY.toFixed(1)}" x2="${px}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.5" opacity=".8"/>
+    <circle cx="${px}" cy="${curveY.toFixed(1)}" r="4.5" fill="#1A1A2E"/>
+    <text x="${px}" y="${xLineY.toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" font-weight="700" fill="#1A1A2E">x=${fNum(markScore)}</text>
+    <text x="${px}" y="${zLineY.toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" font-weight="700" fill="#1A1A2E">z=${fNum(z)}</text>`;
+  })() : '';
+
+  // Percentage labels — each is the probability of just its own
+  // one-sided, one-SD-wide slice (0 to 1σ, 1σ to 2σ, 2σ to 3σ), NOT
+  // the cumulative two-sided empirical-rule figures (68.27/95.45/
+  // 99.73%, which describe the FULL ±kσ band and are what the legend
+  // and prose elsewhere on this site quote) — since the same label is
+  // drawn on both sides of the mean, using the two-sided total here
+  // would double-count it. 34.13 + 34.13 = 68.27%, the usual band
+  // figure, split across its two mirrored halves. The 2-3 SD label
+  // sits ABOVE its (very low) curve height rather than below it,
+  // since the curve there is too close to the baseline to fit a label
+  // underneath — yFrac must clear that curve height (~0.044 at z=2.5)
+  // by enough margin that the text doesn't dip down into the line.
+  // Any instance that would land on top of a markHtml/critLine/
+  // shadeLabel box registered above (e.g. the dragged score landing
+  // near a ±1.5σ or ±2.5σ tick) is skipped rather than drawn over it —
+  // those dynamic, computed values take priority over this fixed
+  // reference annotation.
+  const pctLabels = [
+    { z: 0.5,  pct: '34.13%', yFrac: 0.38 },
+    { z: 1.5,  pct: '13.59%', yFrac: 0.15 },
+    { z: 2.5,  pct: '2.14%',  yFrac: 0.12 },
+  ].flatMap(({ z, pct, yFrac }) => {
+    const y = toY(yFrac);
+    const halfWidth = 17;
+    return [mean + z * sd, mean - z * sd].map(x => {
+      const px = toX(x);
+      const collides = priorityLabels.some(b =>
+        Math.abs(px - b.x) < (halfWidth + b.halfWidth) && Math.abs(y - b.y) < 12);
+      if (collides) return '';
+      return `<text x="${px.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="9" fill="#4E6EDB" opacity=".75">${pct}</text>`;
+    });
+  }).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Normal distribution with SD bands and data points${hasShade ? ', plus a shaded rejection region' : ''}${markHtml ? ', with one score highlighted' : ''}">
   <polygon points="${band(mean-3*sd, mean+3*sd)}" fill="#4E6EDB" opacity=".07"/>
   <polygon points="${band(mean-2*sd, mean+2*sd)}" fill="#4E6EDB" opacity=".09"/>
   <polygon points="${band(mean-sd,   mean+sd  )}" fill="#4E6EDB" opacity=".13"/>
+  ${shadeHtml}
   ${sdLines}
   <line x1="${PL}" y1="${baseline}" x2="${W-PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
   <polyline points="${curvePts.join(' ')}" fill="none" stroke="#4E6EDB" stroke-width="2.5" stroke-linejoin="round"/>
   <line x1="${toX(mean).toFixed(1)}" y1="${PT}" x2="${toX(mean).toFixed(1)}" y2="${baseline}" stroke="#E07B2C" stroke-width="2" stroke-dasharray="5,3"/>
   ${pctLabels}
+  ${markHtml}
   <line x1="${PL}" y1="${stripY + 20}" x2="${W-PR}" y2="${stripY + 20}" stroke="#EEF1F7" stroke-width="1"/>
   ${dots}
+  ${ticks}
+</svg>`;
+}
+
+// Standard normal curve with the rejection region(s) for a chosen
+// alpha shaded directly on it — one-tailed (upper tail only) or
+// two-tailed (both tails, each holding alpha/2) — so a reader can see
+// exactly what "alpha" carves out of the curve before ever running a
+// real hypothesis test. Companion visualization for 'z-table' (which
+// supplies live alpha/tails inputs) and the "How to Read a Normal
+// Distribution" Learn guide (which calls this directly with fixed
+// illustrative values for its own static figure). NOT the same chart
+// as 'power-with-graph', which overlays a SECOND (alternative-
+// hypothesis) curve to additionally show β and power — this one only
+// ever draws the single standard-normal curve and its rejection
+// region(s), with no alternative distribution involved.
+// `critUpper` is the ALREADY-COMPUTED upper critical z (jStat.normal.inv
+// result) — deliberately passed in rather than computed here, so this
+// function has no jStat dependency of its own and stays safe to call
+// from a GUIDES figure at module-load time (GUIDES entries, unlike
+// calculators, are built eagerly rather than lazily on a Calculate
+// click, so anything they call must not assume jStat has already
+// finished loading).
+function normalAlphaRegionSVG(alpha, tails, critUpper) {
+  const isTwoTailed = tails !== 'one';
+  const W = 560, H = 200;
+  const PL = 16, PR = 16, PT = 34, PB = 30;
+  const plotH = H - PT - PB;
+  const baseline = PT + plotH;
+
+  const xMin = -4, xMax = 4;
+  const toX = x => PL + ((x - xMin) / (xMax - xMin)) * (W - PL - PR);
+  const phi = x => Math.exp(-0.5 * x * x);
+  const toY = y => baseline - y * plotH;
+
+  const curvePts = [];
+  for (let i = 0; i <= 300; i++) {
+    const x = xMin + (i / 300) * (xMax - xMin);
+    curvePts.push(`${toX(x).toFixed(1)},${toY(phi(x)).toFixed(1)}`);
+  }
+
+  const band = (lo, hi) => {
+    if (hi <= lo) return '';
+    const steps = 120;
+    const pts = [`${toX(lo).toFixed(1)},${baseline}`];
+    for (let i = 0; i <= steps; i++) {
+      const x = lo + (i / steps) * (hi - lo);
+      pts.push(`${toX(x).toFixed(1)},${toY(phi(x)).toFixed(1)}`);
+    }
+    pts.push(`${toX(hi).toFixed(1)},${baseline}`);
+    return pts.join(' ');
+  };
+
+  const critLower = isTwoTailed ? -critUpper : null;
+
+  const upperBand = band(Math.max(critUpper, xMin), xMax);
+  const lowerBand = isTwoTailed ? band(xMin, Math.min(critLower, xMax)) : '';
+
+  const shadeColor = '#2D4FBA';
+  const F = "font-family:'IBM Plex Mono',monospace";
+  const f = v => (+v.toFixed(3)).toString();
+
+  const critLine = value => {
+    const x = toX(value).toFixed(1);
+    return `
+    <line x1="${x}" y1="${(PT - 6).toFixed(1)}" x2="${x}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.25" stroke-dasharray="4,3" opacity=".55"/>
+    <text x="${x}" y="${(PT - 10).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" fill="#1A1A2E">z=${f(value)}</text>`;
+  };
+
+  const regionLabel = (center, text) =>
+    `<text x="${toX(center).toFixed(1)}" y="${(baseline - 14).toFixed(1)}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${shadeColor}">${text}</text>`;
+
+  const upperCenter = (Math.max(critUpper, xMin) + xMax) / 2;
+  const lowerCenter = isTwoTailed ? (xMin + Math.min(critLower, xMax)) / 2 : null;
+
+  const ticks = [-3, -2, -1, 0, 1, 2, 3].map(z => {
+    const px = toX(z).toFixed(1);
+    return `<line x1="${px}" y1="${baseline}" x2="${px}" y2="${(baseline + 4).toFixed(1)}" stroke="#CDD2E0" stroke-width="1"/>
+<text x="${px}" y="${H - 6}" text-anchor="middle" style="${F}" font-size="8.5" fill="#7B8099">${z}</text>`;
+  }).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Standard normal curve with the ${isTwoTailed ? 'two-tailed' : 'one-tailed'} rejection region for alpha = ${alpha} shaded">
+  <polygon points="${upperBand}" fill="${shadeColor}" opacity=".3"/>
+  ${lowerBand ? `<polygon points="${lowerBand}" fill="${shadeColor}" opacity=".3"/>` : ''}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <polyline points="${curvePts.join(' ')}" fill="none" stroke="#4E6EDB" stroke-width="2.25" stroke-linejoin="round"/>
+  ${critLine(critUpper)}
+  ${isTwoTailed ? critLine(critLower) : ''}
+  ${regionLabel(upperCenter, isTwoTailed ? `α/2 = ${f(alpha / 2)}` : `α = ${f(alpha)}`)}
+  ${isTwoTailed ? regionLabel(lowerCenter, `α/2 = ${f(alpha / 2)}`) : ''}
+  ${ticks}
+</svg>`;
+}
+
+// The actual t-density (via jStat.studentt.pdf), not a normal curve
+// relabeled — its true shape at low df is visibly shorter-peaked and
+// fatter-tailed than normal, which is the whole point of drawing it
+// alongside a thin reference standard-normal curve (jStat.normal.pdf)
+// rather than alone. Same rejection-region shading convention as
+// normalAlphaRegionSVG above, so the two read consistently, but
+// `critUpper` here is a t critical value, not a z one, and only the
+// t curve (not the reference z curve) ever gets shaded — the z curve
+// is purely a fixed point of comparison. Like normalAlphaRegionSVG,
+// takes the already-computed critical value as an argument rather
+// than calling jStat.studentt.inv itself, for the same reason: this
+// function has no jStat dependency of its OWN, so it stays safe to
+// call eagerly (e.g. from a static Learn-guide figure) even before
+// jStat has necessarily finished loading — only the caller's
+// calculate(), which already runs after jStat is confirmed present,
+// needs to compute critUpper via jStat.studentt.inv first.
+function tCurveRegionSVG(df, alpha, tails, critUpper) {
+  const isTwoTailed = tails !== 'one';
+  const W = 560, H = 210;
+  const PL = 16, PR = 16, PT = 34, PB = 30;
+  const plotH = H - PT - PB;
+  const baseline = PT + plotH;
+
+  const xMin = -6, xMax = 6;
+  const toX = x => PL + ((x - xMin) / (xMax - xMin)) * (W - PL - PR);
+  const tPdf = x => jStat.studentt.pdf(x, df);
+  const zPdf = x => jStat.normal.pdf(x, 0, 1);
+  const peak = Math.max(tPdf(0), zPdf(0));
+  const toY = y => baseline - (y / peak) * plotH * 0.92;
+
+  const curvePts = fn => {
+    const pts = [];
+    for (let i = 0; i <= 300; i++) {
+      const x = xMin + (i / 300) * (xMax - xMin);
+      pts.push(`${toX(x).toFixed(1)},${toY(fn(x)).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  };
+
+  const band = (fn, lo, hi) => {
+    if (hi <= lo) return '';
+    const steps = 120;
+    const pts = [`${toX(lo).toFixed(1)},${baseline}`];
+    for (let i = 0; i <= steps; i++) {
+      const x = lo + (i / steps) * (hi - lo);
+      pts.push(`${toX(x).toFixed(1)},${toY(fn(x)).toFixed(1)}`);
+    }
+    pts.push(`${toX(hi).toFixed(1)},${baseline}`);
+    return pts.join(' ');
+  };
+
+  const critLower = isTwoTailed ? -critUpper : null;
+  const upperBand = band(tPdf, Math.max(critUpper, xMin), xMax);
+  const lowerBand = isTwoTailed ? band(tPdf, xMin, Math.min(critLower, xMax)) : '';
+
+  const shadeColor = '#2D4FBA';
+  const F = "font-family:'IBM Plex Mono',monospace";
+  const f = v => (+v.toFixed(3)).toString();
+
+  const critLine = value => {
+    const x = toX(value).toFixed(1);
+    return `
+    <line x1="${x}" y1="${(PT - 6).toFixed(1)}" x2="${x}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1.25" stroke-dasharray="4,3" opacity=".55"/>
+    <text x="${x}" y="${(PT - 10).toFixed(1)}" text-anchor="middle" style="${F}" font-size="9" fill="#1A1A2E">t=${f(value)}</text>`;
+  };
+
+  const regionLabel = (center, text) =>
+    `<text x="${toX(center).toFixed(1)}" y="${(baseline - 14).toFixed(1)}" text-anchor="middle" style="${F}" font-size="10" font-weight="700" fill="${shadeColor}">${text}</text>`;
+
+  const upperCenter = (Math.max(critUpper, xMin) + xMax) / 2;
+  const lowerCenter = isTwoTailed ? (xMin + Math.min(critLower, xMax)) / 2 : null;
+
+  const ticks = [-4, -2, 0, 2, 4].map(z => {
+    const px = toX(z).toFixed(1);
+    return `<line x1="${px}" y1="${baseline}" x2="${px}" y2="${(baseline + 4).toFixed(1)}" stroke="#CDD2E0" stroke-width="1"/>
+<text x="${px}" y="${H - 6}" text-anchor="middle" style="${F}" font-size="8.5" fill="#7B8099">${z}</text>`;
+  }).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="t-distribution curve at df=${df} with ${isTwoTailed ? 'two-tailed' : 'one-tailed'} rejection region shaded, alongside a reference standard normal curve">
+  <polygon points="${upperBand}" fill="${shadeColor}" opacity=".3"/>
+  ${lowerBand ? `<polygon points="${lowerBand}" fill="${shadeColor}" opacity=".3"/>` : ''}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  <polyline points="${curvePts(zPdf)}" fill="none" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3" opacity=".7"/>
+  <polyline points="${curvePts(tPdf)}" fill="none" stroke="#4E6EDB" stroke-width="2.25" stroke-linejoin="round"/>
+  ${critLine(critUpper)}
+  ${isTwoTailed ? critLine(critLower) : ''}
+  ${regionLabel(upperCenter, isTwoTailed ? `α/2 = ${f(alpha / 2)}` : `α = ${f(alpha)}`)}
+  ${isTwoTailed ? regionLabel(lowerCenter, `α/2 = ${f(alpha / 2)}`) : ''}
+  <text x="${W - PR}" y="${(PT + 10).toFixed(1)}" text-anchor="end" style="${F}" font-size="8.5" fill="#7B8099">df = ${df}</text>
+  <text x="${W - PR}" y="${(PT + 22).toFixed(1)}" text-anchor="end" style="${F}" font-size="8" fill="#7B8099" opacity=".7">grey dashed = standard normal (z)</text>
   ${ticks}
 </svg>`;
 }
@@ -14996,6 +16133,26 @@ function predictionIntervalWhiskerSVG(toX, PL, y, piLo, piHi, transform) {
     <text x="${xMid}" y="${(y - 9).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[${fmt(piLo)}, ${fmt(piHi)}]</text>`;
 }
 
+// Optional Minimal Important Difference (MID) / non-inferiority margin
+// line: a second dashed vertical line, drawn only when the caller
+// supplies a threshold, and styled distinctly (green, wider dashes)
+// from the black "no effect" null line so the two are never confused
+// at a glance. Whether a result clears the null is a different
+// question from whether it clears a pre-specified clinical threshold
+// (see the "dashed null line" section of the How to Read a Forest Plot
+// Learn guide) — this line lets a reader check the second question
+// directly on the same plot, rather than only the first. `mid` is
+// already on the plot's internal scale (log, for a ratio measure,
+// matching how every other position on these plots is computed), and
+// `label` is the pre-formatted display-scale value shown for it.
+function midLineSVG(toX, mid, y1, y2, label) {
+  if (mid == null || !isFinite(mid)) return '';
+  const x = toX(mid).toFixed(1);
+  return `
+    <line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#23875B" stroke-width="1.25" stroke-dasharray="6,2" opacity=".7"/>
+    <text x="${x}" y="${(y1 - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#23875B">MID = ${label}</text>`;
+}
+
 // Forest plot for 'meta-analysis': each study's own 95% CI (blue
 // squares, sized by its fixed-effect weight) plus the fixed-effect
 // and random-effects pooled estimates as diamonds (blue / amber,
@@ -15028,7 +16185,7 @@ function forestSideColumns(x1, x2, y, effect, ciLo, ciHi, weightPct, transform, 
       ${weightText}`;
 }
 
-function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform, measureLabel) {
+function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, isRatio, het, pi, transform, measureLabel, mid = null) {
   const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = studies.length;
   const rowH = 24;
@@ -15037,13 +16194,14 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   const plotW = W - PL - PR;
   const colX1 = W - PR + 8, colX2 = W - 16;
   const hasPI = Array.isArray(pi);
+  const hasMid = mid != null && isFinite(mid);
   const diamondGap = 21;
   const dividerY = PT + k * rowH;
   const H = dividerY + diamondGap + (hasPI ? 3 : 2) * rowH + PB;
   const baseline = H - PB;
 
   const studyCIs = studies.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
-  const allVals = [...studyCIs.flat(), ...ciFE, ...ciRE, ...(hasPI ? pi : []), 0];
+  const allVals = [...studyCIs.flat(), ...ciFE, ...ciRE, ...(hasPI ? pi : []), 0, ...(hasMid ? [mid] : [])];
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   const pad = (hi - lo) * 0.12 || 1;
   lo -= pad; hi += pad;
@@ -15082,8 +16240,9 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   const feDiamond = diamond(ciFE[0], ciFE[1], pooledFE, yFE, 'Fixed-Effect', '#4E6EDB');
   const reDiamond = diamond(ciRE[0], ciRE[1], pooledRE, yRE, 'Random-Effects', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
+  const midRow = hasMid ? midLineSVG(toX, mid, PT - 4, baseline, fmt(mid)) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates, with ${measureText}, 95% CI, and weight columns">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of individual studies and pooled fixed/random-effects estimates, with ${measureText}, 95% CI, and weight columns${hasMid ? ', plus a minimal important difference line' : ''}">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
   <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
@@ -15093,6 +16252,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
   ${feDiamond}
   ${reDiamond}
   ${piRow}
+  ${midRow}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
   ${heterogeneityCaptionSVG(W / 2, H - 12, het)}
 </svg>`;
@@ -15105,7 +16265,7 @@ function metaForestPlotSVG(studies, weightsFE, pooledFE, ciFE, pooledRE, ciRE, i
 // the wider Hartung-Knapp-Sidik-Jonkman (t-based) CI — so the extra
 // width HKSJ adds is visually obvious at a glance, anchored to the
 // identical point both methods share.
-function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi, measureLabel) {
+function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRatio, transform, het, pi, measureLabel, mid = null) {
   const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = studies.length;
   const rowH = 24;
@@ -15118,12 +16278,13 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   // consistently.
   const diamondGap = 21;
   const hasPI = Array.isArray(pi);
+  const hasMid = mid != null && isFinite(mid);
   const dividerY = PT + k * rowH;
   const H = dividerY + diamondGap + (hasPI ? 3 : 2) * rowH + PB;
   const baseline = H - PB;
 
   const studyCIs = studies.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
-  const allVals = [...studyCIs.flat(), ...ciNormal, ...ciHKSJ, ...(hasPI ? pi : []), 0];
+  const allVals = [...studyCIs.flat(), ...ciNormal, ...ciHKSJ, ...(hasPI ? pi : []), 0, ...(hasMid ? [mid] : [])];
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   const pad = (hi - lo) * 0.12 || 1;
   lo -= pad; hi += pad;
@@ -15162,8 +16323,9 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   const normalDiamond = diamond(ciNormal[0], ciNormal[1], pooledRE, yNormal, 'Standard (Normal)', '#4E6EDB');
   const hksjDiamond = diamond(ciHKSJ[0], ciHKSJ[1], pooledRE, yHKSJ, 'HKSJ (t)', '#E07B2C');
   const piRow = hasPI ? predictionIntervalWhiskerSVG(toX, PL, dividerY + diamondGap + 2 * rowH + rowH / 2, pi[0], pi[1], transform) : '';
+  const midRow = hasMid ? midLineSVG(toX, mid, PT - 4, baseline, fmt(mid)) : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate, with ${measureText}, 95% CI, and weight columns">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot comparing the standard normal-based CI to the Hartung-Knapp-Sidik-Jonkman t-based CI for the same pooled estimate, with ${measureText}, 95% CI, and weight columns${hasMid ? ', plus a minimal important difference line' : ''}">
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
   <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
@@ -15173,6 +16335,7 @@ function hksjForestPlotSVG(studies, weightsFE, pooledRE, ciNormal, ciHKSJ, isRat
   ${normalDiamond}
   ${hksjDiamond}
   ${piRow}
+  ${midRow}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
   ${heterogeneityCaptionSVG(W / 2, H - 12, het)}
 </svg>`;
@@ -15368,7 +16531,7 @@ function glmmForestPlotSVG(studies, pooledPctFE, ciPctFE, pooledPctRE, ciPctRE, 
 // unlike the per-study forest plots above — each row is already a
 // synthesized treatment-vs-reference estimate, not raw per-study
 // data, so a "% weight" wouldn't have the same meaning.
-function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabel) {
+function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabel, mid = null) {
   const measureText = measureLabel || (isRatio ? 'RR/OR' : 'Estimate');
   const k = items.length;
   const rowH = 24;
@@ -15378,9 +16541,10 @@ function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabe
   const colX1 = W - PR + 8;
   const H = PT + k * rowH + PB;
   const baseline = H - PB;
+  const hasMid = mid != null && isFinite(mid);
 
   const cis = items.map(s => [s.effect - 1.96 * s.se, s.effect + 1.96 * s.se]);
-  const allVals = [...cis.flat(), 0];
+  const allVals = [...cis.flat(), 0, ...(hasMid ? [mid] : [])];
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   const pad = (hi - lo) * 0.12 || 1;
   lo -= pad; hi += pad;
@@ -15400,12 +16564,15 @@ function networkForestSVG(items, isRatio, referenceLabel, transform, measureLabe
       ${forestSideColumns(colX1, W - 6, y, s.effect, ciLo, ciHi, null, transform)}`;
   }).join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment, with ${measureText} and 95% CI columns">
+  const midRow = hasMid ? midLineSVG(toX, mid, PT - 4, baseline, fmt(mid)) : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Forest plot of each treatment's random-effects estimate versus the reference treatment, with ${measureText} and 95% CI columns${hasMid ? ', plus a minimal important difference line' : ''}">
   <text x="${PL}" y="14" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#7B8099">Reference: ${esc(referenceLabel)}</text>
   <line x1="${zeroX}" y1="${PT - 4}" x2="${zeroX}" y2="${baseline}" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="${zeroX}" y="${(PT - 6).toFixed(1)}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${isRatio ? 'RR/OR = 1' : 'null = 0'}</text>
   <text x="${colX1}" y="${(PT - 6).toFixed(1)}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">${measureText} [95% CI]</text>
   ${rows}
+  ${midRow}
   <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
 </svg>`;
 }
@@ -16078,10 +17245,13 @@ function equivalenceZoneSVG(diff, ciLo, ciHi, marginLo, marginHi) {
 }
 
 /* ── MATRIX HELPERS ────────────────────────────────────────────────────────
-   Small generic matrix operations for 'Multiple Linear Regression',
-   which solves the OLS normal equations β̂ = (X'X)⁻¹X'y directly —
-   no closed form exists for 2+ predictors, unlike the single-
-   predictor case in 'Simple Linear Regression'.                     */
+   Small generic matrix operations. matrixMultiply/matrixTranspose/
+   matrixInverse serve 'Multiple Linear Regression', which solves the
+   OLS normal equations β̂ = (X'X)⁻¹X'y directly — no closed form exists
+   for 2+ predictors, unlike the single-predictor case in 'Simple
+   Linear Regression'. determinant() additionally serves "Mauchly's
+   Test of Sphericity", which needs |Σ*| for a small (k-1)×(k-1)
+   contrast-transformed covariance matrix.                          */
 
 function matrixMultiply(A, B) {
   const rowsA = A.length, colsA = A[0].length, colsB = B[0].length;
@@ -16132,6 +17302,119 @@ function matrixInverse(A) {
   return M.map(row => row.slice(n));
 }
 
+// Fits a multivariable logistic regression by Newton-Raphson / IRLS —
+// no closed form exists once there are 2+ predictors, unlike the
+// single-predictor case in 'Logistic Regression (2×2)' (β₁ = ln(OR)
+// directly from the 2×2 table). X must already include the leading
+// intercept column of 1s, matching 'Multiple Linear Regression's
+// convention; y is 0/1. Each iteration solves the weighted normal
+// equations directly (X'WX and the score X'(y-p) built as weighted
+// sums, not via a literal n×n diagonal W, since W is diagonal and
+// that would waste an O(n²) matrix for no reason) via the same
+// matrixInverse() used for OLS.
+//
+// When useFirth is true, fits Firth's (1993) penalized-likelihood
+// model instead: maximizes L(β) + ½log|I(β)| rather than L(β)
+// directly, which both reduces ordinary MLE's small-sample bias and
+// guarantees a finite maximum even under complete/quasi-complete
+// separation (where ordinary MLE has none). Firth's penalty enters
+// through a modified score, X'(y-p+h(½-p)) in place of X'(y-p), where
+// hᵢ = wᵢ·xᵢ'(X'WX)⁻¹xᵢ is the i-th diagonal of the hat matrix — reusing
+// the same (X'WX)⁻¹ already computed for the ordinary Newton step, so
+// the extra cost is one more O(np²) pass per iteration, not a second solve.
+//
+// Returns null if the algorithm doesn't converge within 100 iterations
+// or any coefficient diverges. With useFirth false, that's almost
+// always (quasi-)complete separation — some predictor perfectly sorts
+// the outcome and its true MLE is at +/-infinity; useFirth true is
+// specifically meant to rescue that case instead of failing.
+function fitLogisticRegression(X, y, useFirth = false) {
+  const n = X.length, p = X[0].length; // p = k + 1, including the intercept
+  let beta = new Array(p).fill(0);
+  const MAX_ITER = 100, TOL = 1e-8;
+  let converged = false;
+
+  for (let iter = 0; iter < MAX_ITER; iter++) {
+    const eta = X.map(row => row.reduce((s, xij, j) => s + xij * beta[j], 0));
+    const pHat = eta.map(e => {
+      const raw = 1 / (1 + Math.exp(-e));
+      return Math.min(Math.max(raw, 1e-10), 1 - 1e-10);
+    });
+
+    const XtWX = Array.from({ length: p }, () => new Array(p).fill(0));
+    for (let i = 0; i < n; i++) {
+      const xi = X[i], wi = pHat[i] * (1 - pHat[i]);
+      for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) XtWX[a][b] += wi * xi[a] * xi[b];
+    }
+
+    const XtWXinv = matrixInverse(XtWX);
+    if (!XtWXinv) return null;
+
+    const score = new Array(p).fill(0);
+    for (let i = 0; i < n; i++) {
+      const xi = X[i], wi = pHat[i] * (1 - pHat[i]);
+      let resid = y[i] - pHat[i];
+      if (useFirth) {
+        let quad = 0;
+        for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) quad += xi[a] * XtWXinv[a][b] * xi[b];
+        resid += (wi * quad) * (0.5 - pHat[i]);
+      }
+      for (let a = 0; a < p; a++) score[a] += xi[a] * resid;
+    }
+
+    const step = XtWXinv.map(row => row.reduce((s, v, j) => s + v * score[j], 0));
+    const newBeta = beta.map((b, j) => b + step[j]);
+    const maxChange = Math.max(...newBeta.map((b, j) => Math.abs(b - beta[j])));
+    beta = newBeta;
+
+    if (beta.some(b => !isFinite(b) || Math.abs(b) > 1e6)) return null;
+    if (maxChange < TOL) { converged = true; break; }
+  }
+  if (!converged) return null;
+
+  // Recompute W and (X'WX)⁻¹ at the converged β — this final inverse
+  // IS the model's covariance matrix (Fisher information inverse),
+  // not just a solver step, so its diagonal gives each coefficient's SE.
+  const etaFinal = X.map(row => row.reduce((s, xij, j) => s + xij * beta[j], 0));
+  const pFinal = etaFinal.map(e => Math.min(Math.max(1 / (1 + Math.exp(-e)), 1e-10), 1 - 1e-10));
+  const XtWXFinal = Array.from({ length: p }, () => new Array(p).fill(0));
+  for (let i = 0; i < n; i++) {
+    const xi = X[i], wi = pFinal[i] * (1 - pFinal[i]);
+    for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) XtWXFinal[a][b] += wi * xi[a] * xi[b];
+  }
+  const cov = matrixInverse(XtWXFinal);
+  if (!cov) return null;
+
+  const LL = y.reduce((s, yi, i) => s + (yi * Math.log(pFinal[i]) + (1 - yi) * Math.log(1 - pFinal[i])), 0);
+  const pBar = y.reduce((s, v) => s + v, 0) / n;
+  const LL0 = n * (pBar * Math.log(pBar) + (1 - pBar) * Math.log(1 - pBar));
+
+  return { beta, cov, pFitted: pFinal, LL, LL0 };
+}
+
+// Determinant via Gaussian elimination with partial pivoting (O(n³),
+// fine for the small matrices this app ever builds). Returns 0 for a
+// singular matrix rather than throwing.
+function determinant(A) {
+  const n = A.length;
+  const M = A.map(row => [...row]);
+  let det = 1;
+  for (let col = 0; col < n; col++) {
+    let pivotRow = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(M[r][col]) > Math.abs(M[pivotRow][col])) pivotRow = r;
+    }
+    if (Math.abs(M[pivotRow][col]) < 1e-12) return 0;
+    if (pivotRow !== col) { [M[col], M[pivotRow]] = [M[pivotRow], M[col]]; det = -det; }
+    det *= M[col][col];
+    for (let r = col + 1; r < n; r++) {
+      const factor = M[r][col] / M[col][col];
+      for (let c = col; c < n; c++) M[r][c] -= factor * M[col][c];
+    }
+  }
+  return det;
+}
+
 // Maps a base symbol + number to its Unicode-subscript label (e.g.
 // subscriptLabel('β', 1) → 'β₁') for dynamically-labeled regression
 // coefficients, since the number of predictors isn't known until the
@@ -16139,6 +17422,69 @@ function matrixInverse(A) {
 const SUBSCRIPT_DIGITS = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
 function subscriptLabel(base, n) {
   return base + String(n).split('').map(d => SUBSCRIPT_DIGITS[+d]).join('');
+}
+
+/* ── SPHERICITY HELPERS ───────────────────────────────────────────────────
+   Shared by "Mauchly's Test of Sphericity" — same subjects × conditions
+   matrix shape as 'Repeated Measures ANOVA'.                         */
+
+// The (k-1) orthonormal reverse-Helmert contrasts used to test
+// sphericity: row i (1-indexed) is [1,...,1,-i,0,...,0]/sqrt(i(i+1)) —
+// each row sums to 0 (orthogonal to the constant vector, so the mean
+// is removed) and the rows are mutually orthogonal and unit-length.
+// Mauchly's W is invariant to which valid orthonormal contrast set is
+// used, so this particular choice is arbitrary but standard.
+function helmertContrasts(k) {
+  const M = [];
+  for (let i = 1; i <= k - 1; i++) {
+    const row = new Array(k).fill(0);
+    for (let c = 0; c < i; c++) row[c] = 1;
+    row[i] = -i;
+    const norm = Math.sqrt(i * (i + 1));
+    M.push(row.map(v => v / norm));
+  }
+  return M;
+}
+
+// Mauchly's (1940) test of sphericity from a subjects × conditions
+// matrix: transforms the raw k×k sample covariance matrix S onto k-1
+// orthonormal contrasts (removing the mean) to get S*, then computes
+// W = |S*| / (tr(S*)/(k-1))^(k-1) and Box's (1954) chi-square
+// approximation to W's sampling distribution. Also returns the
+// Greenhouse-Geisser epsilon estimate — [tr(S*)]² / [(k-1)·tr(S*²)] —
+// the standard correction factor applied to the RM ANOVA's degrees of
+// freedom once sphericity is violated. Returns null if S* is singular
+// (too few subjects relative to conditions).
+function mauchlySphericityTest(matrix) {
+  const n = matrix.length, k = matrix[0].length, p = k - 1;
+
+  const means = Array.from({ length: k }, (_, j) => matrix.reduce((s, row) => s + row[j], 0) / n);
+  const S = Array.from({ length: k }, () => new Array(k).fill(0));
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < k; j++) {
+      let s = 0;
+      for (const row of matrix) s += (row[i] - means[i]) * (row[j] - means[j]);
+      S[i][j] = s / (n - 1);
+    }
+  }
+
+  const M = helmertContrasts(k);
+  const Sstar = matrixMultiply(M, matrixMultiply(S, matrixTranspose(M)));
+
+  const detS = determinant(Sstar);
+  if (!(detS > 0)) return null;
+  const trace = Sstar.reduce((s, row, i) => s + row[i], 0);
+  const W = detS / Math.pow(trace / p, p);
+
+  const dfW = n - 1;
+  const correction = 1 - (2 * p * p + p + 2) / (6 * p * dfW);
+  const chi2 = -dfW * correction * Math.log(W);
+  const df = (p * (p + 1)) / 2 - 1;
+
+  const traceSq = matrixMultiply(Sstar, Sstar).reduce((s, row, i) => s + row[i], 0);
+  const epsilonGG = (trace * trace) / (p * traceSq);
+
+  return { n, k, p, W, chi2, df, epsilonGG };
 }
 
 /* ── SURVIVAL ANALYSIS HELPERS ────────────────────────────────────────────
@@ -16417,8 +17763,10 @@ const CALCULATOR_INDEX = [
   { id: 'weighted-average',     name: 'Weighted Average / Weighted Score', category: 'Descriptive Statistics', description: 'Combines several scores into one overall score using weights you assign directly — course grades, rubric items, or composite quality indices.', status: 'available' },
 
   // ── 2. PROBABILITY & DISTRIBUTIONS ───────────────────────────────────
-  { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution.',    status: 'available' },
+  { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution, with a shaded one- or two-tailed rejection region drawn on the curve itself.',    status: 'available' },
   { id: 't-table',              name: 't-Distribution Table',            category: 'Probability & Distributions', description: 'Returns critical t-values for one- and two-tailed tests at any df and alpha.',                status: 'available' },
+  { id: 'zscore-sd-explorer',   name: 'z-Score & Standard Deviation Explorer', category: 'Probability & Distributions', description: 'An interactive bell curve — drag the raw score, mean, or standard deviation and watch the z-score and percentile recompute live, or target an exact z-score and shade a one-/two-tailed rejection region.', status: 'available' },
+  { id: 't-distribution-explorer', name: 't-Distribution Explorer (df & Critical Region)', category: 'Probability & Distributions', description: 'Draws the actual t-distribution curve at any degrees of freedom, alongside a reference standard normal curve, with the rejection region shaded.', status: 'available' },
   { id: 'binomial-probability', name: 'Binomial Probability Calculator', category: 'Probability & Distributions', description: 'Computes exact and cumulative binomial probabilities for given n, k, and p.',                 status: 'available' },
   { id: 'poisson-negbinom',     name: 'Poisson & Negative Binomial',     category: 'Probability & Distributions', description: 'Calculates Poisson and negative binomial probabilities and cumulative distributions.',         status: 'available' },
   { id: 'inverse-probability',  name: 'Inverse Probability',             category: 'Probability & Distributions', description: 'Finds the smallest count k such that the binomial cumulative probability P(X ≤ k) meets or exceeds a target probability, given n and p (the BINOM.INV equivalent).',  status: 'available' },
@@ -16431,7 +17779,7 @@ const CALCULATOR_INDEX = [
 
   // ── 3. T-TESTS & Z-TESTS ─────────────────────────────────────────────
   { id: 'one-sample-t-test',    name: '1-Sample t-Test',                 category: 'T-Tests & Z-Tests',           description: 'Tests whether a sample mean differs from a known population mean.',                           status: 'available' },
-  { id: 'unpaired-t-test',      name: "Unpaired t-Test (Welch's)",       category: 'T-Tests & Z-Tests',           description: 'Compares means of two independent groups without assuming equal variances.',                   status: 'available' },
+  { id: 'unpaired-t-test',      name: "Unpaired t-Test (Welch's)",       category: 'T-Tests & Z-Tests',           description: "Compares means of two independent groups without assuming equal variances — the recommended default over the classic pooled-variance (Student's) t-test.", status: 'available' },
   { id: 'equivalence-test',     name: 'Equivalence / Non-Inferiority Test (TOST)', category: 'T-Tests & Z-Tests',  description: 'Tests whether the difference between two independent group means is small enough to be considered equivalent (or non-inferior) to a pre-specified margin, using the two one-sided tests (TOST) procedure.', status: 'available' },
   { id: 'paired-t-test',        name: 'Paired t-Test',                   category: 'T-Tests & Z-Tests',           description: 'Tests the mean difference between paired or matched observations.',                           status: 'available' },
   { id: 'se-mean-diff',         name: 'Standard Error of a Mean Difference', category: 'T-Tests & Z-Tests',       description: 'Computes the standard error of the difference between two independent sample means, using pooled and Welch (unequal-variance) methods.', status: 'available' },
@@ -16467,11 +17815,13 @@ const CALCULATOR_INDEX = [
   { id: 'anova-1way',           name: '1-Way ANOVA',                     category: 'ANOVA',                       description: 'Analysis of Variance (ANOVA) test for differences in means across three or more independent groups.',                     status: 'available' },
   { id: 'anova-2way',           name: '2-Way ANOVA with Replication',    category: 'ANOVA',                       description: 'A two-factor Analysis of Variance (ANOVA) testing main effects and interaction for two factors with multiple observations per cell.',      status: 'available' },
   { id: 'anova-multifactor',    name: 'Multi-Factor ANOVA',              category: 'ANOVA',                       description: 'Extends one-way Analysis of Variance (ANOVA) to designs with more than two independent factors.',                    status: 'available' },
+  { id: 'manova',               name: 'MANOVA (2 Outcomes)',             category: 'ANOVA',                       description: "Tests whether k independent groups differ on two correlated outcome variables analyzed jointly, using Wilks' Lambda and Pillai's Trace.", status: 'available' },
   { id: 'tukeys-hsd',           name: "Tukey's HSD Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons controlling family-wise error rate after ANOVA.',               status: 'available' },
-  { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: 'Tests whether two or more groups have equal variances — the assumption behind ANOVA and the pooled-variance t-test.', status: 'available' },
+  { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: "Tests whether two or more groups have equal variances — the precondition check for a standard (pooled-variance) ANOVA. For the two-group case, current guidance is to skip this test and simply use Welch's t-test by default instead.", status: 'available' },
   { id: 'holm-sidak-test',      name: "Holm-Šídák Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons following ANOVA, using pooled-variance t-tests with the Holm-Šídák step-down correction for multiple comparisons.', status: 'available' },
   { id: 'shapiro-wilk-test',    name: 'Shapiro-Wilk Test',               category: 'ANOVA',                       description: 'Tests whether a sample of continuous data is consistent with a normal distribution — the assumption behind parametric tests like the t-test and ANOVA.', status: 'available' },
   { id: 'repeated-measures-anova', name: 'Repeated Measures ANOVA',      category: 'ANOVA',                       description: 'A within-subjects Analysis of Variance (ANOVA) that analyzes data from designs where the same subjects are measured under multiple conditions.',   status: 'available' },
+  { id: 'mauchlys-test',        name: "Mauchly's Test of Sphericity",   category: 'ANOVA',                       description: 'Tests whether the variances of the differences between every pair of repeated-measures conditions are equal — the sphericity assumption behind Repeated Measures ANOVA.', status: 'available' },
   { id: 'ancova',               name: 'ANCOVA (2-Group, One Covariate)', category: 'ANOVA',                       description: "Analysis of Covariance (ANCOVA) compares two groups' outcome means while statistically adjusting for a continuous baseline covariate — the standard analysis for a two-arm trial with a baseline measurement.", status: 'available' },
 
   // ── 7. CORRELATION & REGRESSION ──────────────────────────────────────
@@ -16482,6 +17832,7 @@ const CALCULATOR_INDEX = [
   { id: 'simple-regression',    name: 'Simple Linear Regression',        category: 'Correlation & Regression',    description: 'Fits a straight line to data and estimates slope, intercept, R², and significance.',            status: 'available' },
   { id: 'multiple-regression',  name: 'Multiple Linear Regression',      category: 'Correlation & Regression',    description: 'Fits a linear model with two or more predictors at once, estimating each coefficient, its standard error, R², adjusted R², and overall significance.', status: 'available' },
   { id: 'logistic-regression',  name: 'Logistic Regression (2×2)',       category: 'Correlation & Regression',    description: 'Estimates the log-odds and OR from a 2×2 table using logistic regression.',                     status: 'available' },
+  { id: 'multiple-logistic-regression', name: 'Multiple Logistic Regression', category: 'Correlation & Regression', description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor constant — plus its 95% CI, Wald test, and the model's overall likelihood-ratio test.", status: 'available' },
   { id: 'multivariable-predictor', name: 'Multivariable Outcome Predictor', category: 'Correlation & Regression', description: 'Computes a predicted outcome — or predicted probability — for a new individual from a linear or logistic equation you supply: an intercept plus a coefficient and a value for each predictor (e.g. diet, health behavior, medication use).', status: 'available' },
 
   // ── 8. EFFECT SIZES & AGREEMENT ──────────────────────────────────────
@@ -16819,7 +18170,10 @@ const WIZARD_TREE = {
       { label: 'Categorical (binary yes/no) at each occasion',   next: 'cochranResult' },
     ]
   },
-  rmAnovaResult:  { results: [ { id: 'repeated-measures-anova', why: 'ANOVA for the same subjects measured under 3+ conditions.' } ] },
+  rmAnovaResult:  { results: [
+    { id: 'repeated-measures-anova', why: 'ANOVA for the same subjects measured under 3+ conditions.' },
+    { id: 'mauchlys-test', why: 'Check this first — tests the sphericity assumption a standard Repeated Measures ANOVA depends on.' },
+  ] },
   friedmanResult: { results: [ { id: 'friedman-test', why: 'Non-parametric repeated-measures test across 3+ related conditions.' } ] },
   cochranResult:  { results: [ { id: 'cochrans-q', why: 'Tests for differences among 3+ matched binary (yes/no) measurements.' } ] },
 
@@ -16944,13 +18298,15 @@ const WIZARD_TREE = {
     options: [
       { label: 'One predictor, continuous outcome',                    next: 'simpleRegResult' },
       { label: 'Two or more predictors, continuous outcome',           next: 'multipleRegResult' },
-      { label: 'Binary (yes/no) outcome, from a 2×2 exposure table',   next: 'logisticRegResult' },
+      { label: 'Binary (yes/no) outcome, one exposure (2×2 table)',    next: 'logisticRegResult' },
+      { label: 'Binary (yes/no) outcome, two or more predictors',      next: 'multipleLogisticRegResult' },
       { label: "Score a new individual from a model/equation I already have", next: 'predictorResult' },
     ]
   },
   simpleRegResult:   { results: [ { id: 'simple-regression',   why: 'Fits a line through paired (X, Y) data — one predictor.' } ] },
   multipleRegResult: { results: [ { id: 'multiple-regression', why: 'Fits a linear model with 2+ predictors at once, controlling for each other.' } ] },
-  logisticRegResult: { results: [ { id: 'logistic-regression', why: 'Estimates log-odds and OR for a binary outcome from a 2×2 exposure table.' } ] },
+  logisticRegResult: { results: [ { id: 'logistic-regression', why: 'Estimates log-odds and OR for a binary outcome from a single 2×2 exposure table — a crude, unadjusted OR.' } ] },
+  multipleLogisticRegResult: { results: [ { id: 'multiple-logistic-regression', why: "Fits a logistic model with 2+ predictors at once, giving each one's adjusted odds ratio (aOR) — the figure a paper's Table 2 actually reports." } ] },
   predictorResult:   { results: [ { id: 'multivariable-predictor', why: 'Plugs an intercept, coefficients, and predictor values (e.g. diet, health behavior, medications) into a linear or logistic equation to score one new individual.' } ] },
 
   agreementGoal: {
@@ -17344,6 +18700,7 @@ const LEARN_WIZARD_TREE = {
       { label: 'How prevalence affects a diagnostic test', next: 'res_prevalence' },
       { label: 'Survival analysis basics — censoring, hazard ratios', next: 'res_survival' },
       { label: 'How much to trust pooled or synthesized evidence', next: 'res_evidence' },
+      { label: 'Test assumptions — equal variances, sphericity', next: 'res_variance_assumptions' },
       { label: 'A specific reading trap or pitfall', next: 'res_pitfall' },
     ]
   },
@@ -17367,6 +18724,7 @@ const LEARN_WIZARD_TREE = {
   ]},
   res_prevalence: { results: [ { id: 'appraisal-diagnostic-tests-prevalence', why: 'The same test performs differently in a screening population than in a specialty referral clinic.' } ] },
   res_survival:   { results: [ { id: 'appraisal-survival-basics', why: 'Censoring, the log-rank test, and what a hazard ratio assumes to stay valid.' } ] },
+  res_variance_assumptions: { results: [ { id: 'appraisal-homogeneity-sphericity', why: "Homogeneity of variance (Levene's Test) and sphericity (Mauchly's Test) are the same underlying question — does spread stay constant — asked of independent groups vs. repeated measurements." } ] },
   res_evidence: { results: [
     { id: 'appraisal-meta-analysis-reading', why: "Heterogeneity, fixed vs. random effects, and why pooling can't fix flawed primary studies." },
     { id: 'appraisal-bias-tools', why: 'A map of which tool answers which question — CONSORT, RoB 2, AMSTAR-2, GRADE, and more.' },
@@ -17379,12 +18737,14 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-monte-carlo-pvalues', why: '"p < 0.001" from a simulated/permutation test can just mean the simulation budget ran out, not that the true p-value is tiny.' },
     { id: 'appraisal-ecological-fallacy', why: 'A group-level pattern (a country, a school, a hospital) can vanish, or even reverse, at the individual level.' },
     { id: 'appraisal-sensitivity-vs-subgroup', why: '"We ran a sensitivity analysis" and "we checked a subgroup" sound like the same reassurance — they are not.' },
+    { id: 'appraisal-post-hoc', why: '"Post hoc" describes a rigorous correction procedure, a circular power calculation, and a red flag — and a paper rarely says which one it means.' },
     { id: 'appraisal-too-good-to-be-true', why: 'A checklist for spotting overinterpreted results — conflicted framing, implausibly large effects, and one-sided harms reporting.' },
   ]},
 
   // ── QUICK REFERENCE ───────────────────────────────────────────────
   quickRefResult: { results: [
     { id: 'reference-glossary-abbreviations', why: 'Grouped by topic, with links to the fuller guide or calculator where one exists.' },
+    { id: 'reference-glossary-concepts', why: 'The plain-English companion to the abbreviations glossary — variable, covariate, confounder, concordant/discordant, and more.' },
     { id: 'reference-appraisal-worksheets', why: 'Six fill-in-the-blank worksheets, one per clinical question type.' },
     { id: 'reference-visual-tradeoff-tools', why: 'An index of every interactive chart on this site that shows a quantity trading off against another as you move a parameter.' },
     { id: 'reference-live-simulators', why: 'An index of every calculator that runs a live random simulation in your browser — coin flips, repeated samples, repeated confidence intervals.' },
@@ -17619,6 +18979,8 @@ const SEARCH_KEYWORDS = {
   // Probability & Distributions
   'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve'],
   't-table':              ['t distribution', 't critical value table', "student's t table"],
+  'zscore-sd-explorer':   ['z score calculator', 'raw score to z score', 'sd slider', 'standard deviation slider', 'bell curve interactive', 'normal distribution explorer', 'percentile from z score', 'target z score', 'shade rejection region', 'two tailed shading', 'one tailed shading', 'z of 1.96', 'z of 0.975'],
+  't-distribution-explorer': ['t distribution curve', 'degrees of freedom slider', 't vs z', 'fat tails', 't curve shape', 'interactive t distribution'],
   'binomial-probability': ['binomial distribution', 'probability of successes', 'coin flip probability', 'exact binomial probability'],
   'poisson-negbinom':     ['poisson distribution', 'rare events', 'count data', 'overdispersion', 'negative binomial'],
   'inverse-probability':  ['reverse lookup', 'binom inv', 'smallest count for a target probability', 'inverse binomial'],
@@ -17667,10 +19029,12 @@ const SEARCH_KEYWORDS = {
   'anova-1way':             ['one-way anova', 'compare three or more group means', 'analysis of variance'],
   'anova-2way':             ['two-way anova', 'two factors', 'interaction effect'],
   'anova-multifactor':      ['multi-factor anova', 'three or more factors'],
+  'manova':                 ['manova', 'multivariate analysis of variance', 'multiple outcome variables', 'wilks lambda', "wilks' lambda", "pillai's trace", 'pillai trace', 'two correlated outcomes'],
   'tukeys-hsd':             ["tukey's hsd", 'post hoc test', 'pairwise comparison after anova', 'which groups differ'],
   'holm-sidak-test':        ['holm-sidak test', 'holm sidak', 'post hoc test', 'pairwise comparison after anova', 'multiple comparisons correction', 'step-down sidak'],
   'shapiro-wilk-test':      ['shapiro-wilk test', 'shapiro wilk', 'test for normality', 'normality assumption', 'is my data normally distributed'],
   'repeated-measures-anova': ['repeated measures anova', 'same subjects multiple conditions'],
+  'mauchlys-test': ['mauchly test', 'mauchly\'s w', 'sphericity test', 'sphericity assumption', 'test of sphericity', 'rm anova assumption'],
   'ancova':                 ['ancova', 'analysis of covariance', 'adjust for baseline', 'baseline-adjusted analysis', 'covariate-adjusted comparison', 'change score vs ancova', 'adjusted mean difference', 'randomized controlled trial', 'homogeneity of regression slopes'],
 
   // Correlation & Regression
@@ -17681,6 +19045,7 @@ const SEARCH_KEYWORDS = {
   'simple-regression':    ['simple linear regression', 'line of best fit', 'one predictor regression', 'predict y from x'],
   'multiple-regression':  ['multiple linear regression', 'multiple predictors', 'multivariable regression', 'two or more predictors'],
   'logistic-regression':  ['logistic regression', 'binary outcome regression', 'odds ratio from a 2x2 table', 'predict yes no outcome'],
+  'multiple-logistic-regression': ['multiple logistic regression', 'multivariable logistic regression', 'adjusted odds ratio', 'aor', 'two or more predictors binary outcome', 'logistic regression multiple predictors', 'crude vs adjusted or', 'table 2 adjusted or', 'firth', "firth's method", 'penalized likelihood', 'bias-reduced logistic regression', 'complete separation', 'quasi-complete separation', 'model did not converge'],
   'multivariable-predictor': ['prediction calculator', 'predict an outcome', 'diet', 'health behavior', 'medications', 'risk score calculator', 'score a new patient', 'apply a regression equation', 'multiple predictors prediction'],
 
   // Effect Sizes & Agreement
@@ -17706,7 +19071,7 @@ const SEARCH_KEYWORDS = {
   'sample-size-2prop':  ['sample size for two proportions', 'sample size two independent proportions', 'rct sample size', 'randomized controlled trial sample size', 'cohort study sample size'],
   'design-effect':      ['design effect', 'deff', 'effective sample size', 'intraclass correlation adjustment', 'cluster adjustment', 'multilevel sample size'],
   'sample-size-cluster-rct': ['cluster randomized trial sample size', 'cluster rct sample size', 'sample size for cluster randomization', 'number of clusters needed', 'group randomized trial sample size'],
-  'sample-size-anova-f': ['sample size for anova', "cohen's f sample size", 'a priori power analysis anova', 'sample size main effect', 'sample size interaction', 'sample size factorial design', 'gpower anova', 'noncentral f sample size', 'how many per group anova'],
+  'sample-size-anova-f': ['sample size for anova', "cohen's f sample size", 'a priori power analysis anova', 'sample size main effect', 'sample size interaction', 'sample size factorial design', 'gpower anova', 'noncentral f sample size', 'how many per group anova', 'ncp', 'non-centrality parameter', 'noncentrality parameter'],
   'sample-size-survey': ['survey sample size', 'how many people to survey', 'margin of error', 'estimate a proportion', 'poll sample size', 'questionnaire sample size', 'response rate'],
   'power-ppv-fpp':      ['false positive risk', 'positive predictive value of a significant result'],
   'power-delta-alpha':  ['power table by effect size and alpha'],
@@ -18064,7 +19429,7 @@ const NOTATION = {
     { symbol: '\\chi^2', meaning: 'Chi-square statistic testing whether the exposure (rows) and outcome (columns) are associated.' },
     { symbol: 'a, b, c, d', meaning: 'The four cell counts of the 2×2 table: exposed/outcome+, exposed/outcome−, unexposed/outcome+, unexposed/outcome−.' },
     { symbol: 'N', meaning: 'Total number of subjects across all four cells.' },
-    { symbol: '\\chi^2_{Yates}', meaning: 'Chi-square statistic with a continuity correction applied for small expected counts.' },
+    { symbol: '\\chi^2_{Yates}', meaning: "Chi-square statistic with a continuity correction applied for small expected counts — shown for reference, but current guidance favors skipping it in favor of Fisher's Exact Test instead." },
     { symbol: '\\varphi', meaning: "Phi coefficient — a correlation-like measure of the strength of association between exposure and outcome." },
     { symbol: 'RR', meaning: 'Relative risk — how many times more likely the outcome is in the exposed group versus the unexposed group.' },
     { symbol: 'OR', meaning: 'Odds ratio — the odds of the outcome in the exposed group divided by the odds in the unexposed group.' },
@@ -18225,6 +19590,17 @@ const NOTATION = {
     { symbol: 'SS_T', meaning: 'Total sum of squares across all observations.' },
     { symbol: 'df_E', meaning: 'Degrees of freedom for error, after subtracting each factor\'s degrees of freedom from the total.' },
   ],
+  'manova': [
+    { symbol: 'Y_1, Y_2', meaning: 'The two correlated outcome variables measured on every subject.' },
+    { symbol: 'H', meaning: 'Hypothesis (between-groups) SSCP matrix — the multivariate analog of SS_between, capturing how far each group\'s mean vector sits from the grand mean vector.' },
+    { symbol: 'E', meaning: 'Error (pooled within-groups) SSCP matrix — the multivariate analog of SS_within, pooling each group\'s own covariance matrix.' },
+    { symbol: 'S_i', meaning: "Group i's own 2×2 sample covariance matrix, reconstructed from its Y₁/Y₂ SDs and within-group correlation." },
+    { symbol: '\\lambda_1, \\lambda_2', meaning: 'Eigenvalues of E⁻¹H — how much each of the two independent directions of group separation contributes, in units of hypothesis variance per unit of error variance.' },
+    { symbol: '\\Lambda', meaning: "Wilks' Lambda — the proportion of total variance NOT explained by group differences (closer to 0 means groups differ more; 1 means no difference)." },
+    { symbol: 'V', meaning: "Pillai's Trace — an alternative multivariate test statistic, generally more robust than Wilks' Λ when the groups' covariance matrices or normality are in doubt." },
+    { symbol: 'df_H, df_E', meaning: 'Hypothesis and error degrees of freedom — k−1 and N−k respectively, the same quantities a univariate ANOVA uses.' },
+    { symbol: 'D_i^2', meaning: "Squared Mahalanobis distance of group i's own centroid from the grand centroid, using the pooled within-group covariance matrix — how far that group sits from the overall center once Y₁/Y₂'s own variances and correlation are accounted for." },
+  ],
   'tukeys-hsd': [
     { symbol: 'HSD_{ij}', meaning: 'Honestly Significant Difference — the minimum mean gap between group i and group j needed to call them significantly different.' },
     { symbol: 'q_{\\alpha,k,df_W}', meaning: 'Critical value from the studentized range distribution at α = 0.05, based on the number of groups (k) and within-groups df.' },
@@ -18267,6 +19643,17 @@ const NOTATION = {
     { symbol: 'SS_{error}', meaning: 'Leftover variation after removing both the condition effect and the subject effect.' },
     { symbol: 'SS_T', meaning: 'Total sum of squares across every measurement in the subjects × conditions matrix.' },
     { symbol: 'F', meaning: 'F-statistic — ratio of the condition effect\'s mean square to the error mean square, with the between-subject variation removed.' },
+  ],
+  'mauchlys-test': [
+    { symbol: 'S', meaning: 'Sample k×k covariance matrix of the raw conditions.' },
+    { symbol: 'C', meaning: 'The (k-1)×k matrix of orthonormal contrasts used to remove the mean and reduce the problem to k-1 dimensions.' },
+    { symbol: 'S^{\\ast}', meaning: 'The (k-1)×(k-1) covariance matrix of the transformed (contrast) variables, S* = CSCᵀ.' },
+    { symbol: 'k', meaning: 'Number of repeated-measures conditions.' },
+    { symbol: 'n', meaning: 'Number of subjects.' },
+    { symbol: 'W', meaning: "Mauchly's W — how close S* is to a scaled identity matrix (W = 1 means perfect sphericity)." },
+    { symbol: '\\chi^2', meaning: "Box's chi-square approximation to W's sampling distribution under the null hypothesis of sphericity." },
+    { symbol: 'df', meaning: 'Degrees of freedom for the chi-square approximation, k(k-1)/2 − 1.' },
+    { symbol: '\\hat\\varepsilon', meaning: 'Greenhouse-Geisser epsilon — how far S* departs from sphericity, used to shrink the RM ANOVA\'s degrees of freedom when sphericity fails (ranges from 1/(k-1) to 1).' },
   ],
   'ancova': [
     { symbol: 'X_{ij}, Y_{ij}', meaning: "Subject j's Baseline/Covariate and Outcome values in group i." },
@@ -18357,6 +19744,18 @@ const NOTATION = {
     { symbol: 'b', meaning: 'Count of exposed subjects without the outcome (2×2 table cell), used to compute the odds ratio.' },
     { symbol: 'SE(\\beta_0)', meaning: "Wald standard error of the intercept, based on the unexposed group's cell counts (c, d)." },
     { symbol: 'SE(\\beta_1)', meaning: 'Wald standard error of the slope, based on all four 2×2 table cell counts.' },
+  ],
+  'multiple-logistic-regression': [
+    { symbol: '\\hat\\beta', meaning: 'Vector of estimated coefficients (intercept plus one per predictor), found iteratively since there is no closed form once k ≥ 2.' },
+    { symbol: 'X', meaning: "Matrix of predictor values (with a column of 1's for the intercept) built from the entered data." },
+    { symbol: 'y', meaning: 'Column vector of the binary (0/1) outcome values entered.' },
+    { symbol: '\\hat p', meaning: "Each subject's predicted probability of Y=1 at the current iteration's coefficients." },
+    { symbol: 'W', meaning: 'Diagonal weight matrix, w_i = p̂ᵢ(1−p̂ᵢ) — how much each subject contributes to the next Newton-Raphson step.' },
+    { symbol: 'aOR_j', meaning: "Adjusted odds ratio for predictor j — e raised to that predictor's coefficient, holding every other predictor in the model constant." },
+    { symbol: 'z', meaning: "Wald test statistic for a coefficient — that coefficient divided by its own standard error, referenced to the standard normal distribution." },
+    { symbol: 'LL,\\ LL_0', meaning: "Log-likelihood of the fitted model, and of the intercept-only ('null') model — the basis of the likelihood-ratio test." },
+    { symbol: 'G^2', meaning: 'Likelihood-ratio test statistic for the overall model, 2(LL − LL₀), compared to a chi-square distribution with k degrees of freedom.' },
+    { symbol: 'h_i', meaning: "Firth's-method-only term: subject i's hat-matrix diagonal, wᵢ·xᵢ'(X'WX)⁻¹xᵢ — how much leverage that subject has on the fit, used to bias-correct the score equation." },
   ],
   'multivariable-predictor': [
     { symbol: '\\eta', meaning: 'Linear predictor — the intercept plus every predictor’s coefficient times its value, added together.' },
@@ -18557,7 +19956,7 @@ const NOTATION = {
     { symbol: 'k', meaning: 'Levels of the Effect Being Tested — the number of groups within the factor of interest (df₁ = k − 1).' },
     { symbol: 'g', meaning: 'Total Cells in the Full Design — all cells in the complete factorial layout (equal to k for a simple one-way ANOVA).' },
     { symbol: 'N_{total}', meaning: 'Required total sample size across the whole design (per-cell n × g).' },
-    { symbol: '\\lambda', meaning: 'Noncentrality parameter of the F distribution under the alternative hypothesis, λ = f² × N_total.' },
+    { symbol: '\\lambda', meaning: 'Non-centrality parameter (NCP) of the F distribution under the alternative hypothesis, λ = f² × N_total — how far the true effect shifts the null distribution.' },
     { symbol: "F'", meaning: 'The noncentral F distribution, used to compute achieved power at a given sample size.' },
     { symbol: 'df_1, df_2', meaning: 'Numerator (k − 1) and denominator (N_total − g) degrees of freedom for the F-test.' },
   ],
@@ -18930,7 +20329,7 @@ const GUIDES = [
       },
       {
         heading: 'Appropriate statistics (in this app)',
-        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. For tables larger than 2&times;2 with several low expected cell counts, the <strong>Monte Carlo Exact Test</strong> is the r&times;c analog of Fisher's Exact Test. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
+        html: `<p>Association between two nominal variables: <strong>Chi-Square 2&times;2</strong> (adequate expected counts) or <strong>Fisher's Exact Test</strong> (small samples) for 2&times;2 tables — current guidance favors going straight to Fisher's Exact Test for small samples rather than applying a Yates continuity correction to the chi-square approximation, which tends to overcorrect; <strong>Chi-Square Goodness-of-Fit</strong> for comparing one variable's distribution to an expected distribution. For tables larger than 2&times;2 with several low expected cell counts, the <strong>Monte Carlo Exact Test</strong> is the r&times;c analog of Fisher's Exact Test. Strength of that association: <strong>Cramer's V</strong> (tables larger than 2&times;2) or the <strong>Phi Coefficient</strong> (2&times;2 tables). Agreement between two raters classifying the same subjects: <strong>Cohen's Kappa</strong>; with three or more raters, <strong>Fleiss' Kappa</strong>. Paired nominal data (e.g. the same patients classified before and after): <strong>McNemar's Test</strong>.</p>`,
       },
     ],
     related: [
@@ -19113,7 +20512,7 @@ const GUIDES = [
       { id: 'unpaired-t-test', why: 'Compares means between two independent continuous samples.' },
       { id: 'paired-t-test', why: 'Compares means between two paired/matched continuous measurements.' },
       { id: 'anova-1way', why: 'Extends the two-group comparison to three or more independent groups.' },
-      { id: 'levenes-test', why: 'Checks the equal-variance assumption behind ANOVA and the pooled-variance t-test.' },
+      { id: 'levenes-test', why: "Checks the equal-variance precondition for a standard ANOVA with 3+ groups (not needed before the two-group t-test above — Welch's handles unequal variances by default)." },
       { id: 'pearson-r', why: 'Measures the linear relationship between two continuous variables.' },
       { id: 'simple-regression', why: 'Fits a line predicting one continuous variable from another.' },
       { id: 'cohens-d', why: 'Standardized effect size for the difference between two means.' },
@@ -19190,9 +20589,11 @@ const GUIDES = [
     title: 'How to Read a Forest Plot',
     blurb: 'What the squares, lines, and diamonds mean — plus fixed vs. random effects, weights, and prediction intervals.',
     dek: `Every forest plot in this app &mdash; Meta-Analysis, HKSJ, GLMM/Proportions, and Network &mdash; draws from the same visual vocabulary. Learn it once here and you can read all of them.`,
-    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates, plus estimate/CI and weight columns">
+    figure: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 237" style="width:100%;height:auto;display:block;" role="img" aria-label="Annotated example forest plot with three studies and two pooled estimates, plus estimate/CI and weight columns, and an optional minimal important difference line">
   <line x1="260.9" y1="16" x2="260.9" y2="197" stroke="#1A1A2E" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/>
   <text x="260.9" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">null = 0</text>
+  <line x1="320" y1="16" x2="320" y2="197" stroke="#23875B" stroke-width="1.25" stroke-dasharray="6,2" opacity=".7"/>
+  <text x="320" y="14" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#23875B">MID = 0.50</text>
   <text x="550" y="14" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">SMD [95% CI]</text>
   <text x="684" y="14" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="7.5" fill="#7B8099">Weight</text>
   <text x="90" y="36" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="9.5" fill="#4A4E6B">Study 1</text>
@@ -19224,11 +20625,12 @@ const GUIDES = [
   <text x="331.9" y="176" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">[-0.35, 1.55]</text>
   <line x1="100" y1="197" x2="680" y2="197" stroke="#CDD2E0" stroke-width="1.5"/>
 </svg>`,
-    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval — with estimate/CI and weight printed alongside each row, matching the calculators' own forest plots. The estimate column's header names whatever's actually being pooled (SMD here; RR/OR, r, etc. elsewhere).`,
+    figureCaption: `A worked example: three studies pooled two ways, plus the 95% prediction interval — with estimate/CI and weight printed alongside each row, matching the calculators' own forest plots. The estimate column's header names whatever's actually being pooled (SMD here; RR/OR, r, etc. elsewhere). The green dashed line at SMD = 0.50 is the optional minimal important difference (MID) line described below — here, both the Fixed-Effect and Random-Effects diamonds straddle it, so this particular result is statistically significant (it clears the null line) without clearly clearing the MID either way.`,
     legendColumns: [
       [
         { colLabel: 'Reading a study row', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Horizontal line: that study's own 95% confidence interval.` },
         { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#1A1A2E" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/></svg>`, text: `Dashed vertical line: the null value (0, or a ratio of 1 for RR/OR).` },
+        { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="1" y1="5" x2="23" y2="5" stroke="#23875B" stroke-width="1.5" stroke-dasharray="5,2" opacity=".85"/></svg>`, text: `Green dashed vertical line, if present: an optional user-entered <strong>Minimal Important Difference (MID) / threshold</strong> &mdash; a second, independent reference value, not a second null.` },
         { swatchSvg: `<svg width="24" height="10" viewBox="0 0 24 10"><line x1="2" y1="5" x2="22" y2="5" stroke="#7B8099" stroke-width="1.5" stroke-dasharray="4,3"/><line x1="2" y1="2" x2="2" y2="8" stroke="#7B8099" stroke-width="1.5"/><line x1="22" y1="2" x2="22" y2="8" stroke="#7B8099" stroke-width="1.5"/></svg>`, text: `Dashed whisker:<br><strong>95% prediction interval</strong>, the range a new study's true effect would plausibly fall in.` },
       ],
       [
@@ -19254,7 +20656,7 @@ const GUIDES = [
       },
       {
         heading: 'The dashed null line',
-        html: `<p>Marks "no effect" &mdash; 0 for a difference, or a ratio of 1 for a risk ratio/odds ratio. A pooled diamond that does not touch this line indicates a statistically significant result at the conventional &alpha; = .05 threshold; one that does touch it does not rule out no effect. It's common, and not a contradiction, for several individual studies' lines to cross the null while the pooled diamond does not &mdash; that's the entire point of pooling evidence.</p>`,
+        html: `<p>Marks "no effect" &mdash; 0 for a difference, or a ratio of 1 for a risk ratio/odds ratio. A pooled diamond that does not touch this line indicates a statistically significant result at the conventional &alpha; = .05 threshold; one that does touch it does not rule out no effect. It's common, and not a contradiction, for several individual studies' lines to cross the null while the pooled diamond does not &mdash; that's the entire point of pooling evidence.</p><p>This is the same CI&ndash;p-value duality covered in the Confidence Intervals guide, drawn out visually: the null line marks the exact H0 value, and any square, line, or diamond whose 95% CI doesn't touch it is precisely the rejection-region case of a two-sided test at &alpha; = .05 &mdash; a line crossing the null line is the visual equivalent of a hypothesized value (here, "no effect") falling inside the interval instead of outside it.</p><p>That equivalence is specifically about the "no difference" null &mdash; it doesn't automatically extend to a trial or pooled result being judged against a different threshold, such as a non-inferiority margin or a minimal important difference (MID). The Meta-Analysis, HKSJ, and Network Meta-Analysis calculators on this site let you optionally enter such a threshold, which draws a second, green dashed line on the plot at that value alongside the null line &mdash; so a result can be read against both questions at once: does it clear "no difference," and, separately, does it clear the value that's actually clinically meaningful for this outcome. A CI can cross one of these lines without crossing the other &mdash; a real, statistically significant effect that still falls short of the MID, for instance &mdash; and that's not a contradiction, it's the entire reason to plot both. Leave the field blank to draw only the null line, as every forest plot on this site did before this option existed.</p>`,
       },
       {
         heading: 'Prediction intervals: a different question than the CI',
@@ -19271,6 +20673,9 @@ const GUIDES = [
       { id: 'hksj-meta-analysis', why: 'Same forest-plot grammar, comparing the standard random-effects CI to the wider Hartung-Knapp-Sidik-Jonkman adjustment.' },
       { id: 'meta-analysis-proportions', why: 'Same grammar applied to pooled proportions, via Arcsine/Logit/Raw transforms or a one-stage GLMM.' },
       { id: 'network-meta-analysis', why: 'Extends the same forest-plot grammar to every treatment compared against a common reference.' },
+      { id: 'appraisal-confidence-intervals', why: "The general CI-p-value duality rule this guide's null-line section draws out visually — see its 'two views of the same test' section." },
+      { id: 'appraisal-non-inferiority-trial', why: 'Why a CI needs to be checked against a pre-specified margin, not just the null line, when the trial itself is a non-inferiority design.' },
+      { id: 'mid-calculator', why: 'Estimates a minimal important difference (MID) you can then enter as the optional threshold line described above.' },
     ],
   },
 
@@ -19917,6 +21322,76 @@ const GUIDES = [
   },
 
   {
+    id: 'reading-normal-distribution',
+    category: 'Reading and Understanding Graphs',
+    title: 'How to Read a Normal Distribution (Bell Curve)',
+    blurb: 'The single most common chart shape in statistics — and the shape quietly underneath nearly every z-score, p-value, and confidence interval calculated on this site.',
+    dek: `A normal ("Gaussian") distribution is fully described by just two numbers &mdash; its mean and its standard deviation &mdash; yet a huge share of statistical inference is really just geometry done on this one curve: where a value sits on it, and how much area lies beyond that point. Learn to read the curve itself here, before the p-values and confidence intervals built on top of it.`,
+    figure: sdBellCurveSVG(0, 1, [-2.1, -1.6, -1.2, -0.9, -0.6, -0.4, -0.2, 0.1, 0.3, 0.5, 0.7, 0.9, 1.3, 1.7, 2.2]),
+    figureCaption: `A standard normal curve (mean = 0, SD = 1) with the classic ±1/2/3 SD shaded bands and 15 illustrative observations plotted as a dot strip beneath it. The same shape describes any normally distributed variable &mdash; only the axis labels (μ, σ) change; the percentages inside each band never do.`,
+    legendColumns: [
+      [
+        { colLabel: 'The curve itself', swatchClass: 'is-line', swatchStyle: 'background:#4E6EDB', text: `Blue curve: the distribution's shape &mdash; tallest at the mean, falling off symmetrically toward either tail.` },
+        { swatchClass: 'is-line', swatchStyle: 'background:#E07B2C', text: `Orange dashed line: the <strong>mean (μ)</strong> &mdash; also the median and mode, since a normal distribution is perfectly symmetric.` },
+      ],
+      [
+        { colLabel: 'Reading the bands', swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;opacity:.35', text: `Shaded bands, darkest to lightest: ±1 SD (&asymp;68% of values), ±2 SD (&asymp;95%), ±3 SD (&asymp;99.7%) &mdash; the empirical rule.` },
+        { swatchClass: 'is-square', swatchStyle: 'background:#4E6EDB;opacity:.55', text: `Dots below the axis: individual observations &mdash; here, purely illustrative; in the "Standard Deviation — Calculated & Visualized" calculator, your own entered data.` },
+      ],
+    ],
+    sections: [
+      {
+        heading: 'Shape and symmetry',
+        html: `<p>A normal distribution is a single-peaked (unimodal), perfectly symmetric curve: fold it in half at the center and the two sides match exactly. That symmetry is what makes the mean, median, and mode coincide at one point &mdash; unlike a skewed distribution (see the Concepts Glossary's skewness entry), where those three measures pull apart from each other. The tails extend infinitely in both directions in the idealized mathematical curve, getting closer and closer to zero probability without ever quite reaching it &mdash; in practice, values more than about 3-4 SDs from the mean are rare enough to be treated as effectively impossible for most purposes.</p>`,
+      },
+      {
+        heading: 'Mean as center, SD as spread',
+        html: `<p>Only two numbers fully describe a normal distribution: the mean (μ), which fixes <em>where</em> the curve is centered, and the standard deviation (σ), which fixes <em>how wide</em> it is. Moving the mean slides the whole curve left or right without changing its shape; increasing the SD flattens and widens it, while decreasing the SD makes it taller and narrower &mdash; the total area under the curve always stays exactly 1 (100% probability) either way, since a wider curve must get shorter to compensate. This is the same mean/SD pair reported by the <a href="#variance-sd">Variance &amp; Standard Deviation</a> calculator, now given a picture rather than just two numbers.</p>`,
+      },
+      {
+        heading: 'The empirical rule: 68-95-99.7',
+        html: `<p>For any normal distribution, regardless of its particular mean or SD, a fixed proportion of values falls within each SD-wide band around the mean: about 68% within ±1 SD, about 95% within ±2 SD, and about 99.7% within ±3 SD &mdash; visible directly as the three shaded bands in the figure above. This "68-95-99.7 rule" is a fast, no-calculation way to sanity-check whether an individual value is unusual: a lab result 2.5 SDs from the mean is already outside the middle 95% of a normal reference population, well before running any formal test.</p>`,
+      },
+      {
+        heading: 'z-scores: standardizing any normal value',
+        html: `<p>A z-score converts any normal value into "how many SDs above or below the mean is this," via z = (x &minus; μ) / σ. That single transformation is what lets one standard normal curve (μ = 0, σ = 1 &mdash; exactly the figure above) stand in for every possible normal distribution: a glucose reading, a birth weight, and a regression coefficient can all be converted to the same z-scale and read off the same curve, rather than needing a separate curve memorized for every possible μ and σ. The <a href="#z-table">z-Distribution Table</a> calculator performs this lookup directly &mdash; enter a z-score and it returns the cumulative probability Φ(z), the exact quantity the next section explains how to read.</p><p>To see this the other way around &mdash; starting from a raw score rather than an already-computed z &mdash; try the <a href="#zscore-sd-explorer">z-Score &amp; Standard Deviation Explorer</a>: drag the raw score, the mean, or the SD independently, and watch the z-score and percentile update live. Holding the score fixed and dragging only σ is particularly worth trying &mdash; the patient's value never moves, but how many SDs from the mean it counts as does, purely because the population's spread changed. That same explorer also has an optional "Target z-Score" field, for jumping straight to a specific z (1.96, for instance) without hunting for the raw score that produces it, and an optional α/tails shading control &mdash; the same one-/two-tailed rejection region from the next section, drawn on this curve's own raw scale instead of the fixed standard-normal one.</p>`,
+      },
+      {
+        heading: 'Area under the curve is probability',
+        html: `<p>The curve's height at any single point is not itself a probability &mdash; only the <em>area</em> under the curve between two points is. The total area under the whole curve is exactly 1 (100%); the area to the left of a given z-score is Φ(z), the cumulative probability that a randomly drawn value falls at or below it. This is the conceptual bridge between "reading a bell curve" and nearly every inferential calculation on this site: a p-value is an area in a tail, a confidence interval's 95% is an area in the middle, and statistical power is an area under a shifted curve past a cutoff (see <a href="#power-with-graph">Power with Graph</a> for that shifted-curve case specifically).</p>`,
+      },
+      {
+        heading: 'Shading the rejection region: one-tailed vs. two-tailed alpha',
+        html: `<p>A hypothesis test's significance level (α) is itself an area &mdash; the region(s) of the curve considered "too extreme to be explained by chance alone" if the null hypothesis were true. Where that area sits depends on whether the test is one-tailed or two-tailed:</p>
+          <div style="display:grid;grid-template-columns:1fr;gap:12px;margin:12px 0;">
+            <div>${normalAlphaRegionSVG(0.05, 'two', 1.96)}<p style="text-align:center;font-size:0.85em;color:var(--text-3,#7B8099);margin-top:2px;">Two-tailed, α = 0.05: α/2 = 0.025 shaded in <em>each</em> tail.</p></div>
+            <div>${normalAlphaRegionSVG(0.05, 'one', 1.645)}<p style="text-align:center;font-size:0.85em;color:var(--text-3,#7B8099);margin-top:2px;">One-tailed, α = 0.05: the full α = 0.05 shaded in a single tail.</p></div>
+          </div>
+          <p>Notice the two critical values differ (±1.96 vs. 1.645) even though both tests use the same α = 0.05 &mdash; a two-tailed test splits its area between both tails, so each individual tail needs a more extreme cutoff (α/2 = 0.025) to enclose the same total shaded area as a one-tailed test's single, less extreme cutoff. A result landing in the shaded region is significant at that α; one landing outside it is not &mdash; the same "does the observed value fall in the tail" logic behind every p-value and critical-value comparison on this site, made visible directly on the curve rather than left as an abstract cutoff. Try it yourself, with any α and either tail choice, on the <a href="#z-table">z-Distribution Table</a> calculator above &mdash; its "Shade Which Rejection Region?" option redraws this exact chart live.</p>`,
+      },
+      {
+        heading: 'When real data isn\'t normal',
+        html: `<p>Everything above describes the idealized mathematical curve &mdash; real data is never perfectly normal, only more or less consistent with it. Real distributions can be skewed (asymmetric, with one tail longer than the other) or have heavier or lighter tails than a true normal curve (kurtosis) &mdash; both covered in the Concepts Glossary's shape-of-a-distribution entries. The <a href="#shapiro-wilk-test">Shapiro-Wilk Test</a> formally tests whether a sample is consistent with having come from a normal distribution, the assumption underneath a t-test, ANOVA, and Pearson correlation alike. And even when the underlying data isn't normal at all, the <a href="#clt-simulator">Central Limit Theorem Simulator</a> shows why the <em>sampling distribution of the mean</em> often turns approximately normal anyway as sample size grows &mdash; the reason this curve shows up so pervasively in statistics even for outcomes that individually look nothing like it.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports a z-score, a standardized effect size, or a p-value without showing the underlying curve, this is the picture being described in words: some value's distance from a center, measured in SDs, translated into an area under this exact shape. If the reported statistic instead comes from a t, F, or chi-square distribution rather than z, the same "area beyond a cutoff = probability" logic still applies &mdash; just on a curve shaped slightly differently (see the <a href="#t-table">t-Distribution Table</a>, or drag degrees of freedom live on the <a href="#t-distribution-explorer">t-Distribution Explorer</a>, and the Concepts Glossary's non-centrality-parameter entry for how those other reference distributions relate back to this one).</p>`,
+      },
+    ],
+    related: [
+      { id: 'sd-visualized', why: 'Plots this exact bell curve, with ±1/2/3 SD bands, directly from your own entered data.' },
+      { id: 'zscore-sd-explorer', why: 'Drag the raw score, mean, or SD independently and watch the z-score and percentile recompute live — the interactive version of the z-score section above.' },
+      { id: 'z-table', why: 'The live version of the shaded-rejection-region figure above — pick any α and either tail and the chart redraws.' },
+      { id: 't-distribution-explorer', why: 'The same shaded-rejection-region idea for the t-distribution, with df as a live slider instead of α — shows the fatter tails at low df directly.' },
+      { id: 'clt-simulator', why: 'Shows why the sampling distribution of the mean tends toward this exact shape even when the underlying data isn\'t normal.' },
+      { id: 'shapiro-wilk-test', why: 'Formally tests whether a real sample is consistent with having come from a normal distribution.' },
+      { id: 'appraisal-p-values', why: 'What the shaded tail area from this guide actually means once it\'s attached to a real test statistic rather than a fixed illustrative α.' },
+      { id: 'power-with-graph', why: 'Extends this single-curve picture to two overlapping curves (H₀ and Hₐ), adding β and power to the same area-under-the-curve logic.' },
+      { id: 'type1-type2-errors', why: 'The decision-matrix framing of the same rejection-region concept introduced here.' },
+    ],
+  },
+
+  {
     id: 'appraisal-instrumental-variables',
     category: 'Critical Appraisal of the Literature',
     title: 'How Instrumental Variable Analysis Works (and What Makes a Valid Instrument)',
@@ -20188,6 +21663,8 @@ const GUIDES = [
       { id: 'binomial-hyp-test', why: 'Worked example of a p-value calculation against a binomial null hypothesis.' },
       { id: 'appraisal-tails-and-multiplicity', why: 'Extends this guide\'s multiple-comparisons example into the formal family-wise error rate, and covers one-tailed vs. two-tailed testing.' },
       { id: 'appraisal-frequentist-bayesian', why: 'Generalizes this guide\'s P(data|null) vs. P(null|data) distinction into the full frequentist-vs-Bayesian divide.' },
+      { id: 'appraisal-confidence-intervals', why: 'Covers the CI-p-value duality — why any value outside a 95% CI is exactly the set of values a p-value < 0.05 would reject.' },
+      { id: 'reading-normal-distribution', why: 'The area-under-the-curve picture a p-value is actually reading off, before it gets attached to a specific test statistic.' },
     ],
   },
 
@@ -20228,6 +21705,8 @@ const GUIDES = [
       { id: 'appraisal-frequentist-bayesian', why: 'Covers the Bayesian adaptive-design alternative to the alpha-spending approach described here for repeated interim looks.' },
       { id: 'appraisal-subgroup-interaction', why: 'Applies the same multiplicity problem specifically to subgroup analyses, with the ISIS-2 astrological-sign example.' },
       { id: 'holm-sidak-test', why: 'Computes the step-down Holm-Šídák correction described here directly.' },
+      { id: 'appraisal-post-hoc', why: 'Distinguishes the corrected, expected use of "post hoc" (pairwise comparisons) from the uncorrected, after-the-fact kind this multiplicity problem applies to.' },
+      { id: 'reading-normal-distribution', why: 'Shows one-tailed vs. two-tailed alpha shaded directly on the curve — why the two need different critical values for the same α.' },
     ],
   },
 
@@ -20254,11 +21733,17 @@ const GUIDES = [
         heading: 'What actually matters when reading one',
         html: `<p>The width of the interval (its precision, driven mostly by sample size) and what values fall inside it &mdash; especially near the boundary closest to "no effect." A confidence interval that barely excludes zero is far less reassuring than one comfortably clear of it, even though both would technically be called "statistically significant."</p>`,
       },
+      {
+        heading: 'The CI–p-value duality: two views of the same test',
+        html: `<p>A confidence interval and a p-value aren't two independent pieces of evidence confirming each other &mdash; a 95% CI is built by inverting the same hypothesis test that produces a p-value, so the two encode exactly the same information about statistical significance. Any hypothesized value that falls <em>outside</em> a 95% CI is a value the data are inconsistent with at the &alpha; = 0.05 level: a two-sided test of "is the true value actually this?" against that value would come back with p &lt; 0.05. That's why checking whether a 95% CI crosses the null value (0 for a difference, 1 for a ratio) and checking whether p &lt; 0.05 always agree &mdash; they're reading the same underlying test from two different angles, not two separate confirmations of it.</p><p>What the CI adds beyond a bare p-value is the entire range of values the data remain compatible with, not just whether the null was rejected. A p-value of 0.04 next to a CI that barely excludes the null looks very different from a p-value of 0.04 next to a CI that excludes it by a wide margin, even though both would be reported identically as "p &lt; 0.05" &mdash; the CI is what makes the difference between "just barely inconsistent with no effect" and "clearly inconsistent with anything close to no effect" visible.</p>`,
+      },
     ],
     related: [
       { id: 'single-sample-ci', why: 'Builds a confidence interval for a single sample mean.' },
       { id: 'confidence-interval-proportion', why: 'Same idea for a single sample proportion.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Uses interval width as the direct evidence that a striking effect size is still imprecisely estimated.' },
+      { id: 'appraisal-p-values', why: 'The p-value companion guide — see the CI-p-value duality section above for why the two are two views of the same test.' },
+      { id: 'reading-forest-plots', why: 'Shows the CI-p-value duality visually — a study or pooled diamond whose CI doesn\'t touch the null line is the rejection-region case described above.' },
     ],
   },
 
@@ -20424,7 +21909,7 @@ const GUIDES = [
       },
       {
         heading: 'What determines power',
-        html: `<p>Four things trade off against each other in any power calculation: the sample size, the size of the effect the study is trying to detect, the amount of variability in the outcome being measured, and the chosen alpha level. Holding everything else fixed, a study can increase its power by enrolling more patients, by only trying to detect a larger effect, by measuring a less variable (noisier) outcome, or by accepting a more lenient alpha threshold. In practice, sample size is usually the only one of these that a research team can directly control after the outcome and population are already decided.</p>`,
+        html: `<p>Four things trade off against each other in any power calculation: the sample size, the size of the effect the study is trying to detect, the amount of variability in the outcome being measured, and the chosen alpha level. Holding everything else fixed, a study can increase its power by enrolling more patients, by only trying to detect a larger effect, by measuring a less variable (noisier) outcome, or by accepting a more lenient alpha threshold. In practice, sample size is usually the only one of these that a research team can directly control after the outcome and population are already decided.</p><p>Mathematically, all four combine into a single quantity called the non-centrality parameter, which measures how far the true-effect distribution is shifted away from the null distribution &mdash; a bigger shift is easier to detect, which is why sample size and effect size increase power while variability decreases it. See the <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts</a> if you want that mechanism spelled out.</p>`,
       },
       {
         heading: 'Worked example',
@@ -20442,6 +21927,7 @@ const GUIDES = [
       { id: 'type1-type2-errors', why: 'Interactive explorer for the Type I/Type II error trade-off described in this guide.' },
       { id: 'power-vs-es-alpha', why: 'Shows how power shifts as effect size and alpha change, holding sample size fixed.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Places this "no significant difference isn\'t no difference" trap within a broader checklist of ways a result gets overinterpreted.' },
+      { id: 'reference-glossary-concepts', why: 'Defines the non-centrality parameter (NCP) that mathematically ties the four factors above together.' },
     ],
   },
 
@@ -20475,6 +21961,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'measures-of-association', why: 'The same RR/OR output that confounding and bias can distort if not accounted for.' },
+      { id: 'multiple-logistic-regression', why: "Statistically adjusts for measured confounders directly — computes the adjusted OR this guide's 'randomization vs. adjustment' distinction is built around." },
       { id: 'ipw-ate', why: 'Uses inverse probability weighting to adjust for measured confounders in an observational analysis.' },
       { id: 'assoc-pred-intervals', why: 'Prediction intervals for measures of association, useful when communicating uncertainty beyond a single confidence interval.' },
       { id: 'appraisal-ancova', why: "Applies the same 'don't adjust for a variable on the causal pathway' rule to choosing a covariate in a baseline-adjusted trial analysis." },
@@ -20612,6 +22099,65 @@ const GUIDES = [
       { id: 'ancova', why: 'Computes the two-group, one-covariate case described here, including the homogeneity-of-regression-slopes check.' },
       { id: 'unpaired-t-test', why: 'The unadjusted comparison ANCOVA improves on whenever baseline and outcome are correlated.' },
       { id: 'multiple-regression', why: 'The general-linear-model machinery ANCOVA extends to several covariates or more than two groups at once.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-homogeneity-sphericity',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Homogeneity of Variance and Sphericity: The Constant-Variance Assumptions Behind ANOVA-Family Tests',
+    blurb: 'Two precondition checks with unrelated-sounding names that are really the same question — does spread stay constant? — asked of two different data shapes: independent groups, and repeated measurements on the same subjects.',
+    dek: `Levene's Test and Mauchly's Test look like unconnected procedures, but both exist to answer a version of the same question before a t-test or ANOVA-family result can be trusted: is the data's spread constant across whatever is being compared? Homogeneity of variance asks that across independent groups; sphericity asks a related version of it across repeated conditions measured on the same subjects. Neither gets much explanation in a typical methods section, and both are commonly reported wrong or skipped outright.`,
+    sections: [
+      {
+        heading: 'The same underlying question, two data shapes',
+        html: `<p><strong>Homogeneity of variance</strong> asks whether two or more <em>independent</em> groups have equal variances &mdash; Var(Group 1) = Var(Group 2) = &hellip;. <strong>Sphericity</strong> asks a structurally different but related question about <em>repeated</em> measurements on the <em>same</em> subjects: whether the variance of the difference between every possible pair of conditions is equal &mdash; e.g., in a 3-condition design, Var(A&minus;B), Var(A&minus;C), and Var(B&minus;C) must all be roughly the same. Both are "does spread stay constant" questions; they just differ in what's being compared &mdash; separate groups side by side, versus the same subjects measured more than once.</p>`,
+      },
+      {
+        heading: 'The connective tissue: compound symmetry',
+        html: `<p><strong>Compound symmetry</strong> is the concept that ties the two together: it requires equal variances across the k repeated conditions themselves <em>and</em> equal covariances between every pair of them &mdash; literally homogeneity of variance, extended to a repeated-measures covariance matrix, plus one further condition on the covariances. Compound symmetry is <em>sufficient</em> for sphericity but not necessary for it; sphericity is the weaker property a Repeated Measures ANOVA's F-test actually depends on. With exactly two repeated conditions there's only one pair of scores to difference, so sphericity is automatically satisfied &mdash; this entire issue only arises once a design has three or more repeated measurements, the direct analog of needing three or more independent groups before homogeneity of variance becomes more than a two-group question.</p>`,
+      },
+      {
+        heading: 'Homogeneity of variance: what it requires and how it\'s checked',
+        html: `<p>The standard check is <a href="#levenes-test">Levene's Test</a>, in its Brown-Forsythe form: it transforms each observation to its absolute deviation from its own group's <em>median</em> (more robust to skewed data than deviation from the mean), then runs an ordinary 1-way ANOVA F-test on those transformed values &mdash; a large F means the groups' spreads, not their centers, differ. It's the precondition behind a standard pooled-variance t-test or 1-Way ANOVA, both of which assume every group shares one common variance when computing their pooled error term.</p>`,
+      },
+      {
+        heading: 'What a homogeneity-of-variance violation means for your test',
+        html: `<p>The two-group and 3+-group cases now get different advice. For exactly two groups, current guidance (e.g. Delacre, Lakens &amp; Leys, 2017) is to skip Levene's Test as a gate entirely and simply use <a href="#unpaired-t-test">Welch's t-test</a> by default &mdash; it performs about as well as a pooled-variance (Student's) t-test when variances are truly equal, and considerably better when they aren't, so there's little to gain from conditioning the choice on a preliminary test. For three or more groups, Levene's Test remains genuinely relevant: this app has no equally simple unequal-variance ("Welch's ANOVA") default implemented, so a significant Levene's result there is a real reason to consider the <a href="#kruskal-wallis">Kruskal-Wallis Test</a> instead of trusting a standard pooled-variance ANOVA.</p>`,
+      },
+      {
+        heading: "Sphericity: what it requires and how it's checked",
+        html: `<p><a href="#mauchlys-test">Mauchly's Test</a> is the standard formal check: it tests H&#8320;: sphericity holds, using a statistic (W) built from the covariance matrix of an orthonormal set of contrasts among the conditions, with a chi-square approximation to its null distribution. It has two well-documented weaknesses of its own &mdash; low power to detect real violations in small samples, and paradoxically high power to flag trivial, practically unimportant violations in large samples. A non-significant Mauchly's Test in a small trial is not a guarantee that sphericity truly holds, and a significant one in a very large study is not automatically fatal to the analysis; the size of the estimated departure (the epsilon below) matters as much as the p-value.</p>`,
+      },
+      {
+        heading: 'What a sphericity violation means for your test',
+        html: `<p>Unlike the two-group homogeneity case, there's no simple "just switch tests" default here &mdash; the standard fix instead shrinks a Repeated Measures ANOVA's degrees of freedom rather than discarding the test. A violation makes the RM ANOVA's F-test anti-conservative (its true Type I error rate runs higher than the nominal &alpha;, without the reported p-value itself signaling this), so both the numerator and denominator degrees of freedom get multiplied by a correction factor, epsilon (&epsilon;, bounded between 1/(k&minus;1) and 1), before recomputing the p-value against the corrected, generally non-integer, degrees of freedom &mdash; which is why a corrected result is reported as something like F(1.62, 8.11) rather than a pair of whole numbers. The <strong>Greenhouse-Geisser</strong> epsilon is the standard estimate but tends to over-correct when the true epsilon is close to 1; the <strong>Huynh-Feldt</strong> correction is a less conservative small-sample adjustment to it, often preferred once Greenhouse-Geisser's own epsilon is reasonably close to 1. A common rule of thumb (Girden, 1992): use Greenhouse-Geisser below about 0.75, Huynh-Feldt at or above it &mdash; a convention, not a rigid law. A multivariate (MANOVA) approach or a linear mixed-effects model with an unstructured covariance matrix avoid the assumption altogether, at some cost in power with small samples; if the outcome is also non-normal or ordinal, the <a href="#friedman-test">Friedman Test</a> sidesteps sphericity entirely rather than correcting the same parametric model for it.</p>`,
+      },
+      {
+        heading: 'Side by side',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th></th><th>Homogeneity of Variance</th><th>Sphericity</th></tr></thead><tbody>
+          <tr><td>Applies to</td><td>2+ independent groups</td><td>Same subjects across 3+ repeated conditions</td></tr>
+          <tr><td>Precondition for</td><td>Pooled-variance t-test / standard ANOVA</td><td>Repeated Measures ANOVA</td></tr>
+          <tr><td>Tested by</td><td>Levene's Test (Brown-Forsythe)</td><td>Mauchly's Test</td></tr>
+          <tr><td>H&#8320;</td><td>All group variances are equal</td><td>All pairwise condition-difference variances are equal</td></tr>
+          <tr><td>If violated</td><td>Two groups: use Welch's t-test by default, no pre-test needed. Three or more: consider Kruskal-Wallis instead.</td><td>Apply a Greenhouse-Geisser/Huynh-Feldt correction, switch to MANOVA/a mixed model, or use the Friedman Test if also non-normal.</td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>For a two-independent-group t-test, don't expect (or need) to see a homogeneity-of-variance test at all &mdash; a paper that simply reports Welch's t-test throughout is following current guidance, not skipping a step. For a 3+-group ANOVA or Repeated Measures ANOVA, check whether Levene's or Mauchly's Test is mentioned in the methods at all: its complete absence (rather than a reported non-significant result) is itself worth flagging, since the alternative is silently assuming constant variance by default rather than having checked it. If a Repeated Measures ANOVA instead reports "Greenhouse-Geisser corrected" or "Huynh-Feldt corrected" degrees of freedom &mdash; typically visible as non-integer values in the F-statistic &mdash; that's confirmation the correction was actually applied, not merely considered.</p>`,
+      },
+    ],
+    related: [
+      { id: 'levenes-test', why: "Tests homogeneity of variance directly — the Brown-Forsythe check described here." },
+      { id: 'mauchlys-test', why: "Computes Mauchly's W, its chi-square approximation, and the Greenhouse-Geisser epsilon described here." },
+      { id: 'unpaired-t-test', why: "Welch's t-test — the recommended two-group default regardless of Levene's Test result." },
+      { id: 'anova-1way', why: 'The 3+ independent-group test homogeneity of variance is a precondition for.' },
+      { id: 'repeated-measures-anova', why: 'The 3+ repeated-condition test sphericity is a precondition for.' },
+      { id: 'kruskal-wallis', why: 'Non-parametric alternative when homogeneity of variance fails across 3+ independent groups.' },
+      { id: 'friedman-test', why: 'Non-parametric repeated-measures alternative that sidesteps the sphericity assumption entirely.' },
+      { id: 'appraisal-crossover-trial', why: 'A common design where the same sphericity assumption applies across three or more treatment periods.' },
+      { id: 'data-paired-independent', why: 'Background on why repeated/paired measurements need their own test family in the first place.' },
     ],
   },
 
@@ -21014,6 +22560,7 @@ const GUIDES = [
       { id: 'measures-of-association', why: 'Produces the subgroup-level effect estimates and confidence intervals discussed in the worked example.' },
       { id: 'meta-analysis', why: 'Subgroup/heterogeneity testing in a pooled-effects context is the same underlying idea.' },
       { id: 'appraisal-sensitivity-vs-subgroup', why: "Draws the line between this and sensitivity analysis — a different robustness check that's commonly confused with this one." },
+      { id: 'appraisal-post-hoc', why: 'Places "post hoc subgroup" within the broader family of things "post hoc" can mean — some legitimate, some not.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Places this specific overinterpretation pattern within a broader checklist of ways a result gets overinterpreted.' },
     ],
   },
@@ -21061,6 +22608,7 @@ const GUIDES = [
       { id: 'reading-baujat-plots', why: 'The leave-one-out sensitivity check for a meta-analysis, and how to tell which studies are worth rerunning without.' },
       { id: 'appraisal-genetic-association-studies', why: 'MR-Egger and the weighted median estimator as sensitivity checks against horizontal pleiotropy in Mendelian Randomization.' },
       { id: 'appraisal-too-good-to-be-true', why: 'A broader checklist of ways a result gets overinterpreted, including two patterns — implausibly large early-trial effects and one-sided harms reporting — that neither this guide nor the subgroup guide covers.' },
+      { id: 'appraisal-post-hoc', why: '"Post hoc" is the other word that gets stretched to cover both a legitimate correction procedure and this exact after-the-fact subgroup problem.' },
     ],
   },
 
@@ -21103,6 +22651,55 @@ const GUIDES = [
       { id: 'appraisal-confidence-intervals', why: 'A wide confidence interval is the direct evidence that a striking effect size is still imprecisely estimated.' },
       { id: 'appraisal-regression-to-mean', why: 'A related but distinct pitfall — a real result inflated by chance rather than by a missing control group still needs replication before its magnitude can be trusted.' },
       { id: 'appraisal-appraising-rcts', why: 'Covers the trial-conduct side of this same problem — early stopping for benefit and incomplete harms reporting, as CONSORT and RoB 2 both check for.' },
+      { id: 'appraisal-post-hoc', why: 'The specific overinterpretation pattern of presenting a chance, after-the-fact finding as though it were planned — one of three unrelated things "post hoc" can mean.' },
+    ],
+  },
+
+  {
+    id: 'appraisal-post-hoc',
+    category: 'Common Statistical Pitfalls',
+    title: '"Post Hoc" Test, Power, or Analysis? Three Different Things Sharing One Name',
+    blurb: 'The same two Latin words describe a rigorous, built-in correction procedure, a circular power calculation, and the single biggest source of manufactured "significant" findings in the literature — a paper rarely says which one it means.',
+    dek: `"Post hoc" literally just means "after this": decided or run after seeing the data, rather than planned in advance (a priori). That shared meaning is the entire family resemblance. What varies enormously is whether the "after the fact" part is harmless, actively corrected for, or exactly the problem — and all three uses appear throughout this site's own calculators and guides under the identical two words.`,
+    sections: [
+      {
+        heading: 'Post-hoc comparisons: legitimate, because the method expects this',
+        html: `<p>After a significant omnibus <a href="#anova-1way">ANOVA</a> or <a href="#kruskal-wallis">Kruskal-Wallis test</a>, which specific pairs of groups actually differ is deliberately decided <em>after</em> seeing that overall result &mdash; that's the whole point of a post-hoc pairwise comparison procedure like <a href="#tukeys-hsd">Tukey's HSD</a>, the <a href="#holm-sidak-test">Holm-Šídák test</a>, or <a href="#dunns-test">Dunn's Test</a>. Because the method is built around the fact that you're going to go looking for interesting pairs only once you already know the overall test was significant, it corrects for exactly that: controlling the family-wise error rate across however many pairwise comparisons turn out to be "worth" testing. This is the one sense of "post hoc" that isn't a caveat &mdash; it's a properly specified, expected step, not a shortcut around one.</p>`,
+      },
+      {
+        heading: 'Post-hoc power: not wrong, just uninformative',
+        html: `<p><a href="#posthoc-power">Post-hoc (achieved, or retrospective) power</a> is calculated from a completed study's own observed effect size after the fact. The catch: it's a deterministic, one-to-one function of the study's own p-value, so it can't tell a reader anything the p-value hasn't already said. A low post-hoc power number attached to a non-significant result doesn't mean the true effect is "trending" toward significance, and a high one attached to a significant result doesn't add independent reassurance &mdash; it's simply restating the same finding on a different scale. A-priori power belongs at the planning stage, before data collection; once a study is finished, its achieved power is closer to decoration than to new evidence.</p>`,
+      },
+      {
+        heading: 'Post hoc analysis: the pitfall — deciding what to report after seeing the answer',
+        html: `<p>This is the broad, colloquial sense, and the one actually worth being skeptical of: any analytic decision &mdash; which subgroup to highlight, which outcome to call primary, which time point to report, where to draw a cutpoint on a continuous variable &mdash; made <em>after</em> looking at the data, then presented as though it answered a question posed in advance. Unlike post-hoc pairwise comparisons above, this kind usually isn't corrected for, and often isn't even disclosed as having been chosen after the fact. Psychologist Norbert Kerr gave this practice its own name in a widely cited 1998 paper &mdash; <strong>HARKing</strong> (Hypothesizing After the Results are Known): writing up a post hoc finding as though the hypothesis had been specified before any data were collected.</p>`,
+      },
+      {
+        heading: 'A concrete version: the "optimal" cutpoint',
+        html: `<p>A continuous biomarker gets dichotomized at whatever threshold happens to best separate "responders" from "non-responders" in this particular dataset, then reported as "patients above X mg/dL had a significantly better response" &mdash; with no mention that dozens of other thresholds were quietly tried first. Searching for the best-looking cutpoint after seeing the data inflates the false-positive rate the same way an unrestricted subgroup search does (see <a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests</a> for that specific case), and the "optimal" cutpoint chosen this way is very unlikely to reproduce in an independent sample.</p>`,
+      },
+      {
+        heading: 'Side by side',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Sense of "post hoc"</th><th>What's decided after the fact</th><th>Is it a problem?</th></tr></thead><tbody>
+          <tr><td>Post-hoc comparisons</td><td>Which pairs of groups to test, after a significant omnibus test</td><td>No — the correction (Tukey's HSD, Holm-Šídák, Dunn's) is built for exactly this</td></tr>
+          <tr><td>Post-hoc power</td><td>Achieved power, recomputed from the study's own observed effect</td><td>Not wrong, just uninformative — restates the p-value on a different scale</td></tr>
+          <tr><td>Post hoc analysis</td><td>Which hypothesis, subgroup, outcome, or cutpoint to report, after seeing the data</td><td>Yes, unless disclosed and treated as hypothesis-generating only</td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper says "post hoc," check which of the three it means before reacting to the phrase itself. Next to "Tukey," "Holm-Šídák," or "Dunn's": an expected, corrected step after a significant omnibus test, not a red flag. Next to "power": treat the number as decorative. Next to "analysis," "comparison," or "subgroup" with no named correction procedure attached: this is the one to be skeptical of. Check whether the paper itself calls the finding exploratory or hypothesis-generating &mdash; an honest one will &mdash; and treat any such result as a reason to test the idea in a new, independent study, not as confirmatory evidence on its own.</p>`,
+      },
+    ],
+    related: [
+      { id: 'tukeys-hsd', why: "The standard corrected post-hoc pairwise comparison procedure after a significant 1-Way ANOVA." },
+      { id: 'holm-sidak-test', why: 'A slightly more powerful alternative to Tukey\'s HSD for the same corrected post-hoc comparisons.' },
+      { id: 'dunns-test', why: 'The non-parametric counterpart, run after a significant Kruskal-Wallis test.' },
+      { id: 'posthoc-power', why: "Computes achieved power directly, so you can see for yourself that it's fixed once the p-value is fixed." },
+      { id: 'appraisal-subgroup-interaction', why: 'The full treatment of the post hoc subgroup-hunting pattern this guide touches on via the cutpoint example.' },
+      { id: 'appraisal-sensitivity-vs-subgroup', why: 'Draws a related but different line — between varying an analytic assumption and re-slicing the sample after the fact.' },
+      { id: 'appraisal-tails-and-multiplicity', why: 'The family-wise error rate mechanism behind why unrestrained after-the-fact comparisons manufacture false positives.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'Places this specific pattern within a broader checklist of ways a result gets overinterpreted.' },
     ],
   },
 
@@ -21132,6 +22729,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'measures-of-association', why: 'Produces the same odds ratio/relative risk output that sits at the center of this fallacy.' },
+      { id: 'multiple-logistic-regression', why: "Fits exactly the multivariable model this fallacy is about — computes every predictor's adjusted OR, with a built-in reminder that only the exposure of interest should be read that way." },
       { id: 'ipw-ate', why: 'A modeling approach built specifically around one exposure of interest — illustrating the same principle from a different angle.' },
     ],
   },
@@ -22043,7 +23641,7 @@ const GUIDES = [
       },
       {
         heading: 'Quick Index (A–Z)',
-        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-accuracy">Accuracy</a> &middot; <a href="#gloss-af-paf">AF / PAF</a> &middot; <a href="#gloss-agree-ii">AGREE II</a> &middot; <a href="#gloss-alpha">&alpha; (alpha)</a> &middot; <a href="#gloss-amstar-2">AMSTAR-2</a> &middot; <a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a> &middot; <a href="#gloss-ar">AR</a> &middot; <a href="#gloss-ard">ARD</a> &middot; <a href="#gloss-art-anova">ART ANOVA</a> &middot; <a href="#gloss-arr">ARR</a> &middot; <a href="#gloss-ate">ATE</a> &middot; <a href="#gloss-auc">AUC</a> &middot; <a href="#gloss-auprc">AUPRC / PR-AUC</a> &middot; <a href="#gloss-auroc">AUROC</a> &middot; <a href="#gloss-axis">AXIS</a> &middot; <a href="#gloss-beta">&beta; (beta)</a> &middot; <a href="#gloss-cdf">CDF</a> &middot; <a href="#gloss-ci">CI</a> &middot; <a href="#gloss-confusion-matrix">Confusion Matrix</a> &middot; <a href="#gloss-consort">CONSORT</a> &middot; <a href="#gloss-cri">CrI</a> &middot; <a href="#gloss-cv">CV</a> &middot; <a href="#gloss-d-g">d / g</a> &middot; <a href="#gloss-deff">DEFF</a> &middot; <a href="#gloss-df">df</a> &middot; <a href="#gloss-f1">F1 Score</a> &middot; <a href="#gloss-glm">GLM</a> &middot; <a href="#gloss-glmm">GLMM</a> &middot; <a href="#gloss-grade">GRADE</a> &middot; <a href="#gloss-h0-ha">H0 / Ha (H1)</a> &middot; <a href="#gloss-hksj">HKSJ</a> &middot; <a href="#gloss-hr">HR</a> &middot; <a href="#gloss-i2">I&sup2;</a> &middot; <a href="#gloss-icc">ICC</a> &middot; <a href="#gloss-ipw">IPW</a> &middot; <a href="#gloss-iqr">IQR</a> &middot; <a href="#gloss-itt-pp">ITT / PP</a> &middot; <a href="#gloss-jbi">JBI</a> &middot; <a href="#gloss-kappa">&kappa; (kappa)</a> &middot; <a href="#gloss-lr">LR+ / LR&minus;</a> &middot; <a href="#gloss-n-N">n / N</a> &middot; <a href="#gloss-nntb">NNTB</a> &middot; <a href="#gloss-nnth">NNTH</a> &middot; <a href="#gloss-nos">NOS</a> &middot; <a href="#gloss-or">OR</a> &middot; <a href="#gloss-p-hat">p (proportion)</a> &middot; <a href="#gloss-p-value">p (p-value)</a> &middot; <a href="#gloss-pi">PI</a> &middot; <a href="#gloss-ppv-npv">PPV / NPV</a> &middot; <a href="#gloss-precision">Precision</a> &middot; <a href="#gloss-prisma">PRISMA</a> &middot; <a href="#gloss-prisma-scr">PRISMA-ScR</a> &middot; <a href="#gloss-q">Q</a> &middot; <a href="#gloss-quadas-2">QUADAS-2</a> &middot; <a href="#gloss-quips">QUIPS</a> &middot; <a href="#gloss-r-rho">r / &rho;</a> &middot; <a href="#gloss-r-multcorr">R (mult. correlation)</a> &middot; <a href="#gloss-r2-corr">r&sup2; (single predictor)</a> &middot; <a href="#gloss-r2-model">R&sup2; (regression)</a> &middot; <a href="#gloss-rct">RCT</a> &middot; <a href="#gloss-recall">Recall</a> &middot; <a href="#gloss-rob-2">RoB 2</a> &middot; <a href="#gloss-robins-i">ROBINS-I</a> &middot; <a href="#gloss-robis">ROBIS</a> &middot; <a href="#gloss-roc">ROC</a> &middot; <a href="#gloss-rr">RR</a> &middot; <a href="#gloss-rrd">RRD</a> &middot; <a href="#gloss-rrr">RRR</a> &middot; <a href="#gloss-s-sigma">s / &sigma;</a> &middot; <a href="#gloss-sd">SD</a> &middot; <a href="#gloss-se-sem">SE / SEM</a> &middot; <a href="#gloss-sens-spec">Sens / Spec</a> &middot; <a href="#gloss-strobe">STROBE</a> &middot; <a href="#gloss-tau">&tau; (Kendall's tau)</a> &middot; <a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a> &middot; <a href="#gloss-tpr-fpr">TPR / FPR</a> &middot; <a href="#gloss-var">Var</a> &middot; <a href="#gloss-x-X">x / X</a> &middot; <a href="#gloss-x-bar">x&#772; (x-bar)</a></p>`,
+        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-accuracy">Accuracy</a> &middot; <a href="#gloss-af-paf">AF / PAF</a> &middot; <a href="#gloss-agree-ii">AGREE II</a> &middot; <a href="#gloss-alpha">&alpha; (alpha)</a> &middot; <a href="#gloss-amstar-2">AMSTAR-2</a> &middot; <a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a> &middot; <a href="#gloss-aor">aOR</a> &middot; <a href="#gloss-ar">AR</a> &middot; <a href="#gloss-ard">ARD</a> &middot; <a href="#gloss-art-anova">ART ANOVA</a> &middot; <a href="#gloss-arr">ARR</a> &middot; <a href="#gloss-ate">ATE</a> &middot; <a href="#gloss-auc">AUC</a> &middot; <a href="#gloss-auprc">AUPRC / PR-AUC</a> &middot; <a href="#gloss-auroc">AUROC</a> &middot; <a href="#gloss-axis">AXIS</a> &middot; <a href="#gloss-beta">&beta; (beta)</a> &middot; <a href="#gloss-cdf">CDF</a> &middot; <a href="#gloss-ci">CI</a> &middot; <a href="#gloss-confusion-matrix">Confusion Matrix</a> &middot; <a href="#gloss-consort">CONSORT</a> &middot; <a href="#gloss-cri">CrI</a> &middot; <a href="#gloss-cv">CV</a> &middot; <a href="#gloss-d-g">d / g</a> &middot; <a href="#gloss-deff">DEFF</a> &middot; <a href="#gloss-df">df</a> &middot; <a href="#gloss-f1">F1 Score</a> &middot; <a href="#gloss-glm">GLM</a> &middot; <a href="#gloss-glmm">GLMM</a> &middot; <a href="#gloss-grade">GRADE</a> &middot; <a href="#gloss-h0-ha">H0 / Ha (H1)</a> &middot; <a href="#gloss-hksj">HKSJ</a> &middot; <a href="#gloss-hr">HR</a> &middot; <a href="#gloss-i2">I&sup2;</a> &middot; <a href="#gloss-icc">ICC</a> &middot; <a href="#gloss-ipw">IPW</a> &middot; <a href="#gloss-iqr">IQR</a> &middot; <a href="#gloss-itt-pp">ITT / PP</a> &middot; <a href="#gloss-jbi">JBI</a> &middot; <a href="#gloss-kappa">&kappa; (kappa)</a> &middot; <a href="#gloss-lr">LR+ / LR&minus;</a> &middot; <a href="#gloss-n-N">n / N</a> &middot; <a href="#gloss-ncp">NCP (λ)</a> &middot; <a href="#gloss-nntb">NNTB</a> &middot; <a href="#gloss-nnth">NNTH</a> &middot; <a href="#gloss-nos">NOS</a> &middot; <a href="#gloss-or">OR</a> &middot; <a href="#gloss-p-hat">p (proportion)</a> &middot; <a href="#gloss-p-value">p (p-value)</a> &middot; <a href="#gloss-pi">PI</a> &middot; <a href="#gloss-ppv-npv">PPV / NPV</a> &middot; <a href="#gloss-precision">Precision</a> &middot; <a href="#gloss-prisma">PRISMA</a> &middot; <a href="#gloss-prisma-scr">PRISMA-ScR</a> &middot; <a href="#gloss-q">Q</a> &middot; <a href="#gloss-quadas-2">QUADAS-2</a> &middot; <a href="#gloss-quips">QUIPS</a> &middot; <a href="#gloss-r-rho">r / &rho;</a> &middot; <a href="#gloss-r-multcorr">R (mult. correlation)</a> &middot; <a href="#gloss-r2-corr">r&sup2; (single predictor)</a> &middot; <a href="#gloss-r2-model">R&sup2; (regression)</a> &middot; <a href="#gloss-rct">RCT</a> &middot; <a href="#gloss-recall">Recall</a> &middot; <a href="#gloss-rob-2">RoB 2</a> &middot; <a href="#gloss-robins-i">ROBINS-I</a> &middot; <a href="#gloss-robis">ROBIS</a> &middot; <a href="#gloss-roc">ROC</a> &middot; <a href="#gloss-rr">RR</a> &middot; <a href="#gloss-rrd">RRD</a> &middot; <a href="#gloss-rrr">RRR</a> &middot; <a href="#gloss-s-sigma">s / &sigma;</a> &middot; <a href="#gloss-sd">SD</a> &middot; <a href="#gloss-se-sem">SE / SEM</a> &middot; <a href="#gloss-sens-spec">Sens / Spec</a> &middot; <a href="#gloss-strobe">STROBE</a> &middot; <a href="#gloss-tau">&tau; (Kendall's tau)</a> &middot; <a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a> &middot; <a href="#gloss-tpr-fpr">TPR / FPR</a> &middot; <a href="#gloss-var">Var</a> &middot; <a href="#gloss-x-X">x / X</a> &middot; <a href="#gloss-x-bar">x&#772; (x-bar)</a></p>`,
       },
       {
         heading: 'Probability & Distributions',
@@ -22055,11 +23653,11 @@ const GUIDES = [
       },
       {
         heading: 'Hypothesis Testing & Inference',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-alpha"></span>α (alpha)</td><td>Significance level</td><td style="text-align:left;">The pre-specified threshold (conventionally 0.05) for the Type I error rate &mdash; the chance of rejecting a true null hypothesis.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr><tr><td><span id="gloss-beta"></span>β (beta)</td><td>Type II error rate</td><td style="text-align:left;">The chance of failing to reject a false null hypothesis. Power = 1 &minus; β.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a>, <a href="#power-calculations">Power Calculations</a></td></tr><tr><td><span id="gloss-ci"></span>CI</td><td>Confidence Interval</td><td style="text-align:left;">A range constructed so that, over many repeated studies, that construction method would capture the true value a stated percentage (e.g., 95%) of the time.</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a></td></tr><tr><td><span id="gloss-cri"></span>CrI</td><td>Credible Interval</td><td style="text-align:left;">The Bayesian counterpart to a CI. Unlike a CI, it does support a direct probability statement &mdash; but only relative to the prior used.</td><td style="text-align:left;"><a href="#bayesian-cri">Bayesian Credible Intervals</a>; <a href="#learn/appraisal-interval-types">Confidence Interval, Credible Interval, or Prediction Interval? (Learn guide)</a></td></tr><tr><td><span id="gloss-h0-ha"></span>H0 / Ha (H1)</td><td>Null / Alternative Hypothesis</td><td style="text-align:left;">H0 typically states "no effect" or "no difference"; Ha (or H1) states the effect the study is designed to detect.</td><td style="text-align:left;">&mdash;</td></tr><tr><td><span id="gloss-p-value"></span>p</td><td>p-value</td><td style="text-align:left;">The probability of seeing a result at least as extreme as the observed one, if the null hypothesis were true. Not the probability that the null hypothesis is true &mdash; and a different p from the sample proportion in the Descriptive Statistics table above.</td><td style="text-align:left;"><a href="#learn/appraisal-p-values">What a P-Value Actually Means (Learn guide)</a></td></tr><tr><td><span id="gloss-pi"></span>PI</td><td>Prediction Interval</td><td style="text-align:left;">Where one new study or one new individual observation would plausibly fall &mdash; always at least as wide as the corresponding CI.</td><td style="text-align:left;"><a href="#meta-analysis">Meta-Analysis (Q, τ², I², PI)</a>; <a href="#learn/appraisal-interval-types">interval-types Learn guide</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-alpha"></span>α (alpha)</td><td>Significance level</td><td style="text-align:left;">The pre-specified threshold (conventionally 0.05) for the Type I error rate &mdash; the chance of rejecting a true null hypothesis.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr><tr><td><span id="gloss-beta"></span>β (beta)</td><td>Type II error rate</td><td style="text-align:left;">The chance of failing to reject a false null hypothesis. Power = 1 &minus; β.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a>, <a href="#power-calculations">Power Calculations</a></td></tr><tr><td><span id="gloss-ci"></span>CI</td><td>Confidence Interval</td><td style="text-align:left;">A range constructed so that, over many repeated studies, that construction method would capture the true value a stated percentage (e.g., 95%) of the time. Because a CI is built by inverting the same hypothesis test that produces a p-value, whether it contains H0's null value is equivalent to that test's rejection-region check (see H0/Ha row below).</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a>; <a href="#gloss-h0-ha">H0/Ha</a></td></tr><tr><td><span id="gloss-cri"></span>CrI</td><td>Credible Interval</td><td style="text-align:left;">The Bayesian counterpart to a CI. Unlike a CI, it does support a direct probability statement &mdash; but only relative to the prior used.</td><td style="text-align:left;"><a href="#bayesian-cri">Bayesian Credible Intervals</a>; <a href="#learn/appraisal-interval-types">Confidence Interval, Credible Interval, or Prediction Interval? (Learn guide)</a></td></tr><tr><td><span id="gloss-h0-ha"></span>H0 / Ha (H1)</td><td>Null / Alternative Hypothesis</td><td style="text-align:left;">H0 typically states "no effect" or "no difference"; Ha (or H1) states the effect the study is designed to detect. A confidence interval doubles as a rejection-region check: any hypothesized value falling <em>outside</em> a 95% CI is exactly the set of values a two-sided test would reject at &alpha; = 0.05 &mdash; checking whether a CI contains the null value is the same test as checking whether p &lt; 0.05.</td><td style="text-align:left;"><a href="#gloss-ci">CI</a>; <a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a></td></tr><tr><td><span id="gloss-ncp"></span>NCP (λ)</td><td>Non-Centrality Parameter</td><td style="text-align:left;">Quantifies how far a true alternative effect shifts a test statistic's null (central) distribution into its "non-central" form — the basis for computing power under the non-central t, F, or &chi;&sup2; distributions. This app builds it explicitly for the noncentral-F ANOVA sample-size search (&lambda; = f&sup2;&middot;N); the other power calculators here use a simpler z-based shift instead, which doesn't need a distinct non-central distribution.</td><td style="text-align:left;"><a href="#sample-size-anova-f">Sample Size — ANOVA (Cohen's f)</a>; <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts (plain-English explanation)</a></td></tr><tr><td><span id="gloss-p-value"></span>p</td><td>p-value</td><td style="text-align:left;">The probability of seeing a result at least as extreme as the observed one, if the null hypothesis were true. Not the probability that the null hypothesis is true &mdash; and a different p from the sample proportion in the Descriptive Statistics table above.</td><td style="text-align:left;"><a href="#learn/appraisal-p-values">What a P-Value Actually Means (Learn guide)</a></td></tr><tr><td><span id="gloss-pi"></span>PI</td><td>Prediction Interval</td><td style="text-align:left;">Where one new study or one new individual observation would plausibly fall &mdash; always at least as wide as the corresponding CI.</td><td style="text-align:left;"><a href="#meta-analysis">Meta-Analysis (Q, τ², I², PI)</a>; <a href="#learn/appraisal-interval-types">interval-types Learn guide</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Effect Measures (Epidemiology & Clinical Research)',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-af-paf"></span>AF / PAF</td><td>Attributable Fraction / Population Attributable Fraction</td><td style="text-align:left;">The proportion of cases (among the exposed, or the whole population) that would not have occurred without the exposure.</td><td style="text-align:left;"><a href="#attributable-fraction">Attributable Fraction (AFe &amp; PAF)</a>; <a href="#par">Population Attributable Risk</a></td></tr><tr><td><span id="gloss-ar"></span>AR</td><td>Absolute Risk</td><td style="text-align:left;">The risk (proportion) of an outcome within a single group &mdash; e.g. AR&#8330; in the exposed/treated group, AR&#8331; in the unexposed/control group. Not itself a difference; see ARD directly below for that.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-ard"></span>ARD</td><td>Absolute Risk Difference</td><td style="text-align:left;">AR in one group minus AR in the other. The general, either-sign version of the same subtraction ARR below frames specifically as a treatment benefit.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-arr"></span>ARR</td><td>Absolute Risk Reduction</td><td style="text-align:left;">The plain difference between two absolute risks (control risk minus treated risk), in percentage points &mdash; the benefit-framed case of ARD above.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-hr"></span>HR</td><td>Hazard Ratio</td><td style="text-align:left;">The ratio of the instantaneous event rate (hazard) between two groups over time &mdash; the standard effect measure from Cox regression and survival analysis.</td><td style="text-align:left;"><a href="#cox-ph">Cox Proportional Hazards (Hazard Ratio)</a></td></tr><tr><td><span id="gloss-nntb"></span>NNTB</td><td>Number Needed to Treat for an Additional Beneficial Outcome</td><td style="text-align:left;">1 &divide; ARR (as a decimal). How many patients must be treated for one additional patient to benefit. Formerly NNT — still common in the literature and treated as a synonym here.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNTB &amp; NNTH</a></td></tr><tr><td><span id="gloss-nnth"></span>NNTH</td><td>Number Needed to Treat for an Additional Harmful Outcome</td><td style="text-align:left;">The same logic as NNTB, applied to an adverse effect instead of a benefit. Formerly NNH — still common in the literature and treated as a synonym here.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNTB &amp; NNTH</a></td></tr><tr><td><span id="gloss-or"></span>OR</td><td>Odds Ratio</td><td style="text-align:left;">Ratio of the odds of an outcome between two groups. The only measure estimable from a case-control study; approximates RR when the outcome is rare.</td><td style="text-align:left;"><a href="#or-to-rr">Odds Ratio to Risk Ratio</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rr"></span>RR</td><td>Relative Risk</td><td style="text-align:left;">Risk of an outcome in an exposed/treated group divided by risk in an unexposed/control group. Estimable directly in RCTs and cohort studies.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rrd"></span>RRD</td><td>Relative Risk Difference</td><td style="text-align:left;">|RR − 1| &mdash; the same computation as RRR below, reported as an unsigned magnitude for a general exposure rather than assuming the exposure is a risk-reducing treatment.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-rrr"></span>RRR</td><td>Relative Risk Reduction</td><td style="text-align:left;">(Control risk &minus; treated risk) &divide; control risk. Tends to look larger than ARR and is more often highlighted in abstracts.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-af-paf"></span>AF / PAF</td><td>Attributable Fraction / Population Attributable Fraction</td><td style="text-align:left;">The proportion of cases (among the exposed, or the whole population) that would not have occurred without the exposure.</td><td style="text-align:left;"><a href="#attributable-fraction">Attributable Fraction (AFe &amp; PAF)</a>; <a href="#par">Population Attributable Risk</a></td></tr><tr><td><span id="gloss-ar"></span>AR</td><td>Absolute Risk</td><td style="text-align:left;">The risk (proportion) of an outcome within a single group &mdash; e.g. AR&#8330; in the exposed/treated group, AR&#8331; in the unexposed/control group. Not itself a difference; see ARD directly below for that.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-ard"></span>ARD</td><td>Absolute Risk Difference</td><td style="text-align:left;">AR in one group minus AR in the other. The general, either-sign version of the same subtraction ARR below frames specifically as a treatment benefit.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-arr"></span>ARR</td><td>Absolute Risk Reduction</td><td style="text-align:left;">The plain difference between two absolute risks (control risk minus treated risk), in percentage points &mdash; the benefit-framed case of ARD above.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-hr"></span>HR</td><td>Hazard Ratio</td><td style="text-align:left;">The ratio of the instantaneous event rate (hazard) between two groups over time &mdash; the standard effect measure from Cox regression and survival analysis.</td><td style="text-align:left;"><a href="#cox-ph">Cox Proportional Hazards (Hazard Ratio)</a></td></tr><tr><td><span id="gloss-nntb"></span>NNTB</td><td>Number Needed to Treat for an Additional Beneficial Outcome</td><td style="text-align:left;">1 &divide; ARR (as a decimal). How many patients must be treated for one additional patient to benefit. Formerly NNT — still common in the literature and treated as a synonym here.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNTB &amp; NNTH</a></td></tr><tr><td><span id="gloss-nnth"></span>NNTH</td><td>Number Needed to Treat for an Additional Harmful Outcome</td><td style="text-align:left;">The same logic as NNTB, applied to an adverse effect instead of a benefit. Formerly NNH — still common in the literature and treated as a synonym here.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNTB &amp; NNTH</a></td></tr><tr><td><span id="gloss-or"></span>OR</td><td>Odds Ratio</td><td style="text-align:left;">Ratio of the odds of an outcome between two groups. The only measure estimable from a case-control study; approximates RR when the outcome is rare.</td><td style="text-align:left;"><a href="#or-to-rr">Odds Ratio to Risk Ratio</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-aor"></span>aOR</td><td>Adjusted Odds Ratio</td><td style="text-align:left;">An OR from a multivariable model — holding every other predictor in that model constant — as opposed to a CRUDE (unadjusted) OR from a single exposure alone. The two can differ substantially when the other predictors confound the exposure-outcome relationship; this app's "Logistic Regression (2×2)" computes only the crude version, since it takes a single 2×2 table.</td><td style="text-align:left;"><a href="#multiple-logistic-regression">Multiple Logistic Regression</a>; <a href="#learn/appraisal-table2-fallacy">The Table 2 Fallacy (Learn guide)</a></td></tr><tr><td><span id="gloss-rr"></span>RR</td><td>Relative Risk</td><td style="text-align:left;">Risk of an outcome in an exposed/treated group divided by risk in an unexposed/control group. Estimable directly in RCTs and cohort studies.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rrd"></span>RRD</td><td>Relative Risk Difference</td><td style="text-align:left;">|RR − 1| &mdash; the same computation as RRR below, reported as an unsigned magnitude for a general exposure rather than assuming the exposure is a risk-reducing treatment.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-rrr"></span>RRR</td><td>Relative Risk Reduction</td><td style="text-align:left;">(Control risk &minus; treated risk) &divide; control risk. Tends to look larger than ARR and is more often highlighted in abstracts.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Diagnostic Testing',
@@ -22079,7 +23677,7 @@ const GUIDES = [
       },
       {
         heading: 'Regression & Modeling',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-anova-family"></span>ANOVA / ANCOVA / MANOVA</td><td>Analysis of Variance / Covariance / Multiple outcomes</td><td style="text-align:left;">ANOVA compares means across 3+ groups; ANCOVA adds a continuous covariate; MANOVA extends the comparison to multiple outcome variables at once.</td><td style="text-align:left;"><a href="#anova-1way">1-Way ANOVA</a>; <a href="#anova-multifactor">Multi-Factor ANOVA</a>; <a href="#repeated-measures-anova">Repeated Measures ANOVA</a></td></tr><tr><td><span id="gloss-art-anova"></span>ART ANOVA</td><td>Aligned Rank Transform ANOVA</td><td style="text-align:left;">A non-parametric alternative to factorial ANOVA for data that doesn't meet normality assumptions.</td><td style="text-align:left;"><a href="#art-anova">Aligned Rank Transform (ART) ANOVA</a></td></tr><tr><td><span id="gloss-ate"></span>ATE</td><td>Average Treatment Effect</td><td style="text-align:left;">The average effect of a treatment across a population, often estimated from observational data using weighting methods to approximate randomization.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-glm"></span>GLM</td><td>Generalized Linear Model</td><td style="text-align:left;">A family of regression models (including logistic and Poisson regression) that extends linear regression to outcomes that aren't normally distributed.</td><td style="text-align:left;"><a href="#logistic-regression">Logistic Regression (2&times;2)</a>; <a href="#poisson-negbinom">Poisson &amp; Negative Binomial</a></td></tr><tr><td><span id="gloss-glmm"></span>GLMM</td><td>Generalized Linear Mixed Model</td><td style="text-align:left;">A GLM that additionally includes random effects &mdash; used here for meta-analysis models that account for both within- and between-study variation.</td><td style="text-align:left;">&mdash;</td></tr><tr><td><span id="gloss-ipw"></span>IPW</td><td>Inverse Probability Weighting</td><td style="text-align:left;">A method that reweights observational data by the inverse of each participant's estimated probability of receiving the treatment they actually received, to reduce confounding.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-r-multcorr"></span>R</td><td>Multiple Correlation Coefficient</td><td style="text-align:left;">The correlation between the observed Y values and the model's predicted Ŷ values in a regression with two or more predictors. Always 0 to 1 (never negative), unlike the plain r it generalizes.</td><td style="text-align:left;"><a href="#multiple-regression">Multiple Linear Regression</a></td></tr><tr><td><span id="gloss-r2-model"></span>R²</td><td>Coefficient of Determination</td><td style="text-align:left;">The proportion of variance in Y explained by all predictors together. In a single-predictor model it reduces exactly to r² above; adjusted R² (reported alongside it) additionally penalizes adding predictors that don't improve the fit.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a>; <a href="#multiple-regression">Multiple Linear Regression</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-anova-family"></span>ANOVA / ANCOVA / MANOVA</td><td>Analysis of Variance / Covariance / Multiple outcomes</td><td style="text-align:left;">ANOVA compares means across 3+ groups; ANCOVA adds a continuous covariate; MANOVA extends the comparison to multiple outcome variables at once.</td><td style="text-align:left;"><a href="#anova-1way">1-Way ANOVA</a>; <a href="#anova-multifactor">Multi-Factor ANOVA</a>; <a href="#repeated-measures-anova">Repeated Measures ANOVA</a>; <a href="#manova">MANOVA (2 Outcomes)</a></td></tr><tr><td><span id="gloss-art-anova"></span>ART ANOVA</td><td>Aligned Rank Transform ANOVA</td><td style="text-align:left;">A non-parametric alternative to factorial ANOVA for data that doesn't meet normality assumptions.</td><td style="text-align:left;"><a href="#art-anova">Aligned Rank Transform (ART) ANOVA</a></td></tr><tr><td><span id="gloss-ate"></span>ATE</td><td>Average Treatment Effect</td><td style="text-align:left;">The average effect of a treatment across a population, often estimated from observational data using weighting methods to approximate randomization.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-glm"></span>GLM</td><td>Generalized Linear Model</td><td style="text-align:left;">A family of regression models (including logistic and Poisson regression) that extends linear regression to outcomes that aren't normally distributed.</td><td style="text-align:left;"><a href="#logistic-regression">Logistic Regression (2&times;2)</a>; <a href="#poisson-negbinom">Poisson &amp; Negative Binomial</a></td></tr><tr><td><span id="gloss-glmm"></span>GLMM</td><td>Generalized Linear Mixed Model</td><td style="text-align:left;">A GLM that additionally includes random effects &mdash; used here for meta-analysis models that account for both within- and between-study variation.</td><td style="text-align:left;">&mdash;</td></tr><tr><td><span id="gloss-ipw"></span>IPW</td><td>Inverse Probability Weighting</td><td style="text-align:left;">A method that reweights observational data by the inverse of each participant's estimated probability of receiving the treatment they actually received, to reduce confounding.</td><td style="text-align:left;"><a href="#ipw-ate">IPW &amp; ATE</a></td></tr><tr><td><span id="gloss-r-multcorr"></span>R</td><td>Multiple Correlation Coefficient</td><td style="text-align:left;">The correlation between the observed Y values and the model's predicted Ŷ values in a regression with two or more predictors. Always 0 to 1 (never negative), unlike the plain r it generalizes.</td><td style="text-align:left;"><a href="#multiple-regression">Multiple Linear Regression</a></td></tr><tr><td><span id="gloss-r2-model"></span>R²</td><td>Coefficient of Determination</td><td style="text-align:left;">The proportion of variance in Y explained by all predictors together. In a single-predictor model it reduces exactly to r² above; adjusted R² (reported alongside it) additionally penalizes adding predictors that don't improve the fit.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a>; <a href="#multiple-regression">Multiple Linear Regression</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Study Design & Reporting Checklists',
@@ -22092,6 +23690,153 @@ const GUIDES = [
       { id: 'appraisal-sd-vs-se', why: 'Full explanation of the SD vs. SE distinction defined here.' },
       { id: 'standard-error', why: 'Computes SE directly, if you need the number rather than just the definition.' },
       { id: 'appraisal-appraising-ai-studies', why: 'Full explanation of why accuracy alone misleads under class imbalance — the reasoning behind the AI/ML terms defined here.' },
+    ],
+  },
+
+  {
+    id: 'reference-glossary-concepts',
+    category: 'Quick Reference',
+    title: 'Glossary of Statistical Concepts and Roles',
+    blurb: 'A quick lookup for the ordinary-sounding words statistics gives a specific technical meaning to — variable, covariate, concordant/discordant, and more — grouped by topic, with links to the fuller guide or calculator where one exists.',
+    dek: `This page is a companion to the Abbreviations and Symbols glossary above: that one decodes acronyms and mathematical notation, this one defines the plain-English vocabulary that shows up in a methods section without ever being explained, on the assumption that everyone already knows what it means.`,
+    sections: [
+      {
+        heading: 'How These Terms Cluster',
+        html: `<p>A few terms below are foundational vocabulary everything else builds on: population/sample, parameter/statistic, point estimate/interval estimate, crude/adjusted estimate, distribution/sampling distribution, and effect/effect size — pairs worth getting straight first, since several later rows (covariate, homoscedasticity, NCP) only make sense once "distribution" specifically means the sampling distribution of a statistic, not the raw data, and "effect size" specifically means a magnitude independent of sample size, not just "there was an effect." Past that, most remaining terms fall into one of four families. <strong>Role words</strong> describe the job a variable is playing in a specific analysis (independent variable, covariate, confounder) — the same variable can even change role between studies. <strong>Relationship words</strong> describe how two variables, or two samples, relate to each other (related vs. independent samples, concordant vs. discordant). <strong>Assumption words</strong> describe a condition a parametric method depends on (normality, linearity, homoscedastic vs. heteroscedastic). <strong>Design/shape words</strong> describe the structure of a study or the shape of a distribution (factor, level, skewness, bimodal). Knowing which bucket a word falls into is usually enough to guess roughly what it means before even reading the definition. A final trio — Cauchy, Mahalanobis, and the non-centrality parameter — don't fit any of those buckets either; they're specifically-named concepts (a distribution, a distance measure, a power calculation's engine) worth knowing on their own rather than as an example of a broader family.</p>`,
+      },
+      {
+        heading: 'Quick Index (A–Z)',
+        html: `<p>Every term on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-adjusted-estimate">Adjusted Estimate</a> &middot; <a href="#gloss-bimodal">Bimodal / Unimodal</a> &middot; <a href="#gloss-bivariate">Bivariate</a> &middot; <a href="#gloss-cauchy">Cauchy Distribution</a> &middot; <a href="#gloss-concordant">Concordant Pair</a> &middot; <a href="#gloss-confounder">Confounder</a> &middot; <a href="#gloss-covariate">Covariate</a> &middot; <a href="#gloss-crude-estimate">Crude (Unadjusted) Estimate</a> &middot; <a href="#gloss-dependent-var">Dependent Variable / Outcome / Response</a> &middot; <a href="#gloss-discordant">Discordant Pair</a> &middot; <a href="#gloss-distribution">Distribution</a> &middot; <a href="#gloss-effect">Effect</a> &middot; <a href="#gloss-effect-size">Effect Size</a> &middot; <a href="#gloss-factor">Factor</a> &middot; <a href="#gloss-heteroscedasticity">Heteroscedasticity</a> &middot; <a href="#gloss-homoscedasticity">Homoscedasticity</a> &middot; <a href="#gloss-independent-samples">Independent Samples</a> &middot; <a href="#gloss-independent-var">Independent Variable / Predictor / Exposure</a> &middot; <a href="#gloss-interaction-effect">Interaction Effect</a> &middot; <a href="#gloss-interval-estimate">Interval Estimate</a> &middot; <a href="#gloss-kurtosis">Kurtosis</a> &middot; <a href="#gloss-level">Level</a> &middot; <a href="#gloss-linearity">Linearity</a> &middot; <a href="#gloss-mahalanobis">Mahalanobis Distance</a> &middot; <a href="#gloss-main-effect">Main Effect</a> &middot; <a href="#gloss-mediator">Mediator</a> &middot; <a href="#gloss-moderator">Moderator / Effect Modifier</a> &middot; <a href="#gloss-multivariate">Multivariate / Multivariable</a> &middot; <a href="#gloss-ncp">Non-Centrality Parameter (NCP)</a> &middot; <a href="#gloss-normality">Normality</a> &middot; <a href="#gloss-outlier">Outlier</a> &middot; <a href="#gloss-parameter">Parameter</a> &middot; <a href="#gloss-point-estimate">Point Estimate</a> &middot; <a href="#gloss-population">Population</a> &middot; <a href="#gloss-related-samples">Related / Paired / Matched Samples</a> &middot; <a href="#gloss-sample">Sample</a> &middot; <a href="#gloss-sampling-distribution">Sampling Distribution</a> &middot; <a href="#gloss-skewness">Skewness</a> &middot; <a href="#gloss-statistic">Statistic</a> &middot; <a href="#gloss-univariate">Univariate</a> &middot; <a href="#gloss-variable">Variable</a> &middot; <a href="#gloss-variate">Variate</a></p>`,
+      },
+      {
+        heading: 'Variable Roles: What Job Is a Variable Playing?',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-variable"></span>Variable</td><td style="text-align:left;">A quantity that can take different values across the subjects or observations in a study — the raw material every role below is a specific job for.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-independent-var"></span>Independent Variable / Predictor / Exposure</td><td style="text-align:left;">The variable presumed to influence or explain another. "Predictor" is the regression-modeling name for this role; "exposure" is the epidemiological name — three labels for the identical role, chosen by which field is doing the naming.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a>; <a href="#measures-of-association">Measures of Association</a></td></tr>
+          <tr><td><span id="gloss-dependent-var"></span>Dependent Variable / Outcome / Response</td><td style="text-align:left;">The variable being explained or predicted — what changes (or doesn't) because of the independent variable. Also called the response variable in a regression context.</td><td style="text-align:left;"><a href="#simple-regression">Simple Linear Regression</a></td></tr>
+          <tr><td><span id="gloss-covariate"></span>Covariate</td><td style="text-align:left;">A variable included in an analysis primarily to adjust for its effect on the outcome, rather than as the main variable of interest — e.g., adjusting for baseline severity while the real question is about treatment.</td><td style="text-align:left;"><a href="#ancova">ANCOVA (2-Group, One Covariate)</a>; <a href="#learn/appraisal-ancova">How to Interpret an ANCOVA-Adjusted Result (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-confounder"></span>Confounder</td><td style="text-align:left;">A variable associated with both the exposure and the outcome that distorts the apparent relationship between them if not accounted for — the central concern behind randomization and statistical adjustment.</td><td style="text-align:left;"><a href="#learn/appraisal-confounding-bias">Confounding, Bias, and Why Randomization Matters (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-mediator"></span>Mediator</td><td style="text-align:left;">A variable sitting on the causal pathway between exposure and outcome, explaining part or all of how the exposure produces its effect. Adjusting for a mediator — rather than a confounder — can hide the very effect a study is trying to measure.</td><td style="text-align:left;"><a href="#learn/appraisal-ancova">How to Interpret an ANCOVA-Adjusted Result (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-moderator"></span>Moderator / Effect Modifier</td><td style="text-align:left;">A variable that changes the size or direction of the exposure-outcome relationship, rather than being a source of bias — the subject of a subgroup analysis and its interaction test.</td><td style="text-align:left;"><a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: '"-Variate" Family: Univariate, Bivariate, Multivariate',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-variate"></span>Variate</td><td style="text-align:left;">A single random variable or measured quantity — an older, more technical synonym for "variable" that mostly survives today inside the univariate/bivariate/multivariate family below, rather than as a standalone word.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-univariate"></span>Univariate</td><td style="text-align:left;">Involving, describing, or analyzing exactly one variable at a time — e.g., a univariate summary: the mean and SD of a single measurement.</td><td style="text-align:left;"><a href="#variance-sd">Variance &amp; Standard Deviation</a></td></tr>
+          <tr><td><span id="gloss-bivariate"></span>Bivariate</td><td style="text-align:left;">Involving exactly two variables at once, typically to describe their relationship — a bivariate scatterplot, a bivariate correlation.</td><td style="text-align:left;"><a href="#pearson-r">Pearson's Correlation</a></td></tr>
+          <tr><td><span id="gloss-multivariate"></span>Multivariate / Multivariable</td><td style="text-align:left;">Involving three or more variables analyzed jointly. Often used loosely for "more than one predictor," though careful usage reserves <strong>multivariate</strong> for multiple <em>outcome</em> variables analyzed together (as in MANOVA) and <strong>multivariable</strong> for multiple predictors with a single outcome (as in multiple regression) — a distinction worth knowing even though most papers don't observe it.</td><td style="text-align:left;"><a href="#multiple-regression">Multiple Linear Regression</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Population vs. Sample; Parameter vs. Statistic',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-population"></span>Population</td><td style="text-align:left;">The complete set of individuals or units a study wants to draw conclusions about — rarely measured in its entirety.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-sample"></span>Sample</td><td style="text-align:left;">The subset of the population actually observed or measured — what a study's data come from.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-parameter"></span>Parameter</td><td style="text-align:left;">A numerical characteristic of the population (the true mean &mu;, the true proportion &pi;) — almost always unknown, and the actual target of estimation.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (Latin vs. Greek notation)</td></tr>
+          <tr><td><span id="gloss-statistic"></span>Statistic</td><td style="text-align:left;">A numerical characteristic computed from a sample (the sample mean <span class="over-bar">x</span>) — used to estimate the corresponding, unobserved population parameter.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (Latin vs. Greek notation)</td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Point Estimate vs. Interval Estimate',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-point-estimate"></span>Point Estimate</td><td style="text-align:left;">A single value calculated from sample data that serves as the best available guess for an unknown population parameter — a sample mean, a risk ratio, a regression coefficient. Nearly every "value" this site's calculators report is a point estimate.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-interval-estimate"></span>Interval Estimate</td><td style="text-align:left;">A range of plausible values built around a point estimate, rather than a single number — a confidence interval is the standard example. A point estimate alone throws away exactly the information needed to judge how precisely it was measured, which is why this site pairs one with a CI wherever one is computable, and why a forest plot draws each study as a square (the point estimate) sitting inside a line (its interval estimate) rather than the square alone.</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a>; <a href="#learn/reading-forest-plots">How to Read a Forest Plot (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Crude vs. Adjusted Estimate',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-crude-estimate"></span>Crude (Unadjusted) Estimate</td><td style="text-align:left;">A point estimate — an odds ratio, risk ratio, or mean difference — computed from the exposure and outcome alone, ignoring every other variable. A plain 2&times;2 table gives a crude OR or RR; a two-group t-test gives a crude mean difference.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#logistic-regression">Logistic Regression (2×2)</a></td></tr>
+          <tr><td><span id="gloss-adjusted-estimate"></span>Adjusted Estimate</td><td style="text-align:left;">The same kind of point estimate, but from a model that holds one or more other variables (age, sex, comorbidity, baseline severity) constant — an adjusted odds ratio (aOR), adjusted hazard ratio (aHR), or ANCOVA's adjusted mean difference. Crude and adjusted estimates can differ substantially when those other variables confound the exposure-outcome relationship; a large gap between the two is itself evidence of confounding, not a sign one of the two numbers is simply wrong.</td><td style="text-align:left;"><a href="#multiple-logistic-regression">Multiple Logistic Regression</a>; <a href="#ancova">ANCOVA (2-Group, One Covariate)</a>; <a href="#learn/appraisal-table2-fallacy">The Table 2 Fallacy (Learn guide)</a>; <a href="#learn/appraisal-confounding-bias">Confounding, Bias, and Why Randomization Matters (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Distribution vs. Sampling Distribution',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-distribution"></span>Distribution</td><td style="text-align:left;">A description of all the values a variable can take and how often (or how likely) each one occurs — the shape, spread, and center of a dataset or a random variable, all at once. "Normal distribution," the Cauchy row below, and the skewness/kurtosis/bimodal rows above are all describing properties of a distribution.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-sampling-distribution"></span>Sampling Distribution</td><td style="text-align:left;">The distribution of a <em>statistic</em> — not the raw data — across many repeated samples of the same size. The sampling distribution of the mean is what standard error describes, and what the Central Limit Theorem is actually a statement about; it's a genuinely different object from the distribution of the underlying data itself, even though both get called "the distribution" interchangeably.</td><td style="text-align:left;"><a href="#learn/appraisal-sd-vs-se">Standard Deviation vs. Standard Error (Learn guide)</a>; <a href="#clt-simulator">Central Limit Theorem Simulator</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Related vs. Independent Samples; Concordant vs. Discordant Pairs',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-related-samples"></span>Related / Paired / Matched Samples</td><td style="text-align:left;">Two sets of measurements linked observation-by-observation to the same underlying unit — the same patient before and after, or two subjects deliberately matched on age, sex, or severity.</td><td style="text-align:left;"><a href="#learn/data-paired-independent">Paired/Matched vs. Independent Samples (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-independent-samples"></span>Independent Samples</td><td style="text-align:left;">Two sets of measurements with no such link — separate, unrelated subjects contributing to each group.</td><td style="text-align:left;"><a href="#unpaired-t-test">Unpaired t-Test (Welch's)</a></td></tr>
+          <tr><td><span id="gloss-concordant"></span>Concordant Pair</td><td style="text-align:left;">A matched pair, or a pair of paired binary measurements, where both members share the same outcome or classification — e.g., both the before and after measurement agree. Note: "concordant" has a different meaning in rank-correlation contexts (Kendall's tau), where it describes whether two ranked observations move in the same or opposite direction rather than whether a matched pair agrees — see the <a href="#learn/reference-glossary-abbreviations">Kendall's tau glossary entry</a> for that usage.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a>; <a href="#cohens-kappa">Cohen's Kappa</a>; <a href="#kendalls-tau">Kendall's τ</a></td></tr>
+          <tr><td><span id="gloss-discordant"></span>Discordant Pair</td><td style="text-align:left;">A matched pair where the two members disagree — the only pairs that carry any information in a McNemar's test, since concordant pairs cancel out of the comparison entirely. Note: "discordant" carries the same alternate, rank-correlation meaning described in the Concordant Pair row above.</td><td style="text-align:left;"><a href="#mcnemars-test">McNemar's Test</a>; <a href="#kendalls-tau">Kendall's τ</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Core Model Assumptions: Normality, Linearity, Homoscedasticity',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-normality"></span>Normality</td><td style="text-align:left;">The assumption that a variable — or, in regression, a model's residuals — follows a normal (Gaussian) distribution. The condition behind t-tests, ANOVA, and Pearson correlation, checked directly with the Shapiro-Wilk Test.</td><td style="text-align:left;"><a href="#shapiro-wilk-test">Shapiro-Wilk Test</a></td></tr>
+          <tr><td><span id="gloss-linearity"></span>Linearity</td><td style="text-align:left;">The assumption that the relationship between two variables is adequately described by a straight line, rather than a curve. The condition behind Pearson correlation and linear regression, usually checked visually with a scatterplot or a residual plot showing no curved pattern left over.</td><td style="text-align:left;"><a href="#pearson-r">Pearson's Correlation</a>; <a href="#simple-regression">Simple Linear Regression</a></td></tr>
+          <tr><td><span id="gloss-homoscedasticity"></span>Homoscedasticity</td><td style="text-align:left;">Constant variance (spread) across the range of another variable — e.g., a regression's residuals scattering evenly across every predicted value. Literally "same scatter," and the same underlying idea as homogeneity of variance, just the term more often reached for in a regression/residuals context.</td><td style="text-align:left;"><a href="#learn/appraisal-homogeneity-sphericity">Homogeneity of Variance and Sphericity (Learn guide)</a>; <a href="#levenes-test">Levene's Test</a></td></tr>
+          <tr><td><span id="gloss-heteroscedasticity"></span>Heteroscedasticity</td><td style="text-align:left;">The opposite: variance that changes systematically across the range of another variable — e.g., a regression residual funnel that widens as predicted values increase. A violation of the constant-variance assumption behind ordinary linear regression's standard errors.</td><td style="text-align:left;"><a href="#learn/appraisal-homogeneity-sphericity">Homogeneity of Variance and Sphericity (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Factor, Level, Main Effect, Interaction',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-factor"></span>Factor</td><td style="text-align:left;">A categorical independent variable in an ANOVA-family design — e.g., "Treatment" or "Sex" as a factor, as distinct from a continuous covariate.</td><td style="text-align:left;"><a href="#anova-2way">2-Way ANOVA with Replication</a></td></tr>
+          <tr><td><span id="gloss-level"></span>Level</td><td style="text-align:left;">One specific category within a factor — "Drug A," "Drug B," and "Placebo" are three levels of a "Treatment" factor.</td><td style="text-align:left;"><a href="#anova-1way">1-Way ANOVA</a></td></tr>
+          <tr><td><span id="gloss-main-effect"></span>Main Effect</td><td style="text-align:left;">The effect of one factor on the outcome, averaged across every level of every other factor in the model — what a factor does on its own.</td><td style="text-align:left;"><a href="#anova-2way">2-Way ANOVA with Replication</a></td></tr>
+          <tr><td><span id="gloss-interaction-effect"></span>Interaction Effect</td><td style="text-align:left;">When one factor's effect on the outcome depends on the level of another factor, so the two don't simply add together independently.</td><td style="text-align:left;"><a href="#anova-2way">2-Way ANOVA with Replication</a>; <a href="#learn/appraisal-subgroup-interaction">Subgroup Analyses and Interaction Tests (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Shape of a Distribution: Skewness, Kurtosis, Outlier, Bimodal',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-skewness"></span>Skewness</td><td style="text-align:left;">A measure of asymmetry in a distribution's shape. Positive (right) skew has a longer tail toward high values; negative (left) skew a longer tail toward low values — a common reason to prefer the median over the mean, and a non-parametric test over a parametric one.</td><td style="text-align:left;"><a href="#interquartile-range">Interquartile Range (IQR)</a>; <a href="#shapiro-wilk-test">Shapiro-Wilk Test</a></td></tr>
+          <tr><td><span id="gloss-kurtosis"></span>Kurtosis</td><td style="text-align:left;">A measure of how heavy a distribution's tails are relative to a normal distribution — high kurtosis means more extreme values than a normal curve would predict.</td><td style="text-align:left;"><a href="#shapiro-wilk-test">Shapiro-Wilk Test</a></td></tr>
+          <tr><td><span id="gloss-outlier"></span>Outlier</td><td style="text-align:left;">An observation notably distant from the rest of the data — not automatically an error, and not automatically safe to remove; a genuine extreme biological value and a data-entry mistake can look identical without further investigation.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-bimodal"></span>Bimodal / Unimodal</td><td style="text-align:left;">A distribution with two distinct peaks (bimodal) rather than one (unimodal) — often a sign the sample actually mixes two different underlying subgroups, which a single mean and SD would misrepresent.</td><td style="text-align:left;">&mdash;</td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Named Distributions & Distances: Cauchy, Mahalanobis',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-cauchy"></span>Cauchy Distribution</td><td style="text-align:left;">A symmetric, bell-shaped-looking probability distribution whose mean and variance are both mathematically undefined — its tails are so heavy that averaging more observations doesn't narrow the estimate at all; the average of n Cauchy-distributed values has the exact same spread as a single value, no matter how large n gets. The standard textbook counterexample to "the Central Limit Theorem always applies" and to "more data always helps."</td><td style="text-align:left;"><a href="#clt-simulator">Central Limit Theorem Simulator</a></td></tr>
+          <tr><td><span id="gloss-mahalanobis"></span>Mahalanobis Distance</td><td style="text-align:left;">A distance measure between a point and a distribution's center (or between two groups' centroids) that accounts for the variables' own variances and correlations, unlike ordinary (Euclidean) distance, which treats every direction as equally spread out. The basis of Hotelling's T&sup2; and MANOVA's group-separation tests, and the standard tool for flagging multivariate outliers — a point unremarkable on each variable alone can still be a clear outlier once their correlation is accounted for.</td><td style="text-align:left;"><a href="#manova">MANOVA (2 Outcomes)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Effect vs. Effect Size',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-effect"></span>Effect</td><td style="text-align:left;">The change, difference, or association a study is trying to detect or estimate — a difference in means, a risk ratio, a correlation. What a hypothesis test is actually built to find, as distinct from whether that test happens to reach statistical significance in any one particular study.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-effect-size"></span>Effect Size</td><td style="text-align:left;">A standardized or directly interpretable measure of how <em>big</em> an effect is, independent of sample size — Cohen's d, Cohen's f, a correlation r, a risk ratio. Unlike a p-value, effect size doesn't shrink automatically as a study gets larger, which is exactly why a huge trial can find a "significant" but clinically trivial effect, and a small trial can miss a genuinely large one. Effect size is also the direct input to every power and sample-size calculation on this site — it's the quantity that determines the non-centrality parameter below.</td><td style="text-align:left;"><a href="#cohens-d">Cohen's d</a>; <a href="#sample-size-anova-f">Sample Size — ANOVA (Cohen's f)</a>; <a href="#learn/appraisal-clinical-significance">Statistical Significance vs. Clinical Significance (Learn guide)</a></td></tr>
+        </tbody></table></div>`,
+      },
+      {
+        heading: 'Non-Centrality Parameter (NCP): Why Effect Size and Sample Size Drive Power',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
+          <tr><td><span id="gloss-ncp"></span>Non-Centrality Parameter (NCP)</td><td style="text-align:left;">Effect size and sample size don't affect statistical power directly — they work by shifting the alternative (true-effect) distribution away from the null distribution. The non-centrality parameter is the number that quantifies that shift: a bigger NCP means more separation between the null and alternative distributions, and higher power to detect the difference. It's the parameter that turns an ordinary ("central") t, F, or chi-square distribution into its "non-central" version once a real effect is assumed true — every power or sample-size calculation on this site is, underneath, a question about how big this shift is.</td><td style="text-align:left;"><a href="#sample-size-anova-f">Sample Size — ANOVA (Cohen's f)</a>; <a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr>
+        </tbody></table></div>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-confounding-bias', why: 'Full explanation of confounding and why randomization controls for it — the concept behind the confounder row above.' },
+      { id: 'appraisal-ancova', why: 'Full explanation of covariates and mediators in the context of adjusting a trial for a baseline measurement.' },
+      { id: 'appraisal-subgroup-interaction', why: 'Full explanation of effect modification and the interaction test — the concept behind the moderator and interaction-effect rows above.' },
+      { id: 'appraisal-homogeneity-sphericity', why: 'Full explanation of homoscedasticity under its other common name, homogeneity of variance.' },
+      { id: 'data-paired-independent', why: 'Full explanation of related vs. independent samples, with worked examples of each.' },
+      { id: 'mcnemars-test', why: 'Computes a result directly from concordant/discordant pair counts, the terms defined above.' },
+      { id: 'kendalls-tau', why: "Uses concordant/discordant pairs in their other sense — direction of pairwise rank movement, not matched-pair agreement — noted in the row above." },
+      { id: 'shapiro-wilk-test', why: 'Tests the normality assumption defined above directly, on your own data.' },
+      { id: 'appraisal-confidence-intervals', why: 'Full explanation of the interval estimate defined above, and what "95% confidence" actually covers.' },
+      { id: 'reading-forest-plots', why: 'Reads the point-estimate-square-inside-interval-estimate-line convention defined above directly off a real chart.' },
+      { id: 'multiple-logistic-regression', why: 'Computes the adjusted OR defined above directly, and shows how it can differ from the crude OR once a confounder is held constant.' },
+      { id: 'appraisal-table2-fallacy', why: "Full explanation of why only one exposure's adjusted estimate in a multivariable table is actually a clean, confounding-free number." },
+      { id: 'clt-simulator', why: 'Watch the Central Limit Theorem hold for ordinary skewed/bimodal populations — the Cauchy row above is the classic counterexample where it fails.' },
+      { id: 'appraisal-sd-vs-se', why: 'Full explanation of the distribution-vs-sampling-distribution distinction defined above — why SD and SE describe two different distributions entirely.' },
+      { id: 'manova', why: 'Computes Mahalanobis-distance-based group separation directly, via Wilks\' Lambda and Pillai\'s Trace.' },
+      { id: 'cohens-d', why: 'Computes a standardized effect size directly, the quantity the effect-size row above defines.' },
+      { id: 'appraisal-clinical-significance', why: 'Full explanation of why a large effect size and a small p-value are not the same claim.' },
+      { id: 'appraisal-power-sample-size', why: 'Full explanation of power, Type II error, and why an underpowered "no difference" isn\'t the same as "no difference exists" — the concept the NCP row above quantifies numerically.' },
+      { id: 'sample-size-anova-f', why: 'The one calculator on this site that builds the non-centrality parameter explicitly, for the non-central F distribution.' },
+      { id: 'reference-glossary-abbreviations', why: 'The companion glossary for abbreviations and mathematical notation, rather than plain-English concept words — including the symbol-level NCP (λ) entry.' },
     ],
   },
 
