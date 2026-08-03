@@ -1273,7 +1273,10 @@ function renderCalculator(calc) {
       ${inputsHtml}
     </div>
 
-    <button class="calc-btn" id="calc-btn">Calculate</button>
+    <div class="calc-actions">
+      <button class="calc-btn" id="calc-btn">Calculate</button>
+      <button class="reset-btn" id="reset-btn" type="button">Reset</button>
+    </div>
     <div id="results-wrap"></div>
 
     <div class="formula-block">
@@ -1297,6 +1300,15 @@ function renderCalculator(calc) {
   }
 
   document.getElementById('calc-btn').addEventListener('click', run);
+
+  // Zeroes the inputs rather than restoring calc.inputs[]'s defaults —
+  // navigating to this calculator again (route() re-renders from
+  // scratch) is what brings the defaults back, not Reset.
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    zeroInputs(calc);
+    if (calc.inputLayout === '2x2') refreshTotals();
+    run();
+  });
 
   if (calc.inputLayout === '2x2') {
     attachTotalListeners();
@@ -1355,7 +1367,11 @@ function renderExplorerCalculator(calc) {
                min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">
         <div class="explorer-control-value" id="val-${inp.id}">${esc(display)}</div>
       </div>`;
-  }).join('');
+  }).join('') + `
+    <div class="explorer-control explorer-control-select">
+      <label class="explorer-control-label">&nbsp;</label>
+      <button type="button" class="reflip-btn" id="explorer-reset-btn">Reset</button>
+    </div>`;
 
   const notation = NOTATION[calc.id] || [];
   const notationHtml = notation.map(n => `
@@ -1467,6 +1483,14 @@ function renderExplorerCalculator(calc) {
       }
       run();
     });
+  });
+
+  // Zeroes the sliders rather than restoring calc.inputs[]'s defaults —
+  // navigating to this calculator again (route() re-renders from
+  // scratch) is what brings the defaults back, not Reset.
+  document.getElementById('explorer-reset-btn').addEventListener('click', () => {
+    zeroInputs(calc);
+    run();
   });
 
   run();
@@ -1702,6 +1726,29 @@ function refreshTotals() {
   set('tot-r1', a+b); set('tot-r2', c+d);
   set('tot-c1', a+c); set('tot-c2', b+d);
   set('tot-n',  a+b+c+d);
+}
+
+// Clears every input to its zero-equivalent value (0 for numbers/
+// sliders, '' for free text) rather than restoring calc.inputs[]'s
+// defaults — that's what the Reset button does; the defaults only
+// come back when the calculator is next visited fresh (route() always
+// re-renders from calc.inputs[].default, so no extra work is needed
+// there). A select has no natural "zero" and is left alone.
+function zeroInputs(calc) {
+  calc.inputs.forEach(inp => {
+    if (inp.type === 'button' || inp.type === 'select') return;
+    const el = document.getElementById('inp-' + inp.id);
+    if (!el) return;
+    if (inp.type === 'textarea' || inp.type === 'text') {
+      el.value = '';
+    } else if (inp.type === 'slider') {
+      el.value = (inp.min <= 0 && inp.max >= 0) ? 0 : inp.min;
+      const label = document.getElementById('val-' + inp.id);
+      if (label) label.textContent = inp.format ? inp.format(parseFloat(el.value)) : el.value;
+    } else {
+      el.value = 0;
+    }
+  });
 }
 
 /* ── READ INPUTS ────────────────────────────────────────── */

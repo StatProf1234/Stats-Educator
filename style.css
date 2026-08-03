@@ -2236,7 +2236,14 @@ body {
 
 /* ── CALCULATE BUTTON ──────────────────────────────── */
 
+.calc-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
 .calc-btn {
+  flex: 1;
   width: 100%;
   padding: 13px 24px;
   background: var(--accent);
@@ -2248,7 +2255,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   letter-spacing: .01em;
-  margin-bottom: 18px;
+  margin-bottom: 0;
   transition: background .15s, box-shadow .15s, transform .08s;
 }
 
@@ -2258,6 +2265,29 @@ body {
 }
 
 .calc-btn:active { transform: scale(.99); }
+
+/* Secondary action next to .calc-btn — outlined rather than solid-fill
+   so it doesn't compete with Calculate for visual weight; resets every
+   input back to calc.inputs[].default by simply re-rendering the whole
+   calculator (see the reset-btn listener in app.js). */
+.reset-btn {
+  padding: 13px 22px;
+  background: transparent;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  transition: background .15s, transform .08s;
+}
+
+.reset-btn:hover { background: rgba(78,110,219,.10); }
+.reset-btn:active { transform: scale(.99); }
+.reset-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ── RESULTS BLOCK ─────────────────────────────────── */
 
