@@ -68,9 +68,9 @@ const CALCULATORS = [
   {
     id:          'measures-of-association',
     name:        'Measures of Association',
-    hint:        'AR · RR · OR · ARD + 95% CIs',
+    hint:        'AR · RR · OR · ARD · NNTB/NNTH + 95% CIs',
     category:    'Epidemiology & Risk',
-    description: 'Computes absolute risk, relative risk, odds ratio, and risk difference — all with 95% confidence intervals — from a 2×2 table of exposure and outcome, plus a two-proportion z-test and chi-square test of significance for the risk difference.',
+    description: 'Computes absolute risk, relative risk, odds ratio, and risk difference — all with 95% confidence intervals — from a 2×2 table of exposure and outcome, plus the number needed to treat for an additional beneficial (NNTB) or harmful (NNTH) outcome, and a two-proportion z-test and chi-square test of significance for the risk difference.',
 
     formulas: [
       {
@@ -80,6 +80,10 @@ const CALCULATORS = [
       {
         label: 'Relative Risk & Odds Ratio',
         latex: 'RR = \\dfrac{AR_{+}}{AR_{-}} \\qquad OR = \\dfrac{a \\cdot d}{b \\cdot c}'
+      },
+      {
+        label: 'Number Needed to Treat for Benefit or Harm',
+        latex: 'NNTB \\,/\\, NNTH = \\left\\lceil \\dfrac{1}{|ARD|} \\right\\rceil'
       },
       {
         label: '95% Confidence Intervals',
@@ -138,6 +142,12 @@ const CALCULATORS = [
       const OR  = (a * d) / (b * c);
       const RRD = Math.abs(RR - 1);
 
+      // NNTB when exposure lowers risk (ARD < 0), NNTH when it raises
+      // risk (ARD > 0) — same 1/|ARD| identity as 'OR to NNTB & NNTH',
+      // just derived directly from this table's own risk difference.
+      const NNX = Math.abs(ARD) < 1e-10 ? '∞' : Math.ceil(1 / Math.abs(ARD));
+      const isBeneficial = ARD < 0;
+
       const SE_ARp   = Math.sqrt(ARp*(1-ARp)/n1);
       const SE_ARn   = Math.sqrt(ARn*(1-ARn)/n2);
       const SE_ARD   = Math.sqrt(ARp*(1-ARp)/n1 + ARn*(1-ARn)/n2);
@@ -148,6 +158,16 @@ const CALCULATORS = [
       const CI_ARp = [clip(ARp - Z*SE_ARp), clip(ARp + Z*SE_ARp)];
       const CI_ARn = [clip(ARn - Z*SE_ARn), clip(ARn + Z*SE_ARn)];
       const CI_ARD = [ARD - Z*SE_ARD,              ARD + Z*SE_ARD];
+
+      // NNTB/NNTH's CI is only meaningful when the ARD CI excludes zero
+      // (Altman 1998) — if it straddles zero, the reciprocal flips sign
+      // through infinity partway across the interval, so it's suppressed
+      // with an explanatory note instead of a nonsensical [lo, hi] pair.
+      const ardCIExcludesZero = CI_ARD[0] * CI_ARD[1] > 0;
+      const NNX_CI = ardCIExcludesZero
+        ? [Math.ceil(1 / Math.max(Math.abs(CI_ARD[0]), Math.abs(CI_ARD[1]))), Math.ceil(1 / Math.min(Math.abs(CI_ARD[0]), Math.abs(CI_ARD[1])))]
+        : null;
+
       const CI_RR  = [Math.exp(Math.log(RR) - Z*SE_logRR), Math.exp(Math.log(RR) + Z*SE_logRR)];
       const CI_OR  = [Math.exp(Math.log(OR) - Z*SE_logOR), Math.exp(Math.log(OR) + Z*SE_logOR)];
 
@@ -193,6 +213,12 @@ const CALCULATORS = [
           { label: 'Absolute Risk (Exposed)',   value: f(ARp),  ci: [f(CI_ARp[0]), f(CI_ARp[1])], isRatio: false },
           { label: 'Absolute Risk (Unexposed)', value: f(ARn),  ci: [f(CI_ARn[0]), f(CI_ARn[1])], isRatio: false },
           { label: 'Absolute Risk Difference',  value: f(ARD),  ci: CI_ARD, isRatio: false },
+          { label: isBeneficial
+              ? 'Number Needed to Treat for an Additional Beneficial Outcome (NNTB)'
+              : 'Number Needed to Treat for an Additional Harmful Outcome (NNTH)',
+            value: NNX, ci: NNX_CI, isRatio: false, highlight: true },
+          ...(ardCIExcludesZero ? [] : [{ label: 'Note', isText: true, ci: null, isRatio: false,
+            value: "NNTB/NNTH's own CI isn't shown because the risk difference's 95% CI includes zero — the reciprocal would pass through infinity partway across the interval, so no single [low, high] range is meaningful." }]),
           { label: 'Relative Risk (RR)',         value: f(RR),   ci: CI_RR,  isRatio: true  },
           { label: 'Relative Risk Difference',  value: f(RRD),  ci: null,   isRatio: false },
         );
@@ -287,14 +313,18 @@ const CALCULATORS = [
     }
   },
 
-  /* ── 2. OR → NNT & NNH ──────────────────────────────────────────────
-     Source: OR to NNT and NNH.R                                       */
+  /* ── 2. OR → NNTB & NNTH ──────────────────────────────────────────────
+     Source: OR to NNT and NNH.R — NNT/NNH renamed to NNTB/NNTH (the
+     current GRADE/Cochrane terminology), since "NNT" alone doesn't say
+     which direction the outcome runs. Old terms kept as search synonyms
+     and as "formerly" notes in the abbreviations glossary, since a lot
+     of the literature still uses them.                                */
   {
     id:          'or-to-nnt-nnh',
-    name:        'OR to NNT & NNH',
-    hint:        'OR → RR → ARR → NNT / NNH',
+    name:        'OR to NNTB & NNTH',
+    hint:        'OR → RR → ARR → NNTB / NNTH',
     category:    'Epidemiology & Risk',
-    description: 'Converts an odds ratio and baseline control event rate to relative risk, absolute risk difference, and the number needed to treat (OR < 1) or number needed to harm (OR > 1).',
+    description: 'Converts an odds ratio and baseline control event rate to relative risk, absolute risk difference, and the number needed to treat for an additional beneficial outcome (NNTB, if OR < 1) or an additional harmful outcome (NNTH, if OR > 1). Formerly known as NNT and NNH, respectively.',
 
     formulas: [
       {
@@ -306,8 +336,8 @@ const CALCULATORS = [
         latex: 'ARD = |\\,CER - EER\\,| \\qquad \\text{where } EER = CER \\times RR'
       },
       {
-        label: 'NNT or NNH',
-        latex: 'NNT \\,/\\, NNH = \\left\\lceil \\dfrac{1}{ARD} \\right\\rceil'
+        label: 'NNTB or NNTH',
+        latex: 'NNTB \\,/\\, NNTH = \\left\\lceil \\dfrac{1}{ARD} \\right\\rceil'
       }
     ],
 
@@ -325,7 +355,7 @@ const CALCULATORS = [
       const ARD = Math.abs(CER - EER);
       const isProtective = OR < 1;
       const NNXtext = ARD < 1e-10 ? '∞' : String(Math.ceil(1 / ARD));
-      return `A drug trial reports OR = ${OR} against a control group event rate of ${(CER * 100).toFixed(0)}%. Converting to absolute terms, the drug ${isProtective ? 'reduces' : 'increases'} the event rate to about ${(EER * 100).toFixed(1)}% — meaning you'd need to treat about ${NNXtext} patients to ${isProtective ? 'prevent' : 'cause'} one additional event (${isProtective ? 'NNT' : 'NNH'}). An OR alone doesn't tell you this; it depends heavily on the baseline rate.`;
+      return `A drug trial reports OR = ${OR} against a control group event rate of ${(CER * 100).toFixed(0)}%. Converting to absolute terms, the drug ${isProtective ? 'reduces' : 'increases'} the event rate to about ${(EER * 100).toFixed(1)}% — meaning you'd need to treat about ${NNXtext} patients to ${isProtective ? 'prevent' : 'cause'} one additional event (${isProtective ? 'NNTB' : 'NNTH'}). An OR alone doesn't tell you this; it depends heavily on the baseline rate.`;
     },
 
     calculate({ OR, CER }) {
@@ -352,7 +382,9 @@ const CALCULATORS = [
           value: f(RRD),  ci: null, isRatio: false },
         { label: isProtective ? 'Absolute Risk Reduction (ARR)' : 'Absolute Risk Increase (ARI)',
           value: f(ARD),  ci: null, isRatio: false },
-        { label: isProtective ? 'Number Needed to Treat (NNT)' : 'Number Needed to Harm (NNH)',
+        { label: isProtective
+            ? 'Number Needed to Treat for an Additional Beneficial Outcome (NNTB)'
+            : 'Number Needed to Treat for an Additional Harmful Outcome (NNTH)',
           value: NNX,     ci: null, isRatio: false, highlight: true },
       ];
     }
@@ -8022,7 +8054,7 @@ const CALCULATORS = [
 
   /* ── 69. ODDS RATIO TO RISK RATIO ───────────────────────────────────────
      Converts OR → RR given a control event rate, reusing the same
-     identity already used inside 'OR to NNT & NNH' — split out here
+     identity already used inside 'OR to NNTB & NNTH' — split out here
      as a focused, standalone conversion.                             */
   {
     id:          'or-to-rr',
@@ -16483,12 +16515,12 @@ const CALCULATOR_INDEX = [
   { id: 'type1-type2-errors',   name: 'Type I & Type II Error Explorer', category: 'Power & Sample Size',         description: 'An interactive decision matrix showing all four possible outcomes of a hypothesis test — two correct decisions and two errors — and how trading off α against power shifts the risk of each.', status: 'available' },
 
   // ── 10. EPIDEMIOLOGY & RISK ───────────────────────────────────────────
-  { id: 'measures-of-association', name: 'Measures of Association',      category: 'Epidemiology & Risk',         description: 'Computes AR, ARD, RR, RRD, and OR with 95% CIs from a 2×2 exposure-outcome table.',           status: 'available' },
+  { id: 'measures-of-association', name: 'Measures of Association',      category: 'Epidemiology & Risk',         description: 'Computes AR, ARD, RR, RRD, OR, and NNTB/NNTH with 95% CIs from a 2×2 exposure-outcome table.',           status: 'available' },
   { id: 'nested-case-control',  name: 'Nested Case-Control (1:1 Matched)', category: 'Epidemiology & Risk',       description: 'Computes a matched odds ratio from 1:1 nested case-control pairs — a direct estimate of the incidence rate ratio due to risk-set sampling.', status: 'available' },
   { id: 'se-lnrr-lnor',            name: 'SE of ln(RR) & ln(OR) — 2×2 Table', category: 'Epidemiology & Risk',   description: 'Computes the standard error of a difference in proportions, ln(RR), and ln(OR) from a 2×2 table of exposure and outcome counts.', status: 'available' },
   { id: 'se-rate',                 name: 'Standard Error of a Rate',      category: 'Epidemiology & Risk',        description: 'Computes the standard error of an incidence rate from the number of events and total person-time.', status: 'available' },
   { id: 'se-rate-ratio',           name: 'Standard Error of a Rate Ratio', category: 'Epidemiology & Risk',       description: "Computes the standard error of ln(Rate Ratio) and a 95% CI from two groups' event counts and person-time.", status: 'available' },
-  { id: 'or-to-nnt-nnh',           name: 'OR to NNT & NNH',             category: 'Epidemiology & Risk',         description: 'Converts an odds ratio and control event rate to Number Needed to Treat (NNT) or Number Needed to Harm (NNH) via absolute risk difference.',    status: 'available' },
+  { id: 'or-to-nnt-nnh',           name: 'OR to NNTB & NNTH',             category: 'Epidemiology & Risk',         description: 'Converts an odds ratio and control event rate to the number needed to treat for an additional beneficial outcome (NNTB) or harmful outcome (NNTH) via absolute risk difference. Formerly known as NNT and NNH.',    status: 'available' },
   { id: 'or-to-rr',                name: 'Odds Ratio to Risk Ratio',     category: 'Epidemiology & Risk',         description: 'Converts an odds ratio to a risk ratio using the control event rate.',                         status: 'available' },
   { id: 'attributable-fraction',   name: 'Attributable Fraction (AFe & PAF)', category: 'Epidemiology & Risk',   description: 'Estimates the fraction of disease attributable to the exposure, both among the exposed (AFe) and across the whole population (Population Attributable Fraction, PAF).',     status: 'available' },
   { id: 'par',                     name: 'Population Attributable Risk', category: 'Epidemiology & Risk',         description: 'Quantifies how much of the disease burden would be eliminated by removing the exposure.',      status: 'available' },
@@ -17020,7 +17052,7 @@ const WIZARD_TREE = {
     ]
   },
   orToRrResult:  { results: [ { id: 'or-to-rr', why: 'Converts OR to RR using the control event rate.' } ] },
-  orToNntResult: { results: [ { id: 'or-to-nnt-nnh', why: 'Converts OR and control event rate into NNT or NNH.' } ] },
+  orToNntResult: { results: [ { id: 'or-to-nnt-nnh', why: 'Converts OR and control event rate into NNTB or NNTH.' } ] },
 
   rateGoal: {
     question: 'What do you want to compute?',
@@ -17681,12 +17713,12 @@ const SEARCH_KEYWORDS = {
   'type1-type2-errors': ['type i error', 'type ii error', 'false positive', 'false negative', 'decision matrix', 'alpha beta tradeoff', 'confusion matrix hypothesis test'],
 
   // Epidemiology & Risk
-  'measures-of-association': ['relative risk', 'odds ratio', 'risk difference', '2x2 exposure outcome table', 'rct treatment effect', 'randomized controlled trial results', 'arr', 'rrr', 'cohort study', 'case-control study'],
+  'measures-of-association': ['relative risk', 'odds ratio', 'risk difference', '2x2 exposure outcome table', 'rct treatment effect', 'randomized controlled trial results', 'arr', 'rrr', 'cohort study', 'case-control study', 'nntb', 'nnth', 'nnt', 'nnh', 'number needed to treat', 'number needed to harm'],
   'nested-case-control': ['nested case-control', 'matched case-control study', 'risk-set sampling', 'incidence density sampling', 'matched odds ratio', '1:1 matching'],
   'se-lnrr-lnor':            ['standard error of log relative risk', 'se of log odds ratio', 'cohort study', 'case-control study'],
   'se-rate':                 ['standard error of an incidence rate', 'cohort study'],
   'se-rate-ratio':           ['standard error of a rate ratio', 'cohort study'],
-  'or-to-nnt-nnh':           ['convert odds ratio to number needed to treat', 'nnt', 'nnh', 'number needed to harm', 'rct number needed to treat', 'randomized controlled trial'],
+  'or-to-nnt-nnh':           ['convert odds ratio to number needed to treat', 'nntb', 'nnth', 'nnt', 'nnh', 'number needed to treat', 'number needed to harm', 'rct number needed to treat', 'randomized controlled trial'],
   'or-to-rr':                ['convert odds ratio to relative risk', 'case-control study', 'case-control odds ratio'],
   'attributable-fraction':   ['attributable fraction', 'fraction of disease due to exposure', 'cohort study'],
   'par':                     ['population attributable risk', 'absolute disease burden', 'cohort study'],
@@ -18569,6 +18601,7 @@ const NOTATION = {
     { symbol: 'n', meaning: "Size of the exposed or unexposed group, used to compute that group's own confidence interval on AR." },
     { symbol: 'RR', meaning: 'Relative risk — ratio of absolute risk in the exposed group to the unexposed group.' },
     { symbol: 'OR', meaning: 'Odds ratio — the cross-product ratio (a·d)/(b·c) comparing outcome odds between groups.' },
+    { symbol: 'NNTB / NNTH', meaning: 'Number needed to treat for an additional beneficial outcome (if the absolute risk difference favors the exposed group) or an additional harmful outcome (if it favors the unexposed group). Formerly NNT and NNH, respectively.' },
     { symbol: '\\widehat{SE}_{\\ln RR}, \\widehat{SE}_{\\ln OR}', meaning: 'Standard errors of the log-transformed RR and OR, used to build their exponentiated confidence intervals.' },
     { symbol: 'z', meaning: 'Two-proportion z-test statistic comparing the exposed and unexposed absolute risks.' },
     { symbol: '\\hat{p}', meaning: 'Pooled proportion with the outcome across both groups combined, used under the null hypothesis of no difference.' },
@@ -18605,7 +18638,7 @@ const NOTATION = {
     { symbol: 'RR', meaning: 'Relative risk implied by the OR at this particular baseline rate.' },
     { symbol: 'EER', meaning: 'Experimental event rate — the event rate expected in the treated group (CER × RR).' },
     { symbol: 'ARD', meaning: 'Absolute risk difference between the control and experimental event rates.' },
-    { symbol: 'NNT / NNH', meaning: 'Number needed to treat to prevent one event (if OR < 1) or number needed to harm to cause one event (if OR > 1).' },
+    { symbol: 'NNTB / NNTH', meaning: 'Number needed to treat for an additional beneficial outcome (if OR < 1) or an additional harmful outcome (if OR > 1). Formerly NNT and NNH, respectively.' },
   ],
   'or-to-rr': [
     { symbol: 'OR', meaning: 'Odds ratio being converted, typically from a case-control study.' },
@@ -19993,11 +20026,11 @@ const GUIDES = [
       },
       {
         heading: 'From relative measures to absolute ones',
-        html: `<p>Absolute risk (AR) is simply the plain probability of an outcome occurring in a given group over a specified period &mdash; for example, "a 30% risk" or "30 out of 100 people." It is not a comparison to anything else; it is the number itself, which is exactly why it is easy to lose sight of once a study starts reporting relative measures (RR, OR, HR) instead.</p><p>Relative risk reduction (RRR) is calculated as (risk in the control group minus risk in the treated group), divided by the risk in the control group. Absolute risk reduction (ARR) is simply the risk in the control group minus the risk in the treated group, expressed in percentage points &mdash; the difference between two absolute risks. The two can tell very different stories about the same result:</p><div class="ref-table-label">Table: the same 50% relative risk reduction at two different baseline risks</div><div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Baseline<br>(control) risk</th><th>Treated<br>risk</th><th>Relative risk<br>reduction</th><th>Absolute risk<br>reduction</th><th>Number needed<br>to treat</th></tr></thead><tbody><tr><td>2%</td><td>1%</td><td>50%</td><td>1<br>percentage point</td><td>100</td></tr><tr><td>40%</td><td>20%</td><td>50%</td><td>20<br>percentage points</td><td>5</td></tr></tbody></table></div><p>Both rows describe "a 50% relative risk reduction." But treating 100 patients to prevent a single event, versus treating 5, are very different clinical propositions &mdash; and press coverage and abstracts overwhelmingly report the relative number because it is the larger, more attention-grabbing figure.</p>`,
+        html: `<p>Absolute risk (AR) is simply the plain probability of an outcome occurring in a given group over a specified period &mdash; for example, "a 30% risk" or "30 out of 100 people." It is not a comparison to anything else; it is the number itself, which is exactly why it is easy to lose sight of once a study starts reporting relative measures (RR, OR, HR) instead.</p><p>Relative risk reduction (RRR) is calculated as (risk in the control group minus risk in the treated group), divided by the risk in the control group. Absolute risk reduction (ARR) is simply the risk in the control group minus the risk in the treated group, expressed in percentage points &mdash; the difference between two absolute risks. The two can tell very different stories about the same result:</p><div class="ref-table-label">Table: the same 50% relative risk reduction at two different baseline risks</div><div class="ref-table-wrap"><table class="ref-table"><thead><tr><th>Baseline<br>(control) risk</th><th>Treated<br>risk</th><th>Relative risk<br>reduction</th><th>Absolute risk<br>reduction</th><th>NNTB</th></tr></thead><tbody><tr><td>2%</td><td>1%</td><td>50%</td><td>1<br>percentage point</td><td>100</td></tr><tr><td>40%</td><td>20%</td><td>50%</td><td>20<br>percentage points</td><td>5</td></tr></tbody></table></div><p>Both rows describe "a 50% relative risk reduction." But treating 100 patients to prevent a single event, versus treating 5, are very different clinical propositions &mdash; and press coverage and abstracts overwhelmingly report the relative number because it is the larger, more attention-grabbing figure.</p>`,
       },
       {
-        heading: 'Number needed to treat and number needed to harm',
-        html: `<p>Number needed to treat (NNT) = 1 divided by the absolute risk reduction (expressed as a decimal &mdash; for example, 1% = 0.01, so NNT = 100). It is a practical shorthand for "how many patients must I treat for one of them to benefit."</p><p>Number needed to harm (NNH) applies the same logic to an adverse effect. A treatment can have an impressive NNT for benefit alongside a concerning NNH for harm; both numbers are needed to judge its net value.</p>`,
+        heading: 'Number needed to treat for benefit, and for harm',
+        html: `<p>Number needed to treat for an additional beneficial outcome (NNTB) = 1 divided by the absolute risk reduction (expressed as a decimal &mdash; for example, 1% = 0.01, so NNTB = 100). It is a practical shorthand for "how many patients must I treat for one of them to benefit." Number needed to treat for an additional harmful outcome (NNTH) applies the same logic to an adverse effect. A treatment can have an impressive NNTB for benefit alongside a concerning NNTH for harm; both numbers are needed to judge its net value.</p><p>These were traditionally called NNT and NNH. Both terms are still common in the literature and are treated as synonyms here, but NNTB/NNTH (the current GRADE/Cochrane usage) states the outcome's direction directly in the abbreviation rather than leaving it implicit.</p>`,
       },
       {
         heading: 'Reading tip',
@@ -20010,7 +20043,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'measures-of-association', why: 'Calculates RR, OR, and related measures of association directly from a 2×2 table.' },
-      { id: 'or-to-nnt-nnh', why: 'Converts an odds ratio into NNT/NNH using a stated control event rate.' },
+      { id: 'or-to-nnt-nnh', why: 'Converts an odds ratio into NNTB/NNTH using a stated control event rate.' },
       { id: 'or-to-rr', why: 'Converts between odds ratio and relative risk given a baseline risk — useful for checking how much they diverge.' },
       { id: 'reading-fagan-nomogram', why: 'The diagnostic-testing analog of this guide\'s odds-vs-risk distinction — likelihood ratios, and why the diagnostic odds ratio equals LR+/LR−.' },
     ],
@@ -22010,7 +22043,7 @@ const GUIDES = [
       },
       {
         heading: 'Quick Index (A–Z)',
-        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-accuracy">Accuracy</a> &middot; <a href="#gloss-af-paf">AF / PAF</a> &middot; <a href="#gloss-agree-ii">AGREE II</a> &middot; <a href="#gloss-alpha">&alpha; (alpha)</a> &middot; <a href="#gloss-amstar-2">AMSTAR-2</a> &middot; <a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a> &middot; <a href="#gloss-ar">AR</a> &middot; <a href="#gloss-ard">ARD</a> &middot; <a href="#gloss-art-anova">ART ANOVA</a> &middot; <a href="#gloss-arr">ARR</a> &middot; <a href="#gloss-ate">ATE</a> &middot; <a href="#gloss-auc">AUC</a> &middot; <a href="#gloss-auprc">AUPRC / PR-AUC</a> &middot; <a href="#gloss-auroc">AUROC</a> &middot; <a href="#gloss-axis">AXIS</a> &middot; <a href="#gloss-beta">&beta; (beta)</a> &middot; <a href="#gloss-cdf">CDF</a> &middot; <a href="#gloss-ci">CI</a> &middot; <a href="#gloss-confusion-matrix">Confusion Matrix</a> &middot; <a href="#gloss-consort">CONSORT</a> &middot; <a href="#gloss-cri">CrI</a> &middot; <a href="#gloss-cv">CV</a> &middot; <a href="#gloss-d-g">d / g</a> &middot; <a href="#gloss-deff">DEFF</a> &middot; <a href="#gloss-df">df</a> &middot; <a href="#gloss-f1">F1 Score</a> &middot; <a href="#gloss-glm">GLM</a> &middot; <a href="#gloss-glmm">GLMM</a> &middot; <a href="#gloss-grade">GRADE</a> &middot; <a href="#gloss-h0-ha">H0 / Ha (H1)</a> &middot; <a href="#gloss-hksj">HKSJ</a> &middot; <a href="#gloss-hr">HR</a> &middot; <a href="#gloss-i2">I&sup2;</a> &middot; <a href="#gloss-icc">ICC</a> &middot; <a href="#gloss-ipw">IPW</a> &middot; <a href="#gloss-iqr">IQR</a> &middot; <a href="#gloss-itt-pp">ITT / PP</a> &middot; <a href="#gloss-jbi">JBI</a> &middot; <a href="#gloss-kappa">&kappa; (kappa)</a> &middot; <a href="#gloss-lr">LR+ / LR&minus;</a> &middot; <a href="#gloss-n-N">n / N</a> &middot; <a href="#gloss-nnh">NNH</a> &middot; <a href="#gloss-nnt">NNT</a> &middot; <a href="#gloss-nos">NOS</a> &middot; <a href="#gloss-or">OR</a> &middot; <a href="#gloss-p-hat">p (proportion)</a> &middot; <a href="#gloss-p-value">p (p-value)</a> &middot; <a href="#gloss-pi">PI</a> &middot; <a href="#gloss-ppv-npv">PPV / NPV</a> &middot; <a href="#gloss-precision">Precision</a> &middot; <a href="#gloss-prisma">PRISMA</a> &middot; <a href="#gloss-prisma-scr">PRISMA-ScR</a> &middot; <a href="#gloss-q">Q</a> &middot; <a href="#gloss-quadas-2">QUADAS-2</a> &middot; <a href="#gloss-quips">QUIPS</a> &middot; <a href="#gloss-r-rho">r / &rho;</a> &middot; <a href="#gloss-r-multcorr">R (mult. correlation)</a> &middot; <a href="#gloss-r2-corr">r&sup2; (single predictor)</a> &middot; <a href="#gloss-r2-model">R&sup2; (regression)</a> &middot; <a href="#gloss-rct">RCT</a> &middot; <a href="#gloss-recall">Recall</a> &middot; <a href="#gloss-rob-2">RoB 2</a> &middot; <a href="#gloss-robins-i">ROBINS-I</a> &middot; <a href="#gloss-robis">ROBIS</a> &middot; <a href="#gloss-roc">ROC</a> &middot; <a href="#gloss-rr">RR</a> &middot; <a href="#gloss-rrd">RRD</a> &middot; <a href="#gloss-rrr">RRR</a> &middot; <a href="#gloss-s-sigma">s / &sigma;</a> &middot; <a href="#gloss-sd">SD</a> &middot; <a href="#gloss-se-sem">SE / SEM</a> &middot; <a href="#gloss-sens-spec">Sens / Spec</a> &middot; <a href="#gloss-strobe">STROBE</a> &middot; <a href="#gloss-tau">&tau; (Kendall's tau)</a> &middot; <a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a> &middot; <a href="#gloss-tpr-fpr">TPR / FPR</a> &middot; <a href="#gloss-var">Var</a> &middot; <a href="#gloss-x-X">x / X</a> &middot; <a href="#gloss-x-bar">x&#772; (x-bar)</a></p>`,
+        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><p class="ref-quick-index"><a href="#gloss-accuracy">Accuracy</a> &middot; <a href="#gloss-af-paf">AF / PAF</a> &middot; <a href="#gloss-agree-ii">AGREE II</a> &middot; <a href="#gloss-alpha">&alpha; (alpha)</a> &middot; <a href="#gloss-amstar-2">AMSTAR-2</a> &middot; <a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a> &middot; <a href="#gloss-ar">AR</a> &middot; <a href="#gloss-ard">ARD</a> &middot; <a href="#gloss-art-anova">ART ANOVA</a> &middot; <a href="#gloss-arr">ARR</a> &middot; <a href="#gloss-ate">ATE</a> &middot; <a href="#gloss-auc">AUC</a> &middot; <a href="#gloss-auprc">AUPRC / PR-AUC</a> &middot; <a href="#gloss-auroc">AUROC</a> &middot; <a href="#gloss-axis">AXIS</a> &middot; <a href="#gloss-beta">&beta; (beta)</a> &middot; <a href="#gloss-cdf">CDF</a> &middot; <a href="#gloss-ci">CI</a> &middot; <a href="#gloss-confusion-matrix">Confusion Matrix</a> &middot; <a href="#gloss-consort">CONSORT</a> &middot; <a href="#gloss-cri">CrI</a> &middot; <a href="#gloss-cv">CV</a> &middot; <a href="#gloss-d-g">d / g</a> &middot; <a href="#gloss-deff">DEFF</a> &middot; <a href="#gloss-df">df</a> &middot; <a href="#gloss-f1">F1 Score</a> &middot; <a href="#gloss-glm">GLM</a> &middot; <a href="#gloss-glmm">GLMM</a> &middot; <a href="#gloss-grade">GRADE</a> &middot; <a href="#gloss-h0-ha">H0 / Ha (H1)</a> &middot; <a href="#gloss-hksj">HKSJ</a> &middot; <a href="#gloss-hr">HR</a> &middot; <a href="#gloss-i2">I&sup2;</a> &middot; <a href="#gloss-icc">ICC</a> &middot; <a href="#gloss-ipw">IPW</a> &middot; <a href="#gloss-iqr">IQR</a> &middot; <a href="#gloss-itt-pp">ITT / PP</a> &middot; <a href="#gloss-jbi">JBI</a> &middot; <a href="#gloss-kappa">&kappa; (kappa)</a> &middot; <a href="#gloss-lr">LR+ / LR&minus;</a> &middot; <a href="#gloss-n-N">n / N</a> &middot; <a href="#gloss-nntb">NNTB</a> &middot; <a href="#gloss-nnth">NNTH</a> &middot; <a href="#gloss-nos">NOS</a> &middot; <a href="#gloss-or">OR</a> &middot; <a href="#gloss-p-hat">p (proportion)</a> &middot; <a href="#gloss-p-value">p (p-value)</a> &middot; <a href="#gloss-pi">PI</a> &middot; <a href="#gloss-ppv-npv">PPV / NPV</a> &middot; <a href="#gloss-precision">Precision</a> &middot; <a href="#gloss-prisma">PRISMA</a> &middot; <a href="#gloss-prisma-scr">PRISMA-ScR</a> &middot; <a href="#gloss-q">Q</a> &middot; <a href="#gloss-quadas-2">QUADAS-2</a> &middot; <a href="#gloss-quips">QUIPS</a> &middot; <a href="#gloss-r-rho">r / &rho;</a> &middot; <a href="#gloss-r-multcorr">R (mult. correlation)</a> &middot; <a href="#gloss-r2-corr">r&sup2; (single predictor)</a> &middot; <a href="#gloss-r2-model">R&sup2; (regression)</a> &middot; <a href="#gloss-rct">RCT</a> &middot; <a href="#gloss-recall">Recall</a> &middot; <a href="#gloss-rob-2">RoB 2</a> &middot; <a href="#gloss-robins-i">ROBINS-I</a> &middot; <a href="#gloss-robis">ROBIS</a> &middot; <a href="#gloss-roc">ROC</a> &middot; <a href="#gloss-rr">RR</a> &middot; <a href="#gloss-rrd">RRD</a> &middot; <a href="#gloss-rrr">RRR</a> &middot; <a href="#gloss-s-sigma">s / &sigma;</a> &middot; <a href="#gloss-sd">SD</a> &middot; <a href="#gloss-se-sem">SE / SEM</a> &middot; <a href="#gloss-sens-spec">Sens / Spec</a> &middot; <a href="#gloss-strobe">STROBE</a> &middot; <a href="#gloss-tau">&tau; (Kendall's tau)</a> &middot; <a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a> &middot; <a href="#gloss-tpr-fpr">TPR / FPR</a> &middot; <a href="#gloss-var">Var</a> &middot; <a href="#gloss-x-X">x / X</a> &middot; <a href="#gloss-x-bar">x&#772; (x-bar)</a></p>`,
       },
       {
         heading: 'Probability & Distributions',
@@ -22026,7 +22059,7 @@ const GUIDES = [
       },
       {
         heading: 'Effect Measures (Epidemiology & Clinical Research)',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-af-paf"></span>AF / PAF</td><td>Attributable Fraction / Population Attributable Fraction</td><td style="text-align:left;">The proportion of cases (among the exposed, or the whole population) that would not have occurred without the exposure.</td><td style="text-align:left;"><a href="#attributable-fraction">Attributable Fraction (AFe &amp; PAF)</a>; <a href="#par">Population Attributable Risk</a></td></tr><tr><td><span id="gloss-ar"></span>AR</td><td>Absolute Risk</td><td style="text-align:left;">The risk (proportion) of an outcome within a single group &mdash; e.g. AR&#8330; in the exposed/treated group, AR&#8331; in the unexposed/control group. Not itself a difference; see ARD directly below for that.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-ard"></span>ARD</td><td>Absolute Risk Difference</td><td style="text-align:left;">AR in one group minus AR in the other. The general, either-sign version of the same subtraction ARR below frames specifically as a treatment benefit.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-arr"></span>ARR</td><td>Absolute Risk Reduction</td><td style="text-align:left;">The plain difference between two absolute risks (control risk minus treated risk), in percentage points &mdash; the benefit-framed case of ARD above.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-hr"></span>HR</td><td>Hazard Ratio</td><td style="text-align:left;">The ratio of the instantaneous event rate (hazard) between two groups over time &mdash; the standard effect measure from Cox regression and survival analysis.</td><td style="text-align:left;"><a href="#cox-ph">Cox Proportional Hazards (Hazard Ratio)</a></td></tr><tr><td><span id="gloss-nnh"></span>NNH</td><td>Number Needed to Harm</td><td style="text-align:left;">The same logic as NNT, applied to an adverse effect instead of a benefit.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNT &amp; NNH</a></td></tr><tr><td><span id="gloss-nnt"></span>NNT</td><td>Number Needed to Treat</td><td style="text-align:left;">1 &divide; ARR (as a decimal). How many patients must be treated for one to benefit.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNT &amp; NNH</a></td></tr><tr><td><span id="gloss-or"></span>OR</td><td>Odds Ratio</td><td style="text-align:left;">Ratio of the odds of an outcome between two groups. The only measure estimable from a case-control study; approximates RR when the outcome is rare.</td><td style="text-align:left;"><a href="#or-to-rr">Odds Ratio to Risk Ratio</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rr"></span>RR</td><td>Relative Risk</td><td style="text-align:left;">Risk of an outcome in an exposed/treated group divided by risk in an unexposed/control group. Estimable directly in RCTs and cohort studies.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rrd"></span>RRD</td><td>Relative Risk Difference</td><td style="text-align:left;">|RR − 1| &mdash; the same computation as RRR below, reported as an unsigned magnitude for a general exposure rather than assuming the exposure is a risk-reducing treatment.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-rrr"></span>RRR</td><td>Relative Risk Reduction</td><td style="text-align:left;">(Control risk &minus; treated risk) &divide; control risk. Tends to look larger than ARR and is more often highlighted in abstracts.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-af-paf"></span>AF / PAF</td><td>Attributable Fraction / Population Attributable Fraction</td><td style="text-align:left;">The proportion of cases (among the exposed, or the whole population) that would not have occurred without the exposure.</td><td style="text-align:left;"><a href="#attributable-fraction">Attributable Fraction (AFe &amp; PAF)</a>; <a href="#par">Population Attributable Risk</a></td></tr><tr><td><span id="gloss-ar"></span>AR</td><td>Absolute Risk</td><td style="text-align:left;">The risk (proportion) of an outcome within a single group &mdash; e.g. AR&#8330; in the exposed/treated group, AR&#8331; in the unexposed/control group. Not itself a difference; see ARD directly below for that.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-ard"></span>ARD</td><td>Absolute Risk Difference</td><td style="text-align:left;">AR in one group minus AR in the other. The general, either-sign version of the same subtraction ARR below frames specifically as a treatment benefit.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-arr"></span>ARR</td><td>Absolute Risk Reduction</td><td style="text-align:left;">The plain difference between two absolute risks (control risk minus treated risk), in percentage points &mdash; the benefit-framed case of ARD above.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-hr"></span>HR</td><td>Hazard Ratio</td><td style="text-align:left;">The ratio of the instantaneous event rate (hazard) between two groups over time &mdash; the standard effect measure from Cox regression and survival analysis.</td><td style="text-align:left;"><a href="#cox-ph">Cox Proportional Hazards (Hazard Ratio)</a></td></tr><tr><td><span id="gloss-nntb"></span>NNTB</td><td>Number Needed to Treat for an Additional Beneficial Outcome</td><td style="text-align:left;">1 &divide; ARR (as a decimal). How many patients must be treated for one additional patient to benefit. Formerly NNT — still common in the literature and treated as a synonym here.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNTB &amp; NNTH</a></td></tr><tr><td><span id="gloss-nnth"></span>NNTH</td><td>Number Needed to Treat for an Additional Harmful Outcome</td><td style="text-align:left;">The same logic as NNTB, applied to an adverse effect instead of a benefit. Formerly NNH — still common in the literature and treated as a synonym here.</td><td style="text-align:left;"><a href="#or-to-nnt-nnh">OR to NNTB &amp; NNTH</a></td></tr><tr><td><span id="gloss-or"></span>OR</td><td>Odds Ratio</td><td style="text-align:left;">Ratio of the odds of an outcome between two groups. The only measure estimable from a case-control study; approximates RR when the outcome is rare.</td><td style="text-align:left;"><a href="#or-to-rr">Odds Ratio to Risk Ratio</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rr"></span>RR</td><td>Relative Risk</td><td style="text-align:left;">Risk of an outcome in an exposed/treated group divided by risk in an unexposed/control group. Estimable directly in RCTs and cohort studies.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr><tr><td><span id="gloss-rrd"></span>RRD</td><td>Relative Risk Difference</td><td style="text-align:left;">|RR − 1| &mdash; the same computation as RRR below, reported as an unsigned magnitude for a general exposure rather than assuming the exposure is a risk-reducing treatment.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a></td></tr><tr><td><span id="gloss-rrr"></span>RRR</td><td>Relative Risk Reduction</td><td style="text-align:left;">(Control risk &minus; treated risk) &divide; control risk. Tends to look larger than ARR and is more often highlighted in abstracts.</td><td style="text-align:left;"><a href="#learn/appraisal-effect-measures">Understanding Effect Measures (Learn guide)</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Diagnostic Testing',
