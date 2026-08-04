@@ -131,6 +131,8 @@ body {
 
 .footer-license-badge {
   display: block;
+  width: 56px;
+  height: 20px;
   background: #fff;
   border-radius: 3px;
   padding: 2px 4px;
