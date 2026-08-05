@@ -22154,6 +22154,7 @@ const GUIDES = [
       { id: 'posthoc-power', why: 'Estimates the power an already-completed study had to detect a given effect.' },
       { id: 'power-ppv-fpp', why: 'Explores how power interacts with the false positive proportion of significant findings.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Places this significance-vs-magnitude confusion within a broader checklist of ways a result gets overinterpreted.' },
+      { id: 'reference-hypothesis-testing', why: 'The general decision-rule procedure whose output (a significant p-value) this guide\'s "significant but not important" pattern is a misreading of.' },
     ],
   },
 
@@ -22189,6 +22190,7 @@ const GUIDES = [
       { id: 'power-vs-es-alpha', why: 'Shows how power shifts as effect size and alpha change, holding sample size fixed.' },
       { id: 'appraisal-too-good-to-be-true', why: 'Places this "no significant difference isn\'t no difference" trap within a broader checklist of ways a result gets overinterpreted.' },
       { id: 'reference-glossary-concepts', why: 'Defines the non-centrality parameter (NCP) that mathematically ties the four factors above together.' },
+      { id: 'reference-hypothesis-testing', why: 'The general decision-rule procedure this guide\'s Type II error / power discussion is a deeper dive into.' },
     ],
   },
 
@@ -23952,6 +23954,7 @@ const GUIDES = [
       { id: 'appraisal-sd-vs-se', why: 'Full explanation of the SD vs. SE distinction defined here.' },
       { id: 'standard-error', why: 'Computes SE directly, if you need the number rather than just the definition.' },
       { id: 'appraisal-appraising-ai-studies', why: 'Full explanation of why accuracy alone misleads under class imbalance — the reasoning behind the AI/ML terms defined here.' },
+      { id: 'reference-hypothesis-testing', why: 'The step-by-step hypothesis-testing procedure that puts the H0/Ha, α, β, and p symbols defined here into practice.' },
     ],
   },
 
@@ -24099,10 +24102,10 @@ const GUIDES = [
       {
         heading: 'Hypothesis Testing: Null/Alternative Hypothesis, Test Statistic, Significance, Power',
         html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
-          <tr><td><span id="gloss-null-hypothesis"></span>Null Hypothesis (H&#8320;)</td><td style="text-align:left;">The default, "nothing going on" assumption a hypothesis test is built to argue against — no difference between groups, no association, no effect. A test never directly proves H&#8320; true; it only ever produces evidence against it (or fails to), which is why "fail to reject H&#8320;" and "H&#8320; is true" are not the same conclusion.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (H0 / Ha entry)</td></tr>
-          <tr><td><span id="gloss-alternative-hypothesis"></span>Alternative Hypothesis (H&#8321; / H&#8342;)</td><td style="text-align:left;">The substantive claim a study is actually trying to demonstrate — that a difference, association, or effect genuinely exists. Rejecting the null hypothesis is treated as evidence for the alternative, by process of elimination rather than direct proof.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (H0 / Ha entry)</td></tr>
-          <tr><td><span id="gloss-test-statistic"></span>Test Statistic</td><td style="text-align:left;">The single number — t, F, &chi;&sup2;, z — calculated from sample data that a hypothesis test compares against its reference distribution to produce a p-value. Which reference distribution applies (see the z- vs. t-distribution row above) depends on the test; the test statistic itself is just a standardized measure of how far the data depart from what H&#8320; predicts.</td><td style="text-align:left;">&mdash;</td></tr>
-          <tr><td><span id="gloss-critical-value"></span>Critical Value / Rejection Region</td><td style="text-align:left;">The critical value is the test-statistic threshold, set by the chosen significance level (&alpha;), beyond which H&#8320; is rejected; the rejection region is the full range of test-statistic values beyond that threshold. A two-tailed test splits the rejection region across both ends of the reference distribution; a one-tailed test puts it entirely on one side, at the cost of being unable to detect an effect in the other direction.</td><td style="text-align:left;">&mdash;</td></tr>
+          <tr><td><span id="gloss-null-hypothesis"></span>Null Hypothesis (H&#8320;)</td><td style="text-align:left;">The default, "nothing going on" assumption a hypothesis test is built to argue against — no difference between groups, no association, no effect. A test never directly proves H&#8320; true; it only ever produces evidence against it (or fails to), which is why "fail to reject H&#8320;" and "H&#8320; is true" are not the same conclusion.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (H0 / Ha entry); <a href="#learn/reference-hypothesis-testing">Hypothesis Testing: A Quick Reference (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-alternative-hypothesis"></span>Alternative Hypothesis (H&#8321; / H&#8342;)</td><td style="text-align:left;">The substantive claim a study is actually trying to demonstrate — that a difference, association, or effect genuinely exists. Rejecting the null hypothesis is treated as evidence for the alternative, by process of elimination rather than direct proof.</td><td style="text-align:left;"><a href="#learn/reference-glossary-abbreviations">Glossary of Abbreviations and Symbols</a> (H0 / Ha entry); <a href="#learn/reference-hypothesis-testing">Hypothesis Testing: A Quick Reference (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-test-statistic"></span>Test Statistic</td><td style="text-align:left;">The single number — t, F, &chi;&sup2;, z — calculated from sample data that a hypothesis test compares against its reference distribution to produce a p-value. Which reference distribution applies (see the z- vs. t-distribution row above) depends on the test; the test statistic itself is just a standardized measure of how far the data depart from what H&#8320; predicts.</td><td style="text-align:left;"><a href="#learn/reference-hypothesis-testing">Hypothesis Testing: A Quick Reference (Learn guide)</a> (which test statistic applies to which situation)</td></tr>
+          <tr><td><span id="gloss-critical-value"></span>Critical Value / Rejection Region</td><td style="text-align:left;">The critical value is the test-statistic threshold, set by the chosen significance level (&alpha;), beyond which H&#8320; is rejected; the rejection region is the full range of test-statistic values beyond that threshold. A two-tailed test splits the rejection region across both ends of the reference distribution; a one-tailed test puts it entirely on one side, at the cost of being unable to detect an effect in the other direction.</td><td style="text-align:left;"><a href="#learn/reference-hypothesis-testing">Hypothesis Testing: A Quick Reference (Learn guide)</a> (one-tailed vs. two-tailed)</td></tr>
           <tr><td><span id="gloss-statistical-significance"></span>Statistical Significance</td><td style="text-align:left;">The conclusion that an observed result would be unlikely to occur by chance alone if H&#8320; were actually true, at whatever &alpha; threshold was chosen in advance (conventionally 0.05) — nothing more. It is not a statement about how large, important, or clinically meaningful the effect is; that's a separate question answered by effect size, not the p-value.</td><td style="text-align:left;"><a href="#learn/appraisal-clinical-significance">Statistical Significance vs. Clinical Significance (Learn guide)</a></td></tr>
           <tr><td><span id="gloss-statistical-power"></span>Statistical Power (1&minus;&beta;)</td><td style="text-align:left;">The probability that a test correctly rejects H&#8320; when the alternative hypothesis is actually true — the complement of a Type II error (&beta;). Power rises with a larger effect size, a larger sample, a less conservative &alpha;, or less variability in the data; conventionally, studies are designed to target at least 80% power.</td><td style="text-align:left;"><a href="#power-with-graph">Power with Graph</a>; <a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a>; <a href="#sample-size-2mean">Sample Size — Difference of Two Means</a></td></tr>
         </tbody></table></div>`,
@@ -24137,6 +24140,55 @@ const GUIDES = [
       { id: 'appraisal-power-sample-size', why: 'Full explanation of power, Type II error, and why an underpowered "no difference" isn\'t the same as "no difference exists" — the concept the NCP row above quantifies numerically.' },
       { id: 'sample-size-anova-f', why: 'The one calculator on this site that builds the non-centrality parameter explicitly, for the non-central F distribution.' },
       { id: 'reference-glossary-abbreviations', why: 'The companion glossary for abbreviations and mathematical notation, rather than plain-English concept words — including the symbol-level NCP (λ) entry.' },
+      { id: 'reference-hypothesis-testing', why: 'The step-by-step procedure and decision rule built from the null hypothesis, test statistic, and power terms defined above.' },
+    ],
+  },
+
+  {
+    id: 'reference-hypothesis-testing',
+    category: 'Quick Reference',
+    title: 'Hypothesis Testing: A Quick Reference',
+    blurb: 'The logic every hypothesis test follows, one-tailed vs. two-tailed, the decision rule, and a lookup table for which test statistic applies to which situation.',
+    dek: `This page is a companion to the two glossaries above: use it when you need the general procedure or decision rule a hypothesis test follows, then jump to whichever specific calculator on this site actually runs it. For the individual terms used below (null hypothesis, test statistic, p-value, power), see the <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts and Roles</a>.`,
+    sections: [
+      {
+        heading: 'The Logic of a Hypothesis Test',
+        html: `<p>Every hypothesis test on this site follows the same five-step logic, regardless of which specific test statistic it computes:</p><ol><li><strong>State the null and alternative hypotheses (H&#8320; and H&#8321;)</strong> before looking at the data that will be used to test them &mdash; H&#8320; is the "nothing going on" default, H&#8321; the effect the study is trying to demonstrate.</li><li><strong>Choose a significance level (&alpha;)</strong> in advance, conventionally 0.05.</li><li><strong>Compute the test statistic</strong> (t, F, &chi;&sup2;, z, or a rank-based statistic) from the sample data.</li><li><strong>Compare it to a reference distribution</strong> to get a p-value, or compare it directly to a critical value marking the edge of the rejection region.</li><li><strong>Decide:</strong> reject H&#8320; if p &lt; &alpha; (equivalently, if the test statistic falls in the rejection region); otherwise, fail to reject H&#8320;.</li></ol><p>Steps 1 and 2 happen <em>before</em> step 3 for a reason: choosing &alpha; or which hypothesis to test after seeing the data inflates the true false-positive rate well past the nominal 0.05, even though the reported p-value doesn't show it.</p>`,
+      },
+      {
+        heading: 'One-Tailed vs. Two-Tailed: Decided Before You Look',
+        html: `<p>A two-tailed test asks whether the true effect differs from the null value <em>in either direction</em>, and is the appropriate default for almost every situation on this site &mdash; it splits the rejection region across both ends of the reference distribution. A one-tailed test asks only whether the effect is larger (or only whether it's smaller) than the null value, putting the entire rejection region on one side; this makes it easier to reach significance in the predicted direction, but at the cost of being structurally unable to detect a real effect in the other direction, however large.</p><p>The choice has to be made at step 2 above, based on the study question, not after seeing which direction the data happened to point &mdash; switching to a one-tailed test post hoc because a two-tailed result "just missed" significance is a form of the same after-the-fact bias step 1 and 2 are meant to prevent.</p>`,
+      },
+      {
+        heading: 'The Decision Rule, and What It Doesn\'t Mean',
+        html: `<p>The rule itself is simple: reject H&#8320; when p &lt; &alpha;, fail to reject when p &ge; &alpha;. Two of the most common misreadings of that rule:</p><p><strong>"Fail to reject H&#8320;" is not the same claim as "H&#8320; is true."</strong> A test can fail to reject simply because it lacked the statistical power to detect a real effect of the size actually present &mdash; see <a href="#learn/appraisal-power-sample-size">Power, Type II Error, and Why "No Difference Found" Isn't the Same as "No Difference"</a> for the full explanation of that distinction.</p><p><strong>A significant result (p &lt; &alpha;) is not automatically an important one.</strong> Statistical significance says only that the result is unlikely under H&#8320; at the chosen &alpha; &mdash; it says nothing about the size of the effect, which is a separate question answered by effect size and its confidence interval, not the p-value. See <a href="#learn/appraisal-clinical-significance">Statistical Significance vs. Clinical Significance</a>.</p>`,
+      },
+      {
+        heading: 'Which Test Statistic Applies?',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th style="text-align:left;">Situation</th><th style="text-align:left;">Test Statistic</th><th style="text-align:left;">Calculator</th></tr></thead><tbody>
+          <tr><td style="text-align:left;">One sample mean vs. a hypothesized value</td><td style="text-align:left;">t</td><td style="text-align:left;"><a href="#one-sample-t-test">1-Sample t-Test</a></td></tr>
+          <tr><td style="text-align:left;">Two independent group means</td><td style="text-align:left;">t (Welch's)</td><td style="text-align:left;"><a href="#unpaired-t-test">Unpaired t-Test (Welch's)</a></td></tr>
+          <tr><td style="text-align:left;">Two paired/matched means</td><td style="text-align:left;">t</td><td style="text-align:left;"><a href="#paired-t-test">Paired t-Test</a></td></tr>
+          <tr><td style="text-align:left;">Three or more independent group means</td><td style="text-align:left;">F</td><td style="text-align:left;"><a href="#anova-1way">1-Way ANOVA</a></td></tr>
+          <tr><td style="text-align:left;">Association between two categorical variables</td><td style="text-align:left;">&chi;&sup2;</td><td style="text-align:left;"><a href="#chi-square-2x2">Chi-Square 2&times;2</a></td></tr>
+          <tr><td style="text-align:left;">Observed vs. expected category proportions</td><td style="text-align:left;">&chi;&sup2;</td><td style="text-align:left;"><a href="#chi-square-gof">Chi-Square Goodness-of-Fit</a></td></tr>
+          <tr><td style="text-align:left;">Linear association between two continuous variables</td><td style="text-align:left;">t (on r)</td><td style="text-align:left;"><a href="#pearson-r">Pearson's Correlation</a></td></tr>
+          <tr><td style="text-align:left;">One sample proportion vs. a hypothesized value (small n)</td><td style="text-align:left;">exact binomial</td><td style="text-align:left;"><a href="#binomial-hyp-test">Binomial Hypothesis Test</a></td></tr>
+          <tr><td style="text-align:left;">Two independent groups, ordinal/non-normal data</td><td style="text-align:left;">rank-based (Mann-Whitney U)</td><td style="text-align:left;"><a href="#mann-whitney">Mann-Whitney U Test</a></td></tr>
+          <tr><td style="text-align:left;">Two paired groups, ordinal/non-normal data</td><td style="text-align:left;">rank-based (Wilcoxon signed-rank)</td><td style="text-align:left;"><a href="#wilcoxon-signed-rank">Wilcoxon Signed-Rank Test</a></td></tr>
+          <tr><td style="text-align:left;">Three or more independent groups, ordinal/non-normal data</td><td style="text-align:left;">rank-based (Kruskal-Wallis H)</td><td style="text-align:left;"><a href="#kruskal-wallis">Kruskal-Wallis Test</a></td></tr>
+        </tbody></table></div><p class="ref-table-note">Every t- and F-based row above assumes its normality (and, for 3+ groups, homogeneity of variance) assumption roughly holds &mdash; check with the <a href="#shapiro-wilk-test">Shapiro-Wilk Test</a> and <a href="#levenes-test">Levene's Test</a>, and fall back to the rank-based row beneath it if either fails. The <a href="#t-distribution-explorer">t-Distribution Explorer</a> shows directly why a t critical value is more extreme than a z critical value at low degrees of freedom.</p>`,
+      },
+    ],
+    related: [
+      { id: 'reference-glossary-concepts', why: 'Defines the individual terms used throughout this page — null/alternative hypothesis, test statistic, critical value, statistical significance, and power.' },
+      { id: 'reference-glossary-abbreviations', why: 'The symbol-level companion — H0/Ha, α, β, and p defined as notation rather than as procedure.' },
+      { id: 'appraisal-power-sample-size', why: 'Full explanation of power and Type II error, and why "failed to reject H0" is not the same claim as "H0 is true."' },
+      { id: 'appraisal-clinical-significance', why: 'Full explanation of why a significant p-value and a clinically important effect are two different questions.' },
+      { id: 'type1-type2-errors', why: 'Interactive decision matrix for all four outcomes of the decision rule described above.' },
+      { id: 'power-with-graph', why: 'Visualizes the H0/Ha distribution overlap this page\'s decision rule and power both depend on.' },
+      { id: 't-distribution-explorer', why: 'Shows the z-vs-t reference distribution choice this page\'s test-statistic table depends on.' },
+      { id: 'shapiro-wilk-test', why: 'Tests the normality assumption behind every parametric (t- and F-based) row in the test-statistic table above.' },
     ],
   },
 
