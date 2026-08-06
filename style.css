@@ -1744,11 +1744,42 @@ body {
 
 .explorer-slider { width: 100%; }
 
-.explorer-control-value {
+.explorer-control-valuewrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Editable twin of the slider it sits under — the slider stays the
+   source of truth run() reads from, but typing an exact value here
+   (e.g. 0.037 on a slider that steps by 0.01) pushes straight into
+   it, since dragging alone can't reliably land on it. */
+.explorer-control-num {
+  width: 84px;
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
+  background: var(--ground);
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  padding: 3px 6px;
+  text-align: center;
+}
+
+.explorer-control-num:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(78,110,219,.12);
+  background: var(--card);
+}
+
+.explorer-control-caption {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 /* Explorer "action" control (e.g. the coin-flip simulator's re-flip

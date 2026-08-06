@@ -1403,7 +1403,12 @@ function renderExplorerCalculator(calc) {
         <label class="explorer-control-label" for="inp-${inp.id}">${esc(upperAscii(inp.label))}</label>
         <input class="input-slider explorer-slider" type="range" id="inp-${inp.id}" data-id="${inp.id}"
                min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">
-        <div class="explorer-control-value" id="val-${inp.id}">${esc(display)}</div>
+        <div class="explorer-control-valuewrap">
+          <input class="explorer-control-num" type="number" id="num-${inp.id}" data-id="${inp.id}"
+                 min="${inp.min}" max="${inp.max}" step="any" value="${inp.default}"
+                 aria-label="${escAttr(inp.label)} — exact value">
+          <span class="explorer-control-caption" id="val-${inp.id}">${esc(display)}</span>
+        </div>
       </div>`;
   }).join('') + `
     <div class="explorer-control explorer-control-select">
@@ -1513,14 +1518,53 @@ function renderExplorerCalculator(calc) {
   calc.inputs.forEach(inp => {
     const el = document.getElementById('inp-' + inp.id);
     if (!el) return;
-    const evt = inp.type === 'select' ? 'change' : inp.type === 'button' ? 'click' : 'input';
-    el.addEventListener(evt, () => {
-      if (inp.type === 'slider') {
-        const label = document.getElementById('val-' + inp.id);
-        if (label) label.textContent = inp.format ? inp.format(parseFloat(el.value)) : el.value;
+
+    // Sliders get a paired exact-value number field (see controlsHtml
+    // above) — the range stays the source of truth readInputs() reads
+    // from, the number field just pushes precise edits into it.
+    if (inp.type === 'slider') {
+      const numEl = document.getElementById('num-' + inp.id);
+      const caption = document.getElementById('val-' + inp.id);
+      const decimals = stepDecimalPlaces(inp.step);
+      const clampToBounds = v => Math.min(inp.max, Math.max(inp.min, v));
+      const setCaption = v => { if (caption) caption.textContent = inp.format ? inp.format(v) : String(v); };
+
+      el.addEventListener('input', () => {
+        if (numEl) numEl.value = (+el.value).toFixed(decimals);
+        setCaption(parseFloat(el.value));
+        run();
+      });
+
+      if (numEl) {
+        numEl.addEventListener('input', () => {
+          const v = parseFloat(numEl.value);
+          if (isNaN(v)) return;
+          el.value = clampToBounds(v);
+          setCaption(v);
+          run();
+        });
+
+        // Only touches the field when it's actually invalid or out of
+        // range — an in-range value like 0.037 is left exactly as
+        // typed, not rounded to the slider's own coarser step.
+        const clampNumField = () => {
+          let v = parseFloat(numEl.value);
+          if (isNaN(v)) { v = parseFloat(el.value); }
+          else if (v >= inp.min && v <= inp.max) return;
+          else v = clampToBounds(v);
+          numEl.value = v;
+          el.value = v;
+          setCaption(v);
+          run();
+        };
+        numEl.addEventListener('blur', clampNumField);
+        numEl.addEventListener('keydown', e => { if (e.key === 'Enter') { clampNumField(); numEl.blur(); } });
       }
-      run();
-    });
+      return;
+    }
+
+    const evt = inp.type === 'select' ? 'change' : 'click';
+    el.addEventListener(evt, run);
   });
 
   // Blanks the sliders rather than restoring calc.inputs[]'s defaults —
@@ -1827,6 +1871,8 @@ function zeroInputs(calc) {
       el.checked = false;
     } else if (inp.type === 'slider') {
       el.value = (inp.min <= 0 && inp.max >= 0) ? 0 : inp.min;
+      const numEl = document.getElementById('num-' + inp.id);
+      if (numEl) numEl.value = (+el.value).toFixed(stepDecimalPlaces(inp.step));
       const label = document.getElementById('val-' + inp.id);
       if (label) label.textContent = inp.format ? inp.format(parseFloat(el.value)) : el.value;
     } else {
@@ -2108,6 +2154,18 @@ function escAttr(s) {
 // lowercase letter leaves isolated one-letter symbols untouched.
 function upperAscii(s) {
   return String(s).replace(/[a-z]{2,}/g, word => word.toUpperCase());
+}
+
+// How many decimal places an explorer slider's own `step` carries
+// (e.g. 0.01 -> 2, 50 -> 0) — used only to tidy up the paired exact-
+// value number field after a *drag* (float step arithmetic can land
+// on 0.30000000000000004); a value the user *typed* into that field
+// is never rounded through this, so it can still be more precise
+// than the slider's own step.
+function stepDecimalPlaces(step) {
+  const s = String(step);
+  const i = s.indexOf('.');
+  return i === -1 ? 0 : s.length - i - 1;
 }
 
 // Turns a result row's label (e.g. "Forest Plot vs Reference") into a
