@@ -2,3 +2,6 @@ _pre-git-backup-jul10/
 *.docx
 !assets/appraisal-worksheets/*.docx
 ~$*
+Thumbs.db
+.Rhistory
+.claude/settings.local.json
