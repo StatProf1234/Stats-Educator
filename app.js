@@ -1338,7 +1338,7 @@ function renderCalculator(calc) {
 
   document.getElementById('calc-btn').addEventListener('click', run);
 
-  // Zeroes the inputs rather than restoring calc.inputs[]'s defaults —
+  // Blanks the inputs rather than restoring calc.inputs[]'s defaults —
   // navigating to this calculator again (route() re-renders from
   // scratch) is what brings the defaults back, not Reset.
   document.getElementById('reset-btn').addEventListener('click', () => {
@@ -1523,7 +1523,7 @@ function renderExplorerCalculator(calc) {
     });
   });
 
-  // Zeroes the sliders rather than restoring calc.inputs[]'s defaults —
+  // Blanks the sliders rather than restoring calc.inputs[]'s defaults —
   // navigating to this calculator again (route() re-renders from
   // scratch) is what brings the defaults back, not Reset.
   document.getElementById('explorer-reset-btn').addEventListener('click', () => {
@@ -1810,27 +1810,27 @@ function refreshTotals() {
   set('tot-n',  a+b+c+d);
 }
 
-// Clears every input to its zero-equivalent value (0 for numbers/
-// sliders, '' for free text) rather than restoring calc.inputs[]'s
-// defaults — that's what the Reset button does; the defaults only
-// come back when the calculator is next visited fresh (route() always
-// re-renders from calc.inputs[].default, so no extra work is needed
-// there). A select has no natural "zero" and is left alone.
+// Clears every input to blank ('' for numbers/text/textarea — so the
+// user isn't stuck deleting a placeholder "0" before typing a real
+// value) rather than restoring calc.inputs[]'s defaults — that's what
+// the Reset button does; the defaults only come back when the
+// calculator is next visited fresh (route() always re-renders from
+// calc.inputs[].default, so no extra work is needed there). Sliders
+// have no natural blank state and snap to 0 (or their min); a select
+// has no natural "zero" and is left alone.
 function zeroInputs(calc) {
   calc.inputs.forEach(inp => {
     if (inp.type === 'button' || inp.type === 'select') return;
     const el = document.getElementById('inp-' + inp.id);
     if (!el) return;
-    if (inp.type === 'textarea' || inp.type === 'text') {
-      el.value = '';
-    } else if (inp.type === 'checkbox') {
+    if (inp.type === 'checkbox') {
       el.checked = false;
     } else if (inp.type === 'slider') {
       el.value = (inp.min <= 0 && inp.max >= 0) ? 0 : inp.min;
       const label = document.getElementById('val-' + inp.id);
       if (label) label.textContent = inp.format ? inp.format(parseFloat(el.value)) : el.value;
     } else {
-      el.value = 0;
+      el.value = '';
     }
   });
 }

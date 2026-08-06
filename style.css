@@ -2010,7 +2010,12 @@ body {
   margin-bottom: 18px;
 }
 
-.group-corner { }
+.group-corner {
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  z-index: 1;
+}
 
 .group-col-header {
   display: flex;
@@ -2034,6 +2039,10 @@ body {
   font-weight: 500;
   color: var(--text-2);
   padding-right: 8px;
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  z-index: 1;
 }
 
 .group-cell .input-el { width: 100%; }
