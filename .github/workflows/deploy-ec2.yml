@@ -1,0 +1,61 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      SITE_DOMAIN: ${{ secrets.SITE_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Secrets can't be read in an `if:` directly, so they are promoted to env
+      # above and checked here. This keeps the workflow green on a fork or
+      # before the secrets are added, rather than failing for a missing key.
+      - name: Check deploy credentials are present
+        id: creds
+        run: |
+          if [ -n "$EC2_HOST" ] && [ -n "${{ secrets.EC2_SSH_KEY }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::EC2 secrets not configured — skipping deploy."
+          fi
+
+      - name: Configure SSH
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.EC2_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Sync site to server
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          rsync -rlvz --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.gitignore' \
+            --exclude 'CLAUDE.md' \
+            -e 'ssh -i ~/.ssh/deploy_key' \
+            ./ "$EC2_USER@$EC2_HOST:/var/www/stats-educator/"
+
+      - name: Verify site responds
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          # Falls back to plain HTTP against the instance if no domain is set.
+          if [ -n "$SITE_DOMAIN" ]; then url="https://$SITE_DOMAIN/"; else url="http://$EC2_HOST/"; fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+          echo "$url returned HTTP $code"
+          test "$code" = "200"
