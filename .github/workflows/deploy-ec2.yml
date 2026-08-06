@@ -43,13 +43,24 @@ jobs:
       - name: Sync site to server
         if: steps.creds.outputs.ready == 'true'
         run: |
+          # *.gz is excluded so --delete leaves the pre-compressed files alone;
+          # they are rebuilt in the next step.
           rsync -rlvz --delete \
             --exclude '.git' \
             --exclude '.github' \
             --exclude '.gitignore' \
             --exclude 'CLAUDE.md' \
+            --exclude '*.gz' \
             -e 'ssh -i ~/.ssh/deploy_key' \
             ./ "$EC2_USER@$EC2_HOST:/var/www/stats-educator/"
+
+      - name: Rebuild pre-compressed assets
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          # nginx serves these via gzip_static; without this the site would
+          # fall back to weaker on-the-fly compression after every deploy.
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            'sudo /usr/local/bin/precompress-site'
 
       - name: Verify site responds
         if: steps.creds.outputs.ready == 'true'
