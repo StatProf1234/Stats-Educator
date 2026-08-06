@@ -262,6 +262,136 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 1a. RR/OR & BASELINE RISK EXPLORER ───────────────────────────────
+     Companion to 'Measures of Association': instead of computing RR/OR
+     from a fixed 2×2 table, this holds RR (or OR) fixed via a select
+     and lets the user drag baseline risk, showing the exposed-group
+     risk, ARD, NNT, and the 2×2 counts all move even though the
+     relative effect never does — and that RR and OR themselves drift
+     apart as baseline risk rises, converging only when it's low.      */
+  {
+    id:          'rr-or-baseline-risk-explorer',
+    name:        'RR/OR & Baseline Risk Explorer',
+    hint:        'Same relative effect, very different absolute impact',
+    category:    'Epidemiology & Risk',
+    description: 'Holds relative risk or odds ratio fixed while you slide the baseline (control-group) risk, showing how the same relative effect translates into a very different absolute risk difference, NNT, and 2×2 table depending on how common the outcome already is.',
+    inputLayout: 'explorer',
+
+    formulas: [
+      { label: 'Odds From Risk', latex: '\\text{odds} = \\dfrac{p}{1-p}' },
+      { label: 'Holding RR Constant', latex: 'p_1 = RR \\times p_0' },
+      { label: 'Holding OR Constant', latex: 'p_1 = \\dfrac{OR \\cdot \\text{odds}_0}{1 + OR \\cdot \\text{odds}_0}, \\quad \\text{odds}_0 = \\dfrac{p_0}{1-p_0}' },
+      { label: 'Absolute Risk Difference & NNT', latex: 'ARD = p_1 - p_0 \\qquad NNT = \\left\\lceil \\dfrac{1}{|ARD|} \\right\\rceil' },
+    ],
+
+    inputs: [
+      { id: 'holdConstant', type: 'select', label: 'Hold Constant', default: 'rr', options: [
+        { value: 'rr', label: 'Relative Risk (RR)' },
+        { value: 'or', label: 'Odds Ratio (OR)' },
+      ] },
+      { id: 'effect', type: 'slider', label: 'Effect Size (RR or OR, per selection above)', default: 0.5, min: 0.1, max: 4, step: 0.05, wide: true,
+        format: v => v.toFixed(2) + '×' },
+      { id: 'baselineRisk', type: 'slider', label: 'Baseline (Control-Group) Risk', default: 0.20, min: 0.01, max: 0.95, step: 0.01,
+        format: v => (v * 100).toFixed(0) + '%' },
+      { id: 'n', type: 'slider', label: 'Patients per Group', default: 500, min: 50, max: 5000, step: 50,
+        format: v => Math.round(v).toLocaleString('en-US') },
+    ],
+
+    example({ holdConstant, effect, baselineRisk }) {
+      const p0 = baselineRisk;
+      if (!isFinite(p0) || p0 <= 0 || p0 >= 1 || !isFinite(effect) || effect <= 0)
+        return 'Choose whether to hold RR or OR constant, then set an effect size and baseline risk to see a worked medical example here.';
+      const odds0 = p0 / (1 - p0);
+      let RR, OR, p1;
+      if (holdConstant === 'or') {
+        OR = effect;
+        const odds1 = OR * odds0;
+        p1 = odds1 / (1 + odds1);
+        RR = p1 / p0;
+      } else {
+        RR = effect;
+        p1 = p0 * RR;
+        OR = isFinite(p1) && p1 > 0 && p1 < 1 ? (p1 / (1 - p1)) / odds0 : NaN;
+      }
+      if (!isFinite(p1) || p1 <= 0 || p1 >= 1)
+        return 'Adjust the effect size or baseline risk — this combination pushes the exposed/treated-group risk outside 0–100%.';
+      const pct = v => (v * 100).toFixed(1);
+      const f = v => v.toFixed(2);
+      return `A trial's control group has a ${pct(p0)}% event rate. Holding the ${holdConstant === 'or' ? `odds ratio fixed at ${f(OR)}×` : `relative risk fixed at ${f(RR)}×`}, the treated group's risk works out to ${pct(p1)}% — an absolute risk difference of ${pct(p1 - p0)} percentage points. That same relative effect (RR ${f(RR)}×, OR ${f(OR)}×) would translate into a very different absolute difference, and NNT, if the underlying baseline risk were higher or lower — drag the baseline-risk slider to see it happen.`;
+    },
+
+    calculate({ holdConstant, effect, baselineRisk, n }) {
+      const p0 = baselineRisk;
+      const N  = Math.round(n);
+      if (!isFinite(p0) || p0 <= 0 || p0 >= 1) return [err('Baseline risk must be between 0 and 1 (exclusive)')];
+      if (!isFinite(effect) || effect <= 0) return [err('Effect size must be greater than 0')];
+      if (!isFinite(N) || N < 2) return [err('Patients per group must be at least 2')];
+
+      const odds0 = p0 / (1 - p0);
+      let RR, OR, p1;
+
+      if (holdConstant === 'or') {
+        OR = effect;
+        const odds1 = OR * odds0;
+        p1 = odds1 / (1 + odds1);
+        RR = p1 / p0;
+      } else {
+        RR = effect;
+        p1 = p0 * RR;
+        if (!isFinite(p1) || p1 <= 0 || p1 >= 1)
+          return [err(`At a baseline risk of ${(p0 * 100).toFixed(0)}%, an RR of ${RR.toFixed(2)} would put the exposed/treated-group risk ${p1 >= 1 ? 'at or above 100%' : 'at or below 0%'} — lower the RR or the baseline risk.`)];
+        const odds1 = p1 / (1 - p1);
+        OR = odds1 / odds0;
+      }
+
+      if (!isFinite(p1) || p1 <= 0 || p1 >= 1)
+        return [err(`At a baseline risk of ${(p0 * 100).toFixed(0)}%, an OR of ${OR.toFixed(2)} would put the exposed/treated-group risk ${p1 >= 1 ? 'at or above 100%' : 'at or below 0%'} — lower the OR or the baseline risk.`)];
+
+      const a = Math.round(p1 * N);
+      const b = N - a;
+      const c = Math.round(p0 * N);
+      const d = N - c;
+
+      const ARD = p1 - p0;
+      const isBeneficial = ARD < 0;
+      const NNT = Math.abs(ARD) < 1e-9 ? Infinity : Math.ceil(1 / Math.abs(ARD));
+
+      const f = (v, dp = 3) => +(v.toFixed(dp));
+      const pct = v => (v * 100).toFixed(1) + '%';
+
+      return {
+        title: 'RR/OR & Baseline Risk Explorer',
+        subtitle: holdConstant === 'or'
+          ? `Holding OR fixed at ${f(OR, 2)}× while the baseline risk slides — RR drifts to ${f(RR, 2)}×`
+          : `Holding RR fixed at ${f(RR, 2)}× while the baseline risk slides — OR drifts to ${f(OR, 2)}×`,
+        chartSvg: twoStageFlowSVG('Population', [
+          { label: 'Exposed / Treated', value: N, color: '#4E6EDB', children: [
+            { label: 'Outcome +', value: a, color: '#4E6EDB' },
+            { label: 'Outcome −', value: b, color: '#4E6EDB' },
+          ] },
+          { label: 'Unexposed / Control', value: N, color: '#E07B2C', children: [
+            { label: 'Outcome +', value: c, color: '#E07B2C' },
+            { label: 'Outcome −', value: d, color: '#E07B2C' },
+          ] },
+        ]),
+        legend: [
+          { color: '#4E6EDB', label: 'Exposed / Treated' },
+          { color: '#E07B2C', label: 'Unexposed / Control' },
+        ],
+        stats: [
+          { label: 'Baseline (Control) Risk',  value: pct(p0) },
+          { label: 'Exposed/Treated Risk',     value: pct(p1) },
+          { label: 'Relative Risk (RR)',        value: f(RR, 3) },
+          { label: 'Odds Ratio (OR)',           value: f(OR, 3) },
+          { label: 'Absolute Risk Difference',  value: (ARD >= 0 ? '+' : '') + pct(ARD) },
+          { label: isBeneficial ? 'NNT for Benefit (NNTB)' : 'NNT for Harm (NNTH)', value: NNT === Infinity ? '∞' : NNT },
+          { label: '2×2 Counts (a, b, c, d)',    value: `${a}, ${b}, ${c}, ${d}` },
+        ],
+        footnote: `${holdConstant === 'or' ? 'OR' : 'RR'} stays fixed here by construction — only the baseline risk moves. Notice how the absolute risk difference and NNT swing widely even though the relative effect never changes: the same ${holdConstant === 'or' ? `OR of ${f(OR, 2)}×` : `RR of ${f(RR, 2)}×`} means very different numbers of patients affected depending on how common the outcome already is. Also watch RR and OR themselves — they track closely when the baseline risk is low, but pull apart as it rises, which is why OR should not be read as if it were RR when the outcome is common.`,
+      };
+    }
+  },
+
   /* ── 1b. NESTED CASE-CONTROL (1:1 MATCHED) ────────────────────────────
      Distinct from a standard (unmatched) case-control study: each case
      is matched to one control sampled from the risk set at the exact
@@ -18115,6 +18245,7 @@ const CALCULATOR_INDEX = [
 
   // ── 10. EPIDEMIOLOGY & RISK ───────────────────────────────────────────
   { id: 'measures-of-association', name: 'Measures of Association',      category: 'Epidemiology & Risk',         description: 'Computes AR, ARD, RR, RRD, OR, and NNTB/NNTH with 95% CIs from a 2×2 exposure-outcome table.',           status: 'available' },
+  { id: 'rr-or-baseline-risk-explorer', name: 'RR/OR & Baseline Risk Explorer', category: 'Epidemiology & Risk',   description: 'Holds RR or OR fixed while you slide baseline risk, showing how the absolute risk difference, NNT, and 2×2 table change even though the relative effect does not.', status: 'available' },
   { id: 'nested-case-control',  name: 'Nested Case-Control (1:1 Matched)', category: 'Epidemiology & Risk',       description: 'Computes a matched odds ratio from 1:1 nested case-control pairs — a direct estimate of the incidence rate ratio due to risk-set sampling.', status: 'available' },
   { id: 'se-lnrr-lnor',            name: 'SE of ln(RR) & ln(OR) — 2×2 Table', category: 'Epidemiology & Risk',   description: 'Computes the standard error of a difference in proportions, ln(RR), and ln(OR) from a 2×2 table of exposure and outcome counts.', status: 'available' },
   { id: 'se-rate',                 name: 'Standard Error of a Rate',      category: 'Epidemiology & Risk',        description: 'Computes the standard error of an incidence rate from the number of events and total person-time.', status: 'available' },
@@ -19331,6 +19462,7 @@ const SEARCH_KEYWORDS = {
   // Epidemiology & Risk
   'measures-of-association': ['relative risk', 'odds ratio', 'risk difference', '2x2 exposure outcome table', 'rct treatment effect', 'randomized controlled trial results', 'arr', 'rrr', 'cohort study', 'case-control study', 'nntb', 'nnth', 'nnt', 'nnh', 'number needed to treat', 'number needed to harm'],
   'nested-case-control': ['nested case-control', 'matched case-control study', 'risk-set sampling', 'incidence density sampling', 'matched odds ratio', '1:1 matching'],
+  'rr-or-baseline-risk-explorer': ['baseline risk simulator', 'hold rr constant', 'hold or constant', 'rr vs or', 'relative risk vs absolute risk', 'absolute risk difference simulator', 'nnt simulator', 'why rr and or diverge', 'risk ratio odds ratio explorer'],
   'se-lnrr-lnor':            ['standard error of log relative risk', 'se of log odds ratio', 'cohort study', 'case-control study'],
   'se-rate':                 ['standard error of an incidence rate', 'cohort study'],
   'se-rate-ratio':           ['standard error of a rate ratio', 'cohort study'],
@@ -20267,6 +20399,15 @@ const NOTATION = {
     { symbol: 'n_1, n_2', meaning: 'Total number of subjects in the exposed group (n₁) and unexposed group (n₂).' },
     { symbol: '\\chi^2', meaning: 'Chi-square statistic testing whether exposure and outcome are independent in the table.' },
     { symbol: 'N', meaning: 'Total sample size across all four cells (n₁ + n₂), used in the chi-square formula.' },
+  ],
+  'rr-or-baseline-risk-explorer': [
+    { symbol: 'p_0', meaning: 'Baseline (control/unexposed-group) risk — the slider you drag.' },
+    { symbol: 'p_1', meaning: "Exposed/treated-group risk implied by whichever of RR or OR is held fixed at p₀'s current value." },
+    { symbol: '\\text{odds}_0, \\text{odds}_1', meaning: 'Odds of the outcome in the unexposed and exposed groups: p / (1 − p).' },
+    { symbol: 'RR', meaning: 'Relative risk, p₁ / p₀.' },
+    { symbol: 'OR', meaning: 'Odds ratio, odds₁ / odds₀.' },
+    { symbol: 'ARD', meaning: 'Absolute risk difference, p₁ − p₀ — the quantity that moves even when RR or OR is held constant.' },
+    { symbol: 'NNT', meaning: 'Number needed to treat (for benefit) or to harm, ⌈1 / |ARD|⌉.' },
   ],
   'se-lnrr-lnor': [
     { symbol: 'p_1, p_2', meaning: 'Proportion with the outcome in the exposed group (p₁) and the unexposed group (p₂).' },
