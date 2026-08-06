@@ -139,6 +139,19 @@ document.addEventListener('DOMContentLoaded', () => {
       wrap.style.overflowY = 'visible';
     }
 
+    // Flash the destination row (style.css's .gloss-flash animation)
+    // so the eye lands on the right entry — the #gloss-* anchor spans
+    // are invisible markers, so the jump alone gives no visual cue of
+    // which row it arrived at. Stripping the class everywhere first,
+    // then forcing a reflow, restarts the animation even when the same
+    // term is clicked twice in a row.
+    const row = target.closest('tr');
+    if (row) {
+      document.querySelectorAll('.gloss-flash').forEach(el => el.classList.remove('gloss-flash'));
+      void row.offsetWidth;
+      row.classList.add('gloss-flash');
+    }
+
     // Several attempts at reproducing "scroll this into view" by hand
     // (scrollIntoView with various options, then manual pixel math
     // against #main) all produced subtly wrong positions. Simplest
@@ -165,8 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // Tables short enough to fit inside the clamp never had the
           // problem, so skip them and avoid a visible late re-scroll.
           if (wrap.scrollHeight > wrap.clientHeight) {
-            const row = target.closest('tr') || target;
-            wrap.scrollTop = row.getBoundingClientRect().top - wrap.getBoundingClientRect().top - 44;
+            wrap.scrollTop = (row || target).getBoundingClientRect().top - wrap.getBoundingClientRect().top - 44;
             wrap.scrollIntoView({ block: 'start', behavior: 'instant' });
           }
         }

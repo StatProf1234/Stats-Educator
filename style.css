@@ -2191,6 +2191,22 @@ body {
   font-weight: 600;
 }
 
+/* Glossary quick-index jump flash — briefly tints the row a #gloss-*
+   link just landed on (class added in app.js's gloss click handler),
+   then fades back to whatever the cascade otherwise gives the row
+   (zebra stripe or plain). An animation rather than a static
+   background on purpose: a running animation's properties outrank the
+   higher-specificity zebra rule above without joining its specificity
+   arms race, and expire on their own when the flash ends. */
+.ref-table tr.gloss-flash td {
+  animation: gloss-flash 2.4s ease-out;
+}
+
+@keyframes gloss-flash {
+  0%, 40% { background: rgba(78, 110, 219, .16); }
+  100%    { background: rgba(78, 110, 219, 0); }
+}
+
 /* Traffic-light risk-of-bias judgment chips (RoB 2-style tables) —
    reuses --amber for "Some concerns" (already the site's one
    pre-existing semantic accent color); low/high add a small green/red
