@@ -155,6 +155,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (wrap) {
           wrap.style.maxHeight = prevMaxHeight;
           wrap.style.overflowY = prevOverflowY;
+          // Re-clamping a tall table would otherwise swallow a row in
+          // its bottom half back into the wrap's scrollbox (reset to
+          // the top) while the page under the reader shortens by the
+          // clamped-off height — so re-point both scroll levels at the
+          // row: the wrap's inner scrollbar (offset past the sticky
+          // thead, which floats over the first ~36px of the scrollbox),
+          // then the page scroll back onto the re-clamped wrap itself.
+          // Tables short enough to fit inside the clamp never had the
+          // problem, so skip them and avoid a visible late re-scroll.
+          if (wrap.scrollHeight > wrap.clientHeight) {
+            const row = target.closest('tr') || target;
+            wrap.scrollTop = row.getBoundingClientRect().top - wrap.getBoundingClientRect().top - 44;
+            wrap.scrollIntoView({ block: 'start', behavior: 'instant' });
+          }
         }
       }, 400);
     }));
