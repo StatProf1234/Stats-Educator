@@ -1583,18 +1583,27 @@ function renderExplorerCalculator(calc) {
     if (!el) return;
 
     // Sliders get a paired exact-value number field (see controlsHtml
-    // above) — the range stays the source of truth readInputs() reads
-    // from, the number field just pushes precise edits into it.
+    // above). The range element's own `value` is NOT a safe source of
+    // truth for this: per spec, a range input's value sanitization
+    // algorithm snaps to the nearest multiple of `step` even when set
+    // programmatically (not just when dragged), so writing e.g. 0.0224
+    // into a slider with step 0.05 silently collapses it to 0. The
+    // exact typed/dragged number is instead kept in `el.dataset.exact`,
+    // which readInputs() reads in preference to el.value; el.value
+    // itself is still set (and left to snap) purely to position the
+    // visible thumb.
     if (inp.type === 'slider') {
       const numEl = document.getElementById('num-' + inp.id);
       const caption = document.getElementById('val-' + inp.id);
-      const decimals = stepDecimalPlaces(inp.step);
+      const decimals = inp.decimals != null ? inp.decimals : stepDecimalPlaces(inp.step);
       const clampToBounds = v => Math.min(inp.max, Math.max(inp.min, v));
       const setCaption = v => { if (caption) caption.textContent = inp.format ? inp.format(v) : String(v); };
 
       el.addEventListener('input', () => {
-        if (numEl) numEl.value = (+el.value).toFixed(decimals);
-        setCaption(parseFloat(el.value));
+        const v = parseFloat(el.value);
+        el.dataset.exact = v;
+        if (numEl) numEl.value = v.toFixed(decimals);
+        setCaption(v);
         run();
       });
 
@@ -1602,7 +1611,9 @@ function renderExplorerCalculator(calc) {
         numEl.addEventListener('input', () => {
           const v = parseFloat(numEl.value);
           if (isNaN(v)) return;
-          el.value = clampToBounds(v);
+          const clamped = clampToBounds(v);
+          el.value = clamped;
+          el.dataset.exact = clamped;
           setCaption(v);
           run();
         });
@@ -1617,6 +1628,7 @@ function renderExplorerCalculator(calc) {
           else v = clampToBounds(v);
           numEl.value = v;
           el.value = v;
+          el.dataset.exact = v;
           setCaption(v);
           run();
         };
@@ -1934,6 +1946,7 @@ function zeroInputs(calc) {
       el.checked = false;
     } else if (inp.type === 'slider') {
       el.value = (inp.min <= 0 && inp.max >= 0) ? 0 : inp.min;
+      el.dataset.exact = el.value;
       const numEl = document.getElementById('num-' + inp.id);
       if (numEl) numEl.value = (+el.value).toFixed(stepDecimalPlaces(inp.step));
       const label = document.getElementById('val-' + inp.id);
@@ -1954,6 +1967,11 @@ function readInputs(calc) {
     if (!el) { vals[inp.id] = inp.default; continue; }
     vals[inp.id] = (inp.type === 'textarea' || inp.type === 'select' || inp.type === 'text') ? el.value
       : inp.type === 'checkbox' ? el.checked
+      // Range inputs snap their own `value` to the nearest multiple of
+      // `step` even when set from script, so a slider paired with an
+      // exact-value number field (see renderExplorerCalculator) stashes
+      // the un-snapped number in data-exact — prefer that when present.
+      : inp.type === 'slider' && el.dataset.exact !== undefined ? parseFloat(el.dataset.exact)
       : parseFloat(el.value);
   }
   return vals;

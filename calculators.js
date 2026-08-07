@@ -289,12 +289,12 @@ const CALCULATORS = [
         { value: 'rr', label: 'Relative Risk (RR)' },
         { value: 'or', label: 'Odds Ratio (OR)' },
       ] },
-      { id: 'effect', type: 'slider', label: 'Effect Size (RR or OR, per selection above)', default: 0.5, min: 0, max: 4, step: 0.05, wide: true,
-        format: v => v.toFixed(Math.abs(v) < 0.1 ? 4 : 2) + '×',
-        note: 'The slider steps by 0.05, but the box beside it takes any exact value down to 0.01 (e.g. 0.0224) — type directly into the box for a precision the slider itself can\'t land on.' },
-      { id: 'baselineRisk', type: 'slider', label: 'Baseline (Control-Group) Risk (%)', default: 20, min: 0, max: 95, step: 1,
-        format: v => v.toFixed(v < 1 ? 3 : 2) + '%',
-        note: 'The slider steps by 1 percentage point, but the box beside it takes any exact value down to 0.01% (e.g. 58.257) — type directly into the box for a rare-disease baseline risk the slider itself can\'t land on. Entered in the same % units the results below use, so what you type is what you\'ll see come back out.' },
+      { id: 'effect', type: 'slider', label: 'Effect Size (RR or OR, per selection above)', default: 0.5, min: 0, max: 4, step: 0.05, wide: true, decimals: 4,
+        format: v => v.toFixed(4) + '×',
+        note: 'The slider steps by 0.05, but the box beside it takes any exact value to 4 decimal places (e.g. 0.0224) — type directly into the box for a precision the slider itself can\'t land on. Shown to the same 4 decimal places as RR/OR below, so what you type is what you\'ll see come back out.' },
+      { id: 'baselineRisk', type: 'slider', label: 'Baseline (Control-Group) Risk (%)', default: 20, min: 0, max: 95, step: 1, decimals: 2,
+        format: v => v.toFixed(2) + '%',
+        note: 'The slider steps by 1 percentage point, but the box beside it takes any exact value to 2 decimal places (e.g. 58.26) — type directly into the box for a rare-disease baseline risk the slider itself can\'t land on. Entered and shown in the same % units, to the same 2 decimal places, that the results below use, so what you type is what you\'ll see come back out.' },
       { id: 'n', type: 'slider', label: 'Patients per Group', default: 500, min: 50, max: 5000, step: 50,
         format: v => Math.round(v).toLocaleString('en-US') },
     ],
@@ -360,6 +360,7 @@ const CALCULATORS = [
 
       const f = (v, dp = 3) => +(v.toFixed(dp));
       const pct = v => (v * 100).toFixed(1) + '%';
+      const pct2 = v => (v * 100).toFixed(2) + '%';
       const pct4 = v => (v * 100).toFixed(4) + '%';
 
       return {
@@ -382,7 +383,7 @@ const CALCULATORS = [
           { color: '#E07B2C', label: 'Unexposed / Control' },
         ],
         stats: [
-          { label: 'Baseline (Control) Risk',  value: pct4(p0) },
+          { label: 'Baseline (Control) Risk',  value: pct2(p0) },
           { label: 'Exposed/Treated Risk',     value: pct4(p1) },
           { label: 'Relative Risk (RR)',        value: RR.toFixed(4) },
           { label: 'Odds Ratio (OR)',           value: OR.toFixed(4) },
