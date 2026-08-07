@@ -292,15 +292,15 @@ const CALCULATORS = [
       { id: 'effect', type: 'slider', label: 'Effect Size (RR or OR, per selection above)', default: 0.5, min: 0.01, max: 4, step: 0.05, wide: true,
         format: v => v.toFixed(Math.abs(v) < 0.1 ? 4 : 2) + '×',
         note: 'The slider steps by 0.05, but the box beside it takes any exact value down to 0.01 (e.g. 0.0224) — type directly into the box for a precision the slider itself can\'t land on.' },
-      { id: 'baselineRisk', type: 'slider', label: 'Baseline (Control-Group) Risk', default: 0.20, min: 0.0001, max: 0.95, step: 0.01,
-        format: v => (v * 100).toFixed(v < 0.001 ? 3 : v < 0.01 ? 2 : 0) + '%',
-        note: 'The slider steps by 1 percentage point, but the box beside it takes any exact value down to 0.01% — type directly into the box for a rare-disease baseline risk the slider itself can\'t land on.' },
+      { id: 'baselineRisk', type: 'slider', label: 'Baseline (Control-Group) Risk (%)', default: 20, min: 0.01, max: 95, step: 1,
+        format: v => v.toFixed(v < 1 ? 3 : 2) + '%',
+        note: 'The slider steps by 1 percentage point, but the box beside it takes any exact value down to 0.01% (e.g. 58.257) — type directly into the box for a rare-disease baseline risk the slider itself can\'t land on. Entered in the same % units the results below use, so what you type is what you\'ll see come back out.' },
       { id: 'n', type: 'slider', label: 'Patients per Group', default: 500, min: 50, max: 5000, step: 50,
         format: v => Math.round(v).toLocaleString('en-US') },
     ],
 
     example({ holdConstant, effect, baselineRisk }) {
-      const p0 = baselineRisk;
+      const p0 = baselineRisk / 100;
       if (!isFinite(p0) || p0 <= 0 || p0 >= 1 || !isFinite(effect) || effect <= 0)
         return 'Choose whether to hold RR or OR constant, then set an effect size and baseline risk to see a worked medical example here.';
       const odds0 = p0 / (1 - p0);
@@ -323,9 +323,9 @@ const CALCULATORS = [
     },
 
     calculate({ holdConstant, effect, baselineRisk, n }) {
-      const p0 = baselineRisk;
+      const p0 = baselineRisk / 100;
       const N  = Math.round(n);
-      if (!isFinite(p0) || p0 <= 0 || p0 >= 1) return [err('Baseline risk must be between 0 and 1 (exclusive)')];
+      if (!isFinite(p0) || p0 <= 0 || p0 >= 1) return [err('Baseline risk must be between 0% and 100% (exclusive)')];
       if (!isFinite(effect) || effect <= 0) return [err('Effect size must be greater than 0')];
       if (!isFinite(N) || N < 2) return [err('Patients per group must be at least 2')];
 
