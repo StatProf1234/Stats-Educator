@@ -360,6 +360,7 @@ const CALCULATORS = [
 
       const f = (v, dp = 3) => +(v.toFixed(dp));
       const pct = v => (v * 100).toFixed(1) + '%';
+      const pct4 = v => (v * 100).toFixed(4) + '%';
 
       return {
         title: 'RR/OR & Baseline Risk Explorer',
@@ -381,10 +382,10 @@ const CALCULATORS = [
           { color: '#E07B2C', label: 'Unexposed / Control' },
         ],
         stats: [
-          { label: 'Baseline (Control) Risk',  value: pct(p0) },
-          { label: 'Exposed/Treated Risk',     value: pct(p1) },
-          { label: 'Relative Risk (RR)',        value: f(RR, 3) },
-          { label: 'Odds Ratio (OR)',           value: f(OR, 3) },
+          { label: 'Baseline (Control) Risk',  value: pct4(p0) },
+          { label: 'Exposed/Treated Risk',     value: pct4(p1) },
+          { label: 'Relative Risk (RR)',        value: RR.toFixed(4) },
+          { label: 'Odds Ratio (OR)',           value: OR.toFixed(4) },
           { label: 'Absolute Risk Difference',  value: (ARD >= 0 ? '+' : '') + pct(ARD) },
           { label: isBeneficial ? 'NNT for Benefit (NNTB)' : 'NNT for Harm (NNTH)', value: NNT === Infinity ? '∞' : NNT },
           { label: '2×2 Counts (a, b, c, d)',    value: `${a}, ${b}, ${c}, ${d}` },
