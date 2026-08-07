@@ -21926,6 +21926,49 @@ const GUIDES = [
       { id: 'or-to-nnt-nnh', why: 'Converts an odds ratio into NNTB/NNTH using a stated control event rate.' },
       { id: 'or-to-rr', why: 'Converts between odds ratio and relative risk given a baseline risk — useful for checking how much they diverge.' },
       { id: 'reading-fagan-nomogram', why: 'The diagnostic-testing analog of this guide\'s odds-vs-risk distinction — likelihood ratios, and why the diagnostic odds ratio equals LR+/LR−.' },
+      { id: 'appraisal-md-vs-smd', why: 'The same relative-vs-absolute-style distinction, applied to continuous outcomes — mean difference (MD) versus standardized mean difference (SMD).' },
+    ],
+  },
+
+  {
+    id: 'appraisal-md-vs-smd',
+    category: 'Critical Appraisal of the Literature',
+    title: 'Mean Difference vs. Standardized Mean Difference: When Units Matter and When They Don\'t',
+    blurb: 'Two ways to report the same gap between two group means — one keeps the outcome\'s own units, the other rescales it into SD units so results measured on different scales can be compared or pooled.',
+    dek: `Mean difference (MD) and standardized mean difference (SMD) both summarize the gap between two group means on a continuous outcome, and for any single study they carry the same underlying information. They diverge in what they're useful for: MD stays in the outcome's original, clinically interpretable units; SMD strips those units away so a result becomes comparable across studies that measured the same underlying construct with different instruments. Picking the wrong one — or not noticing which one a paper or forest plot is showing — makes an effect look more or less interpretable than it actually is.`,
+    sections: [
+      {
+        heading: 'Mean difference (MD): same units, same scale',
+        html: `<p>Mean difference is simply the difference between two group means, reported in whatever units the outcome was originally measured in &mdash; mmHg, kg, points on a specific pain scale, days. MD = mean(group 1) &minus; mean(group 2). Because it stays in the original units, a reader who knows the scale can judge the result directly: a 5 mmHg reduction in systolic blood pressure means something concrete on its own, without needing to know anything about the study's sample size or variability.</p><p>The cost of that directness is comparability. MD is only meaningful when every study being compared measured the outcome on the <em>same</em> scale. A 5-point improvement on one 0&ndash;100 anxiety scale is not the same size of effect as a 5-point improvement on a different 0&ndash;20 scale &mdash; the units look identical but aren't.</p>`,
+      },
+      {
+        heading: 'Standardized mean difference (SMD): the gap in SD units',
+        html: `<p>Standardized mean difference expresses that same gap in units of standard deviation instead: SMD = (mean(group 1) &minus; mean(group 2)) / (pooled SD). Cohen's d is the most common version of this calculation, and Hedges' g is a small-sample bias-corrected variant of Cohen's d &mdash; both compute an SMD; Hedges' g is the version conventionally reported once a value is being pooled across studies, since it corrects the slight overestimation Cohen's d carries in smaller samples.</p><p>Dividing by the SD strips the original units out entirely, which is exactly what makes SMD useful for combining studies that measured the same underlying construct with different instruments &mdash; one trial's 0&ndash;100 depression scale and another's 0&ndash;63 scale can both be converted to an SMD and then compared or pooled on that common footing. The trade-off is that SMD loses direct clinical meaning: "an SMD of 0.5" doesn't say anything about the outcome's real-world units by itself, and standard verbal benchmarks for its size (roughly, 0.2 small, 0.5 medium, 0.8 large, per Cohen's original convention) are rough guides, not clinical thresholds.</p>`,
+      },
+      {
+        heading: 'Worked example: the same result, two readings',
+        html: `<p>A trial compares two anxiety treatments on a symptom scale. Treatment A's mean score is 42, Treatment B's is 50 (SD, pooled, of 16 in both arms). The MD is 42 &minus; 50 = &minus;8 points on that specific scale &mdash; interpretable immediately by anyone familiar with the instrument, but meaningless to someone who doesn't know its range or minimal important difference. The same result as an SMD (Cohen's d) is &minus;8 / 16 = &minus;0.5, a "medium" effect by convention &mdash; interpretable across any anxiety scale, but no longer saying anything concrete about symptom points. Neither number is more "correct"; they answer different questions from the same data. The <a href="#cohens-d">Cohen's d</a> calculator on this site computes exactly this conversion.</p>`,
+      },
+      {
+        heading: 'Why meta-analyses default to SMD',
+        html: `<p>A meta-analysis pooling several trials of the same intervention almost never finds every trial used the identical outcome instrument &mdash; different depression scales, different pain scales, different lab assay units are common even within one systematic review's inclusion criteria. Pooling raw MDs across such trials would silently average incompatible units together. Converting each trial's result to an SMD first removes that incompatibility, at the cost of the pooled effect no longer being expressible in any one scale's real units &mdash; a pooled SMD of 0.4 has to be translated back into a specific instrument's points before it means anything to a clinician reading the result. When every included trial <em>did</em> use the same instrument, pooling the raw MD is preferable specifically because it keeps that direct interpretability, and nothing is gained by standardizing away units that were already comparable.</p>`,
+      },
+      {
+        heading: 'What this distinction can — and cannot — tell you',
+        html: `<p>Checking whether a result is reported as MD or SMD tells you whether the number in front of you is anchored to a real-world scale or not, and therefore whether "how big is this effect" can be answered directly or only by convention-based benchmarks (or by converting back to a familiar instrument, when the underlying SD is known). It does not, by itself, tell you whether an effect is statistically significant or clinically important &mdash; both of those still require the estimate's confidence interval and, for clinical importance, a stated minimal important difference (MID) on the same scale as whichever measure is being read.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper or forest plot reports "SMD" or "standardized mean difference" (or "Cohen's d" / "Hedges' g" by name), don't read the number as if it were in the outcome's original units &mdash; treat 0.2/0.5/0.8 as rough small/medium/large benchmarks only, and look for the trial's own reporting of raw group means (often in a baseline or results table) if you need the effect back in real, clinically anchored units. When a paper reports a plain "mean difference," confirm every study being compared alongside it used the same outcome scale before treating the numbers as comparable.</p>`,
+      },
+    ],
+    related: [
+      { id: 'cohens-d', why: 'Computes the SMD (Cohen\'s d) directly from two groups\' means, SDs, and sample sizes.' },
+      { id: 'hedges-g', why: 'The bias-corrected version of Cohen\'s d, with a confidence interval — the SMD typically used as meta-analysis input.' },
+      { id: 'meta-analysis', why: 'Pools effect estimates on whichever scale is selected, including MD and SMD, from multiple studies\' point estimates and standard errors.' },
+      { id: 'md-vs-mid', why: 'Once you have a mean difference in real units, compares its confidence interval against a minimal important difference to judge clinical importance.' },
+      { id: 'appraisal-effect-measures', why: 'The same relative-vs-absolute-style distinction applied to binary outcomes — relative risk, odds ratio, and absolute effects.' },
+      { id: 'appraisal-sd-vs-se', why: 'Covers the standard deviation that SMD divides by — and why it is a different quantity from standard error.' },
     ],
   },
 
@@ -22268,6 +22311,7 @@ const GUIDES = [
     related: [
       { id: 'appraisal-confidence-intervals', why: 'Covers the third quantity in this comparison — the confidence interval, built directly from SE.' },
       { id: 'appraisal-effect-measures', why: 'The same "commonly confused, look interchangeable" structure applied to RR, OR, and absolute measures.' },
+      { id: 'appraisal-md-vs-smd', why: 'Uses this same SD directly — it\'s the divisor that turns a mean difference into a standardized mean difference.' },
       { id: 'standard-error', why: 'Computes SE directly from SD and sample size, useful for reconstructing the numbers behind a reported figure.' },
     ],
   },
