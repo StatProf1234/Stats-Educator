@@ -1424,6 +1424,7 @@ function renderExplorerCalculator(calc) {
         </div>`;
     }
     const display = inp.format ? inp.format(inp.default) : String(inp.default);
+    const note = inp.note ? `<p class="input-hint explorer-control-note">${esc(inp.note)}</p>` : '';
     return `
       <div class="explorer-control${inp.wide ? ' explorer-control-wide' : ''}">
         <label class="explorer-control-label" for="inp-${inp.id}">${esc(upperAscii(inp.label))}</label>
@@ -1435,6 +1436,7 @@ function renderExplorerCalculator(calc) {
                  aria-label="${escAttr(inp.label)} — exact value">
           <span class="explorer-control-caption" id="val-${inp.id}">${esc(display)}</span>
         </div>
+        ${note}
       </div>`;
   }).join('') + `
     <div class="explorer-control explorer-control-select">
