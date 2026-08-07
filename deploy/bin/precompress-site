@@ -1,0 +1,8 @@
+#!/bin/bash
+# Build .gz siblings for text assets so nginx can serve them via gzip_static
+# with no per-request compression cost. Stale .gz files are dropped first.
+set -eu
+ROOT=${1:-/var/www/stats-educator}
+find "$ROOT" -name '*.gz' -delete
+find "$ROOT" -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' -o -name '*.svg' \) \
+     -size +1k -print0 | xargs -0 -r gzip -9 -k -f

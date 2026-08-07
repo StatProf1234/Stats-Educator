@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Back shortly — The Biostat Toolkit</title>
+<style>
+  /* Deliberately self-contained: no fonts, images or scripts are fetched from
+     anywhere, so this page still renders when nothing else is reachable. */
+
+  :root {
+    --bg:        #EEF1F7;
+    --bg-tint-1: rgba(78,110,219,.16);
+    --bg-tint-2: rgba(30,26,71,.10);
+    --panel:     rgba(255,255,255,.78);
+    --panel-brd: rgba(30,26,71,.10);
+    --ink:       #16162B;
+    --ink-2:     #4A4E6B;
+    --ink-3:     #7B8099;
+    --accent:    #4056C8;
+    --accent-2:  #4E6EDB;
+    --amber:     #C96A1E;
+    --amber-dot: #E07B2C;
+    --hair:      rgba(30,26,71,.12);
+    --shadow:
+      0 1px 2px rgba(22,22,43,.04),
+      0 8px 24px -8px rgba(22,22,43,.14),
+      0 32px 64px -24px rgba(22,22,43,.16);
+    --ring:      rgba(64,86,200,.38);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #0E0D18;
+      --bg-tint-1: rgba(96,124,232,.20);
+      --bg-tint-2: rgba(126,106,232,.13);
+      --panel:     rgba(31,29,54,.72);
+      --panel-brd: rgba(255,255,255,.09);
+      --ink:       #F2F1FA;
+      --ink-2:     #BFBBDC;
+      --ink-3:     #8C88AE;
+      --accent:    #93A8F5;
+      --accent-2:  #A9B9F8;
+      --amber:     #F0A868;
+      --amber-dot: #E89B55;
+      --hair:      rgba(255,255,255,.10);
+      --shadow:
+        0 1px 2px rgba(0,0,0,.4),
+        0 8px 24px -8px rgba(0,0,0,.5),
+        0 32px 64px -24px rgba(0,0,0,.5);
+      --ring:      rgba(147,168,245,.45);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    display: grid;
+    place-items: center;
+    padding: clamp(16px, 5vw, 48px);
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 16px/1.6 ui-sans-serif, system-ui, -apple-system,
+          'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Two soft light sources rather than a flat fill, so the page reads as a
+     designed surface instead of a default background. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background:
+      radial-gradient(58% 44% at 18% 8%,  var(--bg-tint-1) 0%, transparent 68%),
+      radial-gradient(52% 46% at 88% 96%, var(--bg-tint-2) 0%, transparent 66%);
+    pointer-events: none;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 520px);
+    padding: clamp(30px, 5.5vw, 52px) clamp(24px, 5vw, 52px)
+             clamp(26px, 4.5vw, 40px);
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid var(--panel-brd);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    animation: rise .7s cubic-bezier(.22,.8,.3,1) both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px) scale(.985); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* ── status pill ─────────────────────────────────────── */
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 13px 6px 10px;
+    border: 1px solid var(--hair);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--amber);
+  }
+
+  .dot {
+    position: relative;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--amber-dot);
+    flex: none;
+  }
+
+  .dot::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1.5px solid var(--amber-dot);
+    animation: ping 2.4s cubic-bezier(.2,.7,.4,1) infinite;
+  }
+
+  @keyframes ping {
+    0%        { transform: scale(.55); opacity: .85; }
+    70%, 100% { transform: scale(1.5);  opacity: 0;   }
+  }
+
+  /* ── hero curve ──────────────────────────────────────── */
+
+  figure { margin: clamp(26px, 5vw, 34px) 0 0; }
+
+  /* Scoped to the hero only. A bare `svg` selector here would also catch the
+     arrow icon in the link below and stretch it to the full card width. */
+  figure svg { display: block; width: 100%; height: auto; }
+
+  /* Custom properties are set here rather than as SVG presentation
+     attributes, which do not resolve var(). */
+  .grad-top { stop-color: var(--accent-2); stop-opacity: .30; }
+  .grad-bot { stop-color: var(--accent-2); stop-opacity: .02; }
+  .curve    { stroke: var(--accent); }
+  .centre   { fill: var(--accent); }
+
+  .band  { animation: fade 1s ease-out .55s both; }
+  .curve {
+    stroke-dasharray: 460;
+    stroke-dashoffset: 460;
+    animation: draw 1.5s cubic-bezier(.5,0,.2,1) .15s forwards;
+  }
+  .tick  { animation: fade .6s ease-out 1s both; }
+
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+  figcaption {
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-3);
+    text-align: center;
+  }
+
+  /* ── copy ────────────────────────────────────────────── */
+
+  h1 {
+    margin: clamp(26px, 5vw, 34px) 0 0;
+    font-size: clamp(30px, 7.4vw, 40px);
+    line-height: 1.1;
+    font-weight: 640;
+    letter-spacing: -.024em;
+    color: var(--ink);
+  }
+
+  .lead {
+    margin: 14px 0 0;
+    font-size: clamp(15px, 3.6vw, 16.5px);
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+
+  /* ── backup call to action ───────────────────────────── */
+
+  .cta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: clamp(24px, 4.5vw, 30px);
+    padding: 15px 18px;
+    border: 1px solid var(--hair);
+    border-radius: 13px;
+    text-decoration: none;
+    color: inherit;
+    background: transparent;
+    transition: border-color .18s ease, transform .18s ease,
+                background-color .18s ease;
+  }
+
+  .cta:hover {
+    border-color: var(--ring);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    transform: translateY(-1px);
+  }
+
+  .cta:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .cta-text { flex: 1 1 auto; min-width: 0; }
+
+  .cta-title {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .cta-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+  }
+
+  .arrow {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    display: block;
+    color: var(--accent);
+    transition: transform .18s ease;
+  }
+
+  .cta:hover .arrow { transform: translateX(3px); }
+
+  /* ── auto refresh note ───────────────────────────────── */
+
+  .watching {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin: 18px 0 0;
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+
+  /* Aligned to the first line rather than centred, so it does not drift into
+     the middle of the block when the text wraps on a narrow screen. */
+  .spinner {
+    flex: none;
+    margin-top: 4px;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid var(--hair);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1.1s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer {
+    margin-top: clamp(24px, 4.5vw, 32px);
+    padding-top: 18px;
+    border-top: 1px solid var(--hair);
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+
+  footer a { color: var(--ink-3); }
+  a { color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+    }
+    .curve { stroke-dashoffset: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <div class="status"><span class="dot"></span>Maintenance in progress</div>
+
+  <figure>
+    <svg viewBox="0 0 340 112" role="img"
+         aria-label="A normal distribution curve with its central 95 percent interval shaded.">
+      <defs>
+        <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+          <stop class="grad-top" offset="0"/>
+          <stop class="grad-bot" offset="1"/>
+        </linearGradient>
+      </defs>
+
+      <!-- baseline -->
+      <line class="tick" x1="0" y1="88" x2="340" y2="88"
+            stroke="currentColor" stroke-opacity=".14" stroke-width="1"/>
+
+      <!-- central 95% interval -->
+      <path class="band" fill="url(#fill)"
+            d="M 69.0,88 L 69.0,76.9 L 75.0,74.1 L 80.9,71.0 L 86.8,67.3 L 92.8,63.3 L 98.7,58.8 L 104.7,54.0 L 110.6,48.9 L 116.5,43.6 L 122.5,38.3 L 128.4,33.1 L 134.4,28.2 L 140.3,23.6 L 146.2,19.7 L 152.2,16.4 L 158.1,14.0 L 164.1,12.5 L 170.0,12.0 L 175.9,12.5 L 181.9,14.0 L 187.8,16.4 L 193.8,19.7 L 199.7,23.6 L 205.6,28.2 L 211.6,33.1 L 217.5,38.3 L 223.5,43.6 L 229.4,48.9 L 235.3,54.0 L 241.3,58.8 L 247.2,63.3 L 253.2,67.3 L 259.1,71.0 L 265.0,74.1 L 271.0,76.9 L 271.0,88 Z"/>
+
+      <!-- interval bounds and centre -->
+      <g class="tick" stroke="currentColor" stroke-width="1">
+        <line x1="69"  y1="82" x2="69"  y2="93" stroke-opacity=".28"/>
+        <line x1="271" y1="82" x2="271" y2="93" stroke-opacity=".28"/>
+        <line x1="170" y1="12" x2="170" y2="93" stroke-opacity=".14"
+              stroke-dasharray="2 4"/>
+      </g>
+
+      <!-- the distribution itself -->
+      <path class="curve" fill="none"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            d="M 0.0,87.7 L 5.9,87.5 L 11.7,87.3 L 17.6,87.0 L 23.4,86.7 L 29.3,86.2 L 35.2,85.5 L 41.0,84.7 L 46.9,83.6 L 52.8,82.3 L 58.6,80.7 L 64.5,78.7 L 70.3,76.3 L 76.2,73.5 L 82.1,70.3 L 87.9,66.6 L 93.8,62.6 L 99.7,58.1 L 105.5,53.3 L 111.4,48.2 L 117.2,43.0 L 123.1,37.8 L 129.0,32.7 L 134.8,27.8 L 140.7,23.4 L 146.6,19.5 L 152.4,16.3 L 158.3,13.9 L 164.1,12.5 L 170.0,12.0 L 175.9,12.5 L 181.7,13.9 L 187.6,16.3 L 193.4,19.5 L 199.3,23.4 L 205.2,27.8 L 211.0,32.7 L 216.9,37.8 L 222.8,43.0 L 228.6,48.2 L 234.5,53.3 L 240.3,58.1 L 246.2,62.6 L 252.1,66.6 L 257.9,70.3 L 263.8,73.5 L 269.7,76.3 L 275.5,78.7 L 281.4,80.7 L 287.2,82.3 L 293.1,83.6 L 299.0,84.7 L 304.8,85.5 L 310.7,86.2 L 316.6,86.7 L 322.4,87.0 L 328.3,87.3 L 334.1,87.5 L 340.0,87.7"/>
+
+      <!-- centre point -->
+      <circle class="tick centre" cx="170" cy="12" r="2.6"/>
+    </svg>
+    <figcaption>Most maintenance windows close well inside the interval.</figcaption>
+  </figure>
+
+  <h1>Back shortly</h1>
+
+  <p class="lead">
+    The Biostat Toolkit is offline for a short update. Nothing is wrong with
+    your connection or your device, and every calculator will be exactly where
+    you left it.
+  </p>
+
+  <a class="cta" href="https://statprof1234.github.io/Stats-Educator/">
+    <span class="cta-text">
+      <span class="cta-title">Open the backup copy</span>
+      <span class="cta-sub">Same calculators, hosted separately</span>
+    </span>
+    <svg class="arrow" width="18" height="18" viewBox="0 0 18 18" fill="none"
+         aria-hidden="true">
+      <path d="M3.5 9h11M10 4.5 14.5 9 10 13.5" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </a>
+
+  <p class="watching" id="watching">
+    <span class="spinner" aria-hidden="true"></span>
+    Checking every few seconds. This page reloads itself the moment we are back.
+  </p>
+
+  <footer>&copy; 2026 Michael Glick. Licensed under CC BY-NC-ND 4.0.</footer>
+
+</main>
+
+<script>
+  // Poll the site and reload as soon as it stops answering 503, so nobody has
+  // to sit refreshing. Skipped on the preview URL, which always answers 200
+  // and would otherwise reload in a loop.
+  (function () {
+    if (location.pathname.indexOf('preview') !== -1) {
+      var note = document.getElementById('watching');
+      if (note) note.style.display = 'none';
+      return;
+    }
+    var check = function () {
+      fetch('/', { method: 'HEAD', cache: 'no-store' })
+        .then(function (r) { if (r.status !== 503) location.reload(); })
+        .catch(function () { /* server unreachable; try again next tick */ });
+    };
+    setInterval(check, 12000);
+  })();
+</script>
+</body>
+</html>

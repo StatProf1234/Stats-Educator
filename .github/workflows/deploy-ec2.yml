@@ -43,13 +43,15 @@ jobs:
       - name: Sync site to server
         if: steps.creds.outputs.ready == 'true'
         run: |
-          # *.gz is excluded so --delete leaves the pre-compressed files alone;
-          # they are rebuilt in the next step.
+          # deploy/ holds server configuration, not website files, so it must
+          # never reach the public web root. *.gz is excluded so --delete
+          # leaves the pre-compressed files alone; they are rebuilt below.
           rsync -rlvz --delete \
             --exclude '.git' \
             --exclude '.github' \
             --exclude '.gitignore' \
             --exclude 'CLAUDE.md' \
+            --exclude 'deploy' \
             --exclude '*.gz' \
             -e 'ssh -i ~/.ssh/deploy_key' \
             ./ "$EC2_USER@$EC2_HOST:/var/www/stats-educator/"

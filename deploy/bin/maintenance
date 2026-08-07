@@ -1,0 +1,25 @@
+#!/bin/bash
+# Put the site into (or out of) maintenance mode.
+#   maintenance on      visitors get the notice page and a 503
+#   maintenance off     back to normal
+#   maintenance status  which mode is active
+set -eu
+FLAG=/var/www/maintenance/.enabled
+
+case "${1:-status}" in
+  on)
+    touch "$FLAG"
+    echo "Maintenance mode ON. Visitors now see the notice page."
+    ;;
+  off)
+    rm -f "$FLAG"
+    echo "Maintenance mode OFF. Site is live again."
+    ;;
+  status)
+    [ -f "$FLAG" ] && echo "Maintenance mode is ON" || echo "Site is live"
+    ;;
+  *)
+    echo "usage: maintenance on|off|status" >&2
+    exit 1
+    ;;
+esac
