@@ -480,6 +480,25 @@ function hubToggleHtml(active) {
     </div>`;
 }
 
+// Display order for the Full Calculator Index's category sections —
+// see renderHome() below for how categories missing from this list
+// (currently Probability & Distributions, Non-Parametric Tests) are handled.
+const HOME_CATEGORY_ORDER = [
+  'Descriptive Statistics',
+  'Epidemiology & Risk',
+  'T-Tests & Z-Tests',
+  'Chi-Square & Categorical',
+  'Effect Sizes & Agreement',
+  'Correlation & Regression',
+  'Power & Sample Size',
+  'Diagnostic Testing',
+  'ANOVA',
+  'Survival Analysis',
+  'Patient-Reported Outcomes',
+  'Bayesian & Meta-Analysis',
+  'Genetics & Genomics',
+];
+
 function renderHome() {
   // Group CALCULATOR_INDEX by category, preserving insertion order
   const groups = {};
@@ -490,7 +509,23 @@ function renderHome() {
   const { total, availLabel } = calculatorCountSummary();
   const { total: guideTotal, categories: guideCategories } = guideCountSummary();
 
-  const sections = Object.entries(groups).map(([cat, entries]) => {
+  // Deliberate display order for the home page's category sections
+  // (chosen to read roughly "most commonly reached-for first" rather
+  // than CALCULATOR_INDEX's own insertion order). Any category not
+  // listed here — currently Probability & Distributions and
+  // Non-Parametric Tests — falls back to the end, in whatever order
+  // it already had, via the stable sort below.
+  const orderedCats = Object.keys(groups).sort((a, b) => {
+    const ia = HOME_CATEGORY_ORDER.indexOf(a);
+    const ib = HOME_CATEGORY_ORDER.indexOf(b);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
+  const sections = orderedCats.map(cat => {
+    const entries = groups[cat];
     const cards = entries.map(entry => {
       const isAvailable = entry.status === 'available';
       // For available calculators, find the full definition for the formula hint
