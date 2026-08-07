@@ -1657,7 +1657,7 @@ body {
 
 .explorer-header {
   text-align: center;
-  margin-bottom: 26px;
+  margin-bottom: 16px;
 }
 
 .explorer-title {
@@ -1678,12 +1678,12 @@ body {
 .explorer-controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 24px;
+  gap: 16px 24px;
   background: var(--card);
   border: 1.5px solid var(--border);
   border-radius: 10px;
-  padding: 22px 26px;
-  margin-bottom: 20px;
+  padding: 16px 26px;
+  margin-bottom: 14px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1809,8 +1809,8 @@ body {
   background: var(--card);
   border: 1.5px solid var(--border);
   border-radius: 10px;
-  padding: 28px 26px 24px;
-  margin-bottom: 18px;
+  padding: 20px 26px 18px;
+  margin-bottom: 14px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1829,8 +1829,8 @@ body {
   flex-wrap: wrap;
   justify-content: center;
   gap: 18px;
-  margin-top: 18px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
@@ -1854,8 +1854,8 @@ body {
   flex-wrap: wrap;
   justify-content: center;
   gap: 28px;
-  margin-top: 18px;
-  padding-top: 18px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
