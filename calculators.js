@@ -319,7 +319,7 @@ const CALCULATORS = [
         return 'Adjust the effect size or baseline risk — this combination pushes the exposed/treated-group risk outside 0–100%.';
       const pct = v => (v * 100).toFixed(1);
       const f = v => v.toFixed(2);
-      return `A trial's control group has a ${pct(p0)}% event rate. Holding the ${holdConstant === 'or' ? `odds ratio fixed at ${f(OR)}×` : `relative risk fixed at ${f(RR)}×`}, the treated group's risk works out to ${pct(p1)}% — an absolute risk difference of ${pct(p1 - p0)} percentage points. That same relative effect (RR ${f(RR)}×, OR ${f(OR)}×) would translate into a very different absolute difference, and NNT, if the underlying baseline risk were higher or lower — drag the baseline-risk slider to see it happen.`;
+      return `A trial's control group has a ${pct(p0)}% event rate. Holding the ${holdConstant === 'or' ? `odds ratio fixed at ${f(OR)}×` : `relative risk fixed at ${f(RR)}×`}, the treated group's risk works out to ${pct(p1)}% — an absolute risk difference of ${pct(p1 - p0)} percentage points. That same relative effect (RR ${f(RR)}×, OR ${f(OR)}×) would translate into a very different absolute difference, and NNTB, if the underlying baseline risk were higher or lower — drag the baseline-risk slider to see it happen.`;
     },
 
     calculate({ holdConstant, effect, baselineRisk, n }) {
