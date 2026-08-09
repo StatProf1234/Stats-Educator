@@ -1651,6 +1651,41 @@ body {
   font-size: 13px;
 }
 
+/* ── COLUMN INPUTS (inputLayout: 'columns', e.g. one-sample z/t-test) ──
+   Side-by-side labeled columns (e.g. "Sample" vs. "Population / Null
+   Hypothesis") for calculators whose inputs split into a small number
+   of conceptually distinct groups with DIFFERENT fields each — unlike
+   .group-table's repeated Group 1/2/3 columns, which all share the same
+   field set and so line up as rows of one table instead. */
+.input-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.input-column {
+  flex: 1 1 220px;
+  background: var(--ground);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px 16px;
+}
+
+.input-column-header {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 12px;
+}
+
+.input-column-grid {
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
 /* ── EXPLORER LAYOUT (inputLayout: 'explorer', e.g. Statistical Power
    Explorer) — a live-updating hero visualization in place of the
    standard inputs-grid + Calculate button + results table. ───────── */

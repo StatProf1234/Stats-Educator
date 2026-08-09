@@ -23,7 +23,7 @@ There's no framework/SPA router — `app.js`'s `route()` reads `location.hash` a
 
 ### `calculators.js` top-level tables
 
-- `CALCULATORS` — array of fully-implemented calculators. Each entry has `id`, `name`, `hint`, `category`, `description`, `formulas` (LaTeX shown via KaTeX), `inputs` (+ optional `inputLayout: '2x2'` or `'groups'` for the two special input renderers), `calculate(values)` (returns an array of result rows), and optionally `example(values)` (worked-example prose, re-rendered live as inputs change).
+- `CALCULATORS` — array of fully-implemented calculators. Each entry has `id`, `name`, `hint`, `category`, `description`, `formulas` (LaTeX shown via KaTeX), `inputs` (+ optional `inputLayout: '2x2'`, `'groups'`, or `'columns'` for the special input renderers), `calculate(values)` (returns an array of result rows), and optionally `example(values)` (worked-example prose, re-rendered live as inputs change).
 - `CALCULATOR_INDEX` — the *full* catalog shown on the home page, including calculators not yet built (`status: 'planned'` vs `'available'`). This is a superset of `CALCULATORS` and drives the "Coming soon" cards — when adding a new calculator, add it to both `CALCULATOR_INDEX` (status `'available'`) and `CALCULATORS` (the full definition).
 - `WIZARD_TREE` — the "Which Calculator Should I Use?" decision tree (`#wizard/...`), keyed by node id; each node is either a question (`options: [{ label, next }]`) or a set of `results` (`{ id, why }`) pointing at `CALCULATORS` entries.
 - `SEARCH_KEYWORDS` — per-calculator-id synonym lists (e.g. "two independent groups") that outrank the calculator's own name in sidebar search relevance (see `searchScore()` in `app.js`).
@@ -35,7 +35,8 @@ There's no framework/SPA router — `app.js`'s `route()` reads `location.hash` a
 A calculator's `inputLayout` picks which renderer builds its input form:
 - default (`renderGrid`) — plain field-per-input grid; supports `number`, `text`, `select`, `slider`, `textarea` input types.
 - `'2x2'` (`render2x2`) — a 2×2 contingency table (cells `a`/`b`/`c`/`d` with live-updating row/column/grand totals) for epidemiology calculators; any inputs beyond those four render as a callout *above* the table via `render2x2ExtraInputs` (e.g. a study-design selector, since picking the wrong option there silently changes which results are valid).
-- `'groups'` (`renderGroupedInputs`) — one column per group (e.g. Group 1/2/3 Mean/SD/N) for multi-group tests/ANOVA, driven by `calc.groupFields` and `calc.groupMax`.
+- `'groups'` (`renderGroupedInputs`) — one column per group (e.g. Group 1/2/3 Mean/SD/N) for multi-group tests/ANOVA, driven by `calc.groupFields` and `calc.groupMax`. Groups share the *same* field set, laid out as rows of one table.
+- `'columns'` (`renderColumnInputs`) — a small, fixed number of labeled side-by-side columns with *different* fields each (e.g. "Sample" vs. "Population / Null Hypothesis" for the one-sample z/t-tests), driven by `calc.inputColumns` (`[{ label, ids }]`); any input not listed in a column (e.g. a shared alpha/tails selector) renders below as a plain grid.
 
 ### Results & CI visualization
 

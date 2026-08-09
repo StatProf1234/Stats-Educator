@@ -2131,13 +2131,17 @@ const CALCULATORS = [
 
   /* ── 19. 1-SAMPLE T-TEST ────────────────────────────────────────────────
      Tests a sample mean against a hypothesized population mean, σ
-     unknown (estimated by the sample SD).                              */
+     unknown (estimated by the sample SD). One-tailed always tests for
+     an increase above μ₀ (H₁: μ > μ₀) — same fixed-direction convention
+     as the z-test above and 'power-with-graph' elsewhere on this site.
+     Testing for a decrease instead just means swapping which value
+     goes in the Sample Mean vs. Hypothesized Mean field.             */
   {
     id:          'one-sample-t-test',
     name:        '1-Sample t-Test',
     hint:        't = (x̄−μ₀) / (s/√n)',
     category:    'T-Tests & Z-Tests',
-    description: 'Tests whether a sample mean differs from a known population mean.',
+    description: 'Tests whether a sample mean differs from a known population mean, with a configurable significance level and one- or two-tailed testing.',
 
     formulas: [
       {
@@ -2147,57 +2151,97 @@ const CALCULATORS = [
       {
         label: 't-Statistic',
         latex: 't = \\dfrac{\\bar{x}-\\mu_0}{SE} \\qquad df = n-1'
+      },
+      {
+        label: 'Critical Value (t)',
+        latex: 't_{\\alpha/2,\\,df}\\;\\text{(two-tailed)} \\qquad t_{\\alpha,\\,df}\\;\\text{(one-tailed, }H_1{:}\\ \\mu>\\mu_0\\text{)}'
+      },
+      {
+        label: 'Critical Value (x, raw units)',
+        latex: 'x_{crit} = \\mu_0 \\pm t_{crit}\\times SE'
       }
     ],
 
-    inputLayout: 'grid',
+    inputLayout: 'columns',
+    inputColumns: [
+      { label: 'Sample',                       ids: ['mean', 'sd', 'n'] },
+      { label: 'Population / Null Hypothesis', ids: ['mu0'] },
+    ],
     inputs: [
       { id: 'mean', label: 'Sample Mean (x̄)',        default: 104.5 },
       { id: 'sd',   label: 'Sample SD (s)',           default: 12    },
       { id: 'n',    label: 'Sample Size (n)',         default: 20    },
       { id: 'mu0',  label: 'Hypothesized Mean (μ₀)',  default: 100   },
+      { id: 'alpha', label: 'Significance Level (α)', default: 0.05 },
+      { id: 'tails', type: 'select', label: 'Test Direction', default: 'two',
+        options: [
+          { value: 'two', label: 'Two-Tailed (H₁: μ ≠ μ₀)' },
+          { value: 'one', label: 'One-Tailed (H₁: μ > μ₀ — tests for an increase only)' },
+        ],
+        note: "One-tailed here always tests for an increase above μ₀. If you actually expect a decrease, swap which value you enter as the Sample Mean vs. Hypothesized Mean, or use Two-Tailed if the direction isn't known in advance." },
     ],
 
-    example({ mean, sd, n, mu0 }) {
+    example({ mean, sd, n, mu0, alpha, tails }) {
       n = Math.round(n);
       if (!isFinite(mean) || !isFinite(mu0) || !isFinite(sd) || sd <= 0 || !isFinite(n) || n < 2 ||
-          typeof jStat === 'undefined' || !jStat.studentt)
-        return 'Enter a sample mean, SD, sample size, and hypothesized mean to see a worked medical example here.';
+          !isFinite(alpha) || alpha <= 0 || alpha >= 1 || typeof jStat === 'undefined' || !jStat.studentt)
+        return 'Enter a sample mean, SD, sample size, hypothesized mean, and significance level to see a worked medical example here.';
       const se = sd / Math.sqrt(n);
       const df = n - 1;
       const t  = (mean - mu0) / se;
-      const p  = 2 * (1 - jStat.studentt.cdf(Math.abs(t), df));
+      const isTwoTailed = tails !== 'one';
+      const p  = isTwoTailed ? 2 * (1 - jStat.studentt.cdf(Math.abs(t), df)) : 1 - jStat.studentt.cdf(t, df);
       const f  = v => +v.toFixed(2);
-      return `A clinic wants to know if its patients' average fasting glucose (${mean} mg/dL, SD ${sd}, n=${n}) differs from the established normal benchmark of ${mu0} mg/dL. Since the population SD isn't known and must be estimated from this sample, a t-test (not a z-test) applies: t = ${f(t)} with df = ${df}, ${formatPText(p)}.`;
+      const tailNote = isTwoTailed ? 'a two-tailed test (either direction counts)' : 'a one-tailed test (only an increase above μ₀ counts)';
+      return `A clinic wants to know if its patients' average fasting glucose (${mean} mg/dL, SD ${sd}, n=${n}) differs from the established normal benchmark of ${mu0} mg/dL. Since the population SD isn't known and must be estimated from this sample, a t-test (not a z-test) applies: t = ${f(t)} with df = ${df}, using ${tailNote} at α = ${alpha}, ${formatPText(p)}.`;
     },
 
-    calculate({ mean, sd, n, mu0 }) {
+    calculate({ mean, sd, n, mu0, alpha, tails }) {
       n = Math.round(n);
       if (!isFinite(mean) || !isFinite(mu0)) return [err('Sample Mean and Hypothesized Mean are required')];
       if (!isFinite(sd) || sd <= 0)          return [err('Sample SD must be greater than 0')];
       if (!isFinite(n) || n < 2)             return [err('Sample Size must be at least 2')];
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
       if (typeof jStat === 'undefined' || !jStat.studentt)
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
       const se = sd / Math.sqrt(n);
       const df = n - 1;
       const t  = (mean - mu0) / se;
+      const isTwoTailed = tails !== 'one';
 
-      const pValue = 2 * (1 - jStat.studentt.cdf(Math.abs(t), df));
-      const tCrit  = jStat.studentt.inv(0.975, df);
-      const margin = tCrit * se;
+      const pTwo = 2 * (1 - jStat.studentt.cdf(Math.abs(t), df));
+      const pOne = 1 - jStat.studentt.cdf(t, df); // upper-tail only — this test's one-tailed direction is fixed to H1: mu > mu0
+      const pValue = isTwoTailed ? pTwo : pOne;
+
+      const critTwo = jStat.studentt.inv(1 - alpha / 2, df);
+      const critOne = jStat.studentt.inv(1 - alpha, df);
+      const critT   = isTwoTailed ? critTwo : critOne;
+
+      const margin = critTwo * se; // the sample mean's own CI is always reported two-sided, independent of the test's tail choice
+      const isSignificant = pValue < alpha;
+      const tailWord = isTwoTailed ? 'two' : 'one';
 
       const f = (n, dp = 4) => +(n.toFixed(dp));
+      const ciPct = +(((1 - alpha) * 100).toFixed(2));
 
       return [
-        { label: 'Sample Mean (x̄)',              value: f(mean), ci: [f(mean - margin), f(mean + margin)], isRatio: false, highlight: true },
-        { label: 'Standard Error (SE)',           value: f(se),   ci: null, isRatio: false },
-        { label: 'Degrees of Freedom (df)',       value: df,      ci: null, isRatio: false },
-        { label: 't-Statistic',                   value: f(t),    ci: null, isRatio: false, highlight: true },
-        { label: 't-Critical (two-tailed, α = 0.05)', value: f(tCrit), ci: null, isRatio: false },
-        { label: 'p-value (two-tailed)',          value: formatPValue(pValue), ci: null, isRatio: false },
-        { label: 'Interpretation (α = 0.05)',
-          value: pValue < 0.05 ? 'Reject H₀ — mean differs significantly from μ₀' : 'Fail to reject H₀ — no significant difference from μ₀',
+        { label: `Sample Mean (x̄, ${ciPct}% CI)`,  value: f(mean), ci: [f(mean - margin), f(mean + margin)], isRatio: false, highlight: true },
+        { label: 'Standard Error (SE)',             value: f(se),   ci: null, isRatio: false },
+        { label: 'Degrees of Freedom (df)',         value: df,      ci: null, isRatio: false },
+        { label: 't-Statistic',                     value: f(t),    ci: null, isRatio: false, highlight: true },
+        { label: `Critical Value (t, ${tailWord}-tailed, α = ${alpha}, df = ${df})`,
+          value: isTwoTailed ? `±${f(critT)}` : f(critT), ci: null, isRatio: false, highlight: true },
+        { label: `Critical Value (x, ${tailWord}-tailed, α = ${alpha})`,
+          value: isTwoTailed
+            ? `≤ ${f(mu0 - critT * se, 2)} or ≥ ${f(mu0 + critT * se, 2)}`
+            : `≥ ${f(mu0 + critT * se, 2)}`,
+          ci: null, isRatio: false, highlight: true },
+        { label: `p-value (${tailWord}-tailed)`,     value: formatPValue(pValue), ci: null, isRatio: false },
+        { label: `Interpretation (α = ${alpha}, ${tailWord}-tailed)`,
+          value: isSignificant
+            ? `Reject H₀ — mean ${isTwoTailed ? 'differs significantly from' : 'is significantly greater than'} μ₀`
+            : `Fail to reject H₀ — no significant ${isTwoTailed ? 'difference from' : 'increase above'} μ₀`,
           ci: null, isRatio: false, isText: true },
       ];
     }
@@ -2278,13 +2322,19 @@ const CALCULATORS = [
 
   /* ── 21. 1-SAMPLE Z-TEST ────────────────────────────────────────────────
      Tests a sample mean against a hypothesized population mean, with
-     known population SD (σ).                                          */
+     known population SD (σ). One-tailed always tests for an increase
+     above μ₀ (H₁: μ > μ₀) — the same fixed direction convention used
+     by 'power-with-graph' elsewhere on this site — rather than a
+     user-chosen upper/lower direction, so the math stays a plain
+     mirror-image of the two-tailed case. Testing for a decrease instead
+     just means swapping which value goes in the Sample Mean vs.
+     Hypothesized Mean field; SE doesn't depend on which is which.    */
   {
     id:          'one-sample-z-test',
     name:        '1-Sample z-Test',
     hint:        'z = (x̄−μ₀) / (σ/√n)',
     category:    'T-Tests & Z-Tests',
-    description: 'Tests a sample mean against a population mean when σ is known.',
+    description: 'Tests a sample mean against a population mean when σ is known, with a configurable significance level and one- or two-tailed testing.',
 
     formulas: [
       {
@@ -2294,47 +2344,94 @@ const CALCULATORS = [
       {
         label: 'z-Statistic',
         latex: 'z = \\dfrac{\\bar{x}-\\mu_0}{SE}'
+      },
+      {
+        label: 'Critical Value (z)',
+        latex: 'z_{\\alpha/2}\\;\\text{(two-tailed)} \\qquad z_{\\alpha}\\;\\text{(one-tailed, }H_1{:}\\ \\mu>\\mu_0\\text{)}'
+      },
+      {
+        label: 'Critical Value (x, raw units)',
+        latex: 'x_{crit} = \\mu_0 \\pm z_{crit}\\times SE'
       }
     ],
 
-    inputLayout: 'grid',
+    inputLayout: 'columns',
+    inputColumns: [
+      { label: 'Sample',                       ids: ['mean', 'n'] },
+      { label: 'Population / Null Hypothesis', ids: ['sigma', 'mu0'] },
+    ],
     inputs: [
       { id: 'mean',  label: 'Sample Mean (x̄)',       default: 104.5 },
-      { id: 'sigma', label: 'Population SD (σ)',      default: 12    },
       { id: 'n',     label: 'Sample Size (n)',        default: 30    },
+      { id: 'sigma', label: 'Population SD (σ)',      default: 12    },
       { id: 'mu0',   label: 'Hypothesized Mean (μ₀)', default: 100   },
+      { id: 'alpha', label: 'Significance Level (α)', default: 0.05 },
+      { id: 'tails', type: 'select', label: 'Test Direction', default: 'two',
+        options: [
+          { value: 'two', label: 'Two-Tailed (H₁: μ ≠ μ₀)' },
+          { value: 'one', label: 'One-Tailed (H₁: μ > μ₀ — tests for an increase only)' },
+        ],
+        note: "One-tailed here always tests for an increase above μ₀. If you actually expect a decrease, swap which value you enter as the Sample Mean vs. Hypothesized Mean, or use Two-Tailed if the direction isn't known in advance." },
     ],
 
-    example({ mean, sigma, n, mu0 }) {
+    example({ mean, sigma, n, mu0, alpha, tails }) {
       n = Math.round(n);
-      if (!isFinite(mean) || !isFinite(mu0) || !isFinite(sigma) || sigma <= 0 || !isFinite(n) || n < 1)
-        return 'Enter a sample mean, population SD, sample size, and hypothesized mean to see a worked medical example here.';
+      if (!isFinite(mean) || !isFinite(mu0) || !isFinite(sigma) || sigma <= 0 || !isFinite(n) || n < 1 ||
+          !isFinite(alpha) || alpha <= 0 || alpha >= 1)
+        return 'Enter a sample mean, population SD, sample size, hypothesized mean, and significance level to see a worked medical example here.';
       const se = sigma / Math.sqrt(n);
       const z  = (mean - mu0) / se;
+      const isTwoTailed = tails !== 'one';
+      const pValue = isTwoTailed ? normalTwoTailedP(z) : 0.5 * (1 - erf(z / Math.SQRT2));
       const f  = v => +v.toFixed(2);
-      return `A well-studied lab assay has a known population SD (σ=${sigma}) from decades of prior data. A clinic's sample of ${n} patients averages ${mean}, versus a reference benchmark of ${mu0}. Because σ is already known (not estimated from this sample), a z-test applies directly: z = ${f(z)}, ${formatPText(normalTwoTailedP(z))}.`;
+      const tailNote = isTwoTailed ? 'a two-tailed test (either direction counts)' : 'a one-tailed test (only an increase above μ₀ counts)';
+      return `A well-studied lab assay has a known population SD (σ=${sigma}) from decades of prior data. A clinic's sample of ${n} patients averages ${mean}, versus a reference benchmark of ${mu0}. Because σ is already known (not estimated from this sample), a z-test applies directly: z = ${f(z)}, using ${tailNote} at α = ${alpha}, ${formatPText(pValue)}.`;
     },
 
-    calculate({ mean, sigma, n, mu0 }) {
+    calculate({ mean, sigma, n, mu0, alpha, tails }) {
       n = Math.round(n);
       if (!isFinite(mean) || !isFinite(mu0)) return [err('Sample Mean and Hypothesized Mean are required')];
       if (!isFinite(sigma) || sigma <= 0)    return [err('Population SD must be greater than 0')];
       if (!isFinite(n) || n < 1)             return [err('Sample Size must be at least 1')];
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
 
-      const se     = sigma / Math.sqrt(n);
-      const z      = (mean - mu0) / se;
-      const pValue = normalTwoTailedP(z);
-      const margin = 1.96 * se;
+      const se = sigma / Math.sqrt(n);
+      const z  = (mean - mu0) / se;
+      const isTwoTailed = tails !== 'one';
+
+      const pTwo = normalTwoTailedP(z);
+      const pOne = 0.5 * (1 - erf(z / Math.SQRT2)); // upper-tail only — this test's one-tailed direction is fixed to H1: mu > mu0
+      const pValue = isTwoTailed ? pTwo : pOne;
+
+      const critTwo = jStat.normal.inv(1 - alpha / 2, 0, 1);
+      const critOne = jStat.normal.inv(1 - alpha, 0, 1);
+      const critZ   = isTwoTailed ? critTwo : critOne;
+
+      const margin = critTwo * se; // the sample mean's own CI is always reported two-sided, independent of the test's tail choice
+      const isSignificant = pValue < alpha;
+      const tailWord = isTwoTailed ? 'two' : 'one';
 
       const f = (n, dp = 4) => +(n.toFixed(dp));
+      const ciPct = +(((1 - alpha) * 100).toFixed(2));
 
       return [
-        { label: 'Sample Mean (x̄)',      value: f(mean), ci: [f(mean - margin), f(mean + margin)], isRatio: false, highlight: true },
-        { label: 'Standard Error (SE)',   value: f(se),   ci: null, isRatio: false },
-        { label: 'z-Statistic',           value: f(z),    ci: null, isRatio: false, highlight: true },
-        { label: 'p-value (two-tailed)',  value: formatPValue(pValue), ci: null, isRatio: false },
-        { label: 'Interpretation (α = 0.05)',
-          value: pValue < 0.05 ? 'Reject H₀ — mean differs significantly from μ₀' : 'Fail to reject H₀ — no significant difference from μ₀',
+        { label: `Sample Mean (x̄, ${ciPct}% CI)`,  value: f(mean), ci: [f(mean - margin), f(mean + margin)], isRatio: false, highlight: true },
+        { label: 'Standard Error (SE)',             value: f(se),   ci: null, isRatio: false },
+        { label: 'z-Statistic',                     value: f(z),    ci: null, isRatio: false, highlight: true },
+        { label: `Critical Value (z, ${tailWord}-tailed, α = ${alpha})`,
+          value: isTwoTailed ? `±${f(critZ)}` : f(critZ), ci: null, isRatio: false, highlight: true },
+        { label: `Critical Value (x, ${tailWord}-tailed, α = ${alpha})`,
+          value: isTwoTailed
+            ? `≤ ${f(mu0 - critZ * se, 2)} or ≥ ${f(mu0 + critZ * se, 2)}`
+            : `≥ ${f(mu0 + critZ * se, 2)}`,
+          ci: null, isRatio: false, highlight: true },
+        { label: `p-value (${tailWord}-tailed)`,     value: formatPValue(pValue), ci: null, isRatio: false },
+        { label: `Interpretation (α = ${alpha}, ${tailWord}-tailed)`,
+          value: isSignificant
+            ? `Reject H₀ — mean ${isTwoTailed ? 'differs significantly from' : 'is significantly greater than'} μ₀`
+            : `Fail to reject H₀ — no significant ${isTwoTailed ? 'difference from' : 'increase above'} μ₀`,
           ci: null, isRatio: false, isText: true },
       ];
     }
@@ -19766,6 +19863,9 @@ const NOTATION = {
     { symbol: '\\mu_0', meaning: 'Hypothesized Mean — the benchmark value the sample mean is being tested against.' },
     { symbol: 't', meaning: 't-Statistic — how many standard errors the sample mean is from the hypothesized mean.' },
     { symbol: 'df', meaning: 'Degrees of Freedom, equal to sample size minus 1, used to select the correct t-distribution.' },
+    { symbol: '\\alpha', meaning: 'Significance Level — the false-positive rate the critical value and p-value are judged against.' },
+    { symbol: 't_{\\alpha/2,\\,df}, t_{\\alpha,\\,df}', meaning: 'Critical t-value — two-tailed (α/2 in each tail) or one-tailed (all of α in the upper tail, testing only for an increase above μ₀).' },
+    { symbol: 'x_{crit}', meaning: 'Critical Value in the outcome\'s own raw units — the critical t-value converted back with μ₀ + t_{crit} × SE.' },
   ],
   'unpaired-t-test': [
     { symbol: 's_1', meaning: 'Group 1 SD — the spread of observations within Group 1.' },
@@ -19819,6 +19919,9 @@ const NOTATION = {
     { symbol: '\\bar{x}', meaning: 'Sample Mean — the average observed in your data.' },
     { symbol: '\\mu_0', meaning: 'Hypothesized Mean — the benchmark value the sample mean is being tested against.' },
     { symbol: 'z', meaning: 'z-Statistic — how many standard errors the sample mean is from the hypothesized mean.' },
+    { symbol: '\\alpha', meaning: 'Significance Level — the false-positive rate the critical value and p-value are judged against.' },
+    { symbol: 'z_{\\alpha/2}, z_{\\alpha}', meaning: 'Critical z-value — two-tailed (α/2 in each tail) or one-tailed (all of α in the upper tail, testing only for an increase above μ₀).' },
+    { symbol: 'x_{crit}', meaning: 'Critical Value in the outcome\'s own raw units — the critical z-value converted back with μ₀ + z_{crit} × SE.' },
   ],
   'two-sample-z-test': [
     { symbol: '\\sigma_1', meaning: 'Group 1 Population SD — the known standard deviation for Group 1.' },

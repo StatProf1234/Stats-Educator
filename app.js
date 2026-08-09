@@ -1347,6 +1347,7 @@ function renderCalculator(calc) {
 
   const inputsHtml = calc.inputLayout === '2x2' ? render2x2(calc)
     : calc.inputLayout === 'groups' ? renderGroupedInputs(calc)
+    : calc.inputLayout === 'columns' ? renderColumnInputs(calc)
     : renderGrid(calc);
 
   view().innerHTML = `
@@ -1678,74 +1679,103 @@ function attachSliderListeners(calc, run) {
 
 /* ── INPUT RENDERERS ────────────────────────────────────── */
 
+// Renders the markup for a single input field — factored out of
+// renderGrid so renderColumnInputs (below) can reuse the exact same
+// per-type templates inside its own column wrappers instead of
+// duplicating this switch.
+function renderInputField(inp) {
+  // Fields with a `showIf(values)` predicate start rendered (visibility
+  // is corrected immediately by attachShowIfListeners, which runs right
+  // after this HTML is inserted) but carry a `field-<id>` wrapper id so
+  // that predicate can find and toggle them — e.g. a calculator with two
+  // entry modes ("group summary data" vs. "published estimate") whose
+  // mode select shows only the inputs the current mode actually uses.
+  const fieldId = ` id="field-${inp.id}"`;
+  if (inp.type === 'textarea') {
+    return `
+      <div class="input-field input-field-wide"${fieldId}>
+        <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+        <textarea class="input-el inputs-textarea" id="inp-${inp.id}"
+                  data-id="${inp.id}" rows="3" spellcheck="false">${esc(String(inp.default))}</textarea>
+      </div>`;
+  }
+  if (inp.type === 'slider') {
+    const display = inp.format ? inp.format(inp.default) : String(inp.default);
+    return `
+      <div class="input-field input-field-wide"${fieldId}>
+        <label class="input-label" for="inp-${inp.id}">
+          ${esc(inp.label)} — <span class="slider-value" id="val-${inp.id}">${esc(display)}</span>
+        </label>
+        <input class="input-slider" type="range" id="inp-${inp.id}" data-id="${inp.id}"
+               min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">
+      </div>`;
+  }
+  if (inp.type === 'select') {
+    const opts = inp.options.map(o =>
+      `<option value="${esc(o.value)}"${o.value === inp.default ? ' selected' : ''}>${esc(o.label)}</option>`
+    ).join('');
+    const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
+    return `
+      <div class="input-field input-field-wide"${fieldId}>
+        <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+        <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
+        ${hint}
+      </div>`;
+  }
+  if (inp.type === 'checkbox') {
+    const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
+    return `
+      <div class="input-field input-field-wide"${fieldId}>
+        <label class="input-checkbox-label">
+          <input class="input-checkbox" type="checkbox" id="inp-${inp.id}" data-id="${inp.id}"${inp.default ? ' checked' : ''}>
+          ${esc(inp.label)}
+        </label>
+        ${hint}
+      </div>`;
+  }
+  if (inp.type === 'text') {
+    return `
+      <div class="input-field"${fieldId}>
+        <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+        <input class="input-el" type="text" id="inp-${inp.id}" data-id="${inp.id}"
+               value="${esc(String(inp.default))}"${inp.placeholder ? ` placeholder="${esc(inp.placeholder)}"` : ''} autocomplete="off" spellcheck="false">
+      </div>`;
+  }
+  return `
+    <div class="input-field"${fieldId}>
+      <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
+      <input class="input-el" type="number" id="inp-${inp.id}"
+             data-id="${inp.id}" value="${inp.default}" step="any">
+    </div>`;
+}
+
 function renderGrid(calc) {
-  return `<div class="inputs-grid">` +
-    calc.inputs.map(inp => {
-      // Fields with a `showIf(values)` predicate start rendered (visibility
-      // is corrected immediately by attachShowIfListeners, which runs right
-      // after this HTML is inserted) but carry a `field-<id>` wrapper id so
-      // that predicate can find and toggle them — e.g. a calculator with two
-      // entry modes ("group summary data" vs. "published estimate") whose
-      // mode select shows only the inputs the current mode actually uses.
-      const fieldId = ` id="field-${inp.id}"`;
-      if (inp.type === 'textarea') {
-        return `
-          <div class="input-field input-field-wide"${fieldId}>
-            <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
-            <textarea class="input-el inputs-textarea" id="inp-${inp.id}"
-                      data-id="${inp.id}" rows="3" spellcheck="false">${esc(String(inp.default))}</textarea>
-          </div>`;
-      }
-      if (inp.type === 'slider') {
-        const display = inp.format ? inp.format(inp.default) : String(inp.default);
-        return `
-          <div class="input-field input-field-wide"${fieldId}>
-            <label class="input-label" for="inp-${inp.id}">
-              ${esc(inp.label)} — <span class="slider-value" id="val-${inp.id}">${esc(display)}</span>
-            </label>
-            <input class="input-slider" type="range" id="inp-${inp.id}" data-id="${inp.id}"
-                   min="${inp.min}" max="${inp.max}" step="${inp.step}" value="${inp.default}">
-          </div>`;
-      }
-      if (inp.type === 'select') {
-        const opts = inp.options.map(o =>
-          `<option value="${esc(o.value)}"${o.value === inp.default ? ' selected' : ''}>${esc(o.label)}</option>`
-        ).join('');
-        const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
-        return `
-          <div class="input-field input-field-wide"${fieldId}>
-            <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
-            <select class="input-el" id="inp-${inp.id}" data-id="${inp.id}">${opts}</select>
-            ${hint}
-          </div>`;
-      }
-      if (inp.type === 'checkbox') {
-        const hint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
-        return `
-          <div class="input-field input-field-wide"${fieldId}>
-            <label class="input-checkbox-label">
-              <input class="input-checkbox" type="checkbox" id="inp-${inp.id}" data-id="${inp.id}"${inp.default ? ' checked' : ''}>
-              ${esc(inp.label)}
-            </label>
-            ${hint}
-          </div>`;
-      }
-      if (inp.type === 'text') {
-        return `
-          <div class="input-field"${fieldId}>
-            <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
-            <input class="input-el" type="text" id="inp-${inp.id}" data-id="${inp.id}"
-                   value="${esc(String(inp.default))}"${inp.placeholder ? ` placeholder="${esc(inp.placeholder)}"` : ''} autocomplete="off" spellcheck="false">
-          </div>`;
-      }
-      return `
-        <div class="input-field"${fieldId}>
-          <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
-          <input class="input-el" type="number" id="inp-${inp.id}"
-                 data-id="${inp.id}" value="${inp.default}" step="any">
-        </div>`;
-    }).join('') +
-  `</div>`;
+  return `<div class="inputs-grid">` + calc.inputs.map(renderInputField).join('') + `</div>`;
+}
+
+// Renders inputs split into labeled side-by-side columns (e.g. "Sample"
+// vs. "Population / Null Hypothesis" for a one-sample z/t-test) instead
+// of one flat field-by-field grid — driven by `calc.inputColumns`
+// ([{ label, ids }]), so it's clear at a glance which values come from
+// the data in hand and which describe the fixed hypothesis being tested
+// against. Any input not listed in any column (e.g. a shared alpha or
+// tails selector that belongs to neither) renders below as a plain grid,
+// same as the `beforeInputs`/`afterInputs` split in renderGroupedInputs.
+function renderColumnInputs(calc) {
+  const usedIds = new Set(calc.inputColumns.flatMap(col => col.ids));
+  const columnsHtml = calc.inputColumns.map(col => {
+    const fields = calc.inputs.filter(inp => col.ids.includes(inp.id));
+    return `
+      <div class="input-column">
+        <div class="input-column-header">${esc(col.label)}</div>
+        <div class="inputs-grid input-column-grid">${fields.map(renderInputField).join('')}</div>
+      </div>`;
+  }).join('');
+
+  const remaining = calc.inputs.filter(inp => !usedIds.has(inp.id));
+  const remainingHtml = remaining.length ? renderGrid({ ...calc, inputs: remaining }) : '';
+
+  return `<div class="input-columns">${columnsHtml}</div>${remainingHtml}`;
 }
 
 // Renders calculators whose inputs come in repeated per-group sets
