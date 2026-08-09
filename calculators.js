@@ -2339,7 +2339,7 @@ const CALCULATORS = [
     formulas: [
       {
         label: 'Standard Error',
-        latex: 'SE = \\dfrac{\\sigma}{\\sqrt{n}}'
+        latex: 'SE = \\dfrac{\\sigma}{\\sqrt{n}}\\quad\\text{(or }\\dfrac{s}{\\sqrt{n}}\\text{ as a large-sample approximation)}'
       },
       {
         label: 'z-Statistic',
@@ -2357,13 +2357,22 @@ const CALCULATORS = [
 
     inputLayout: 'columns',
     inputColumns: [
-      { label: 'Sample',                       ids: ['mean', 'n'] },
+      { label: 'Sample',                       ids: ['mean', 'sd', 'n'] },
       { label: 'Population / Null Hypothesis', ids: ['sigma', 'mu0'] },
     ],
     inputs: [
+      { id: 'sdSource', type: 'select', label: 'Which SD do you have?', default: 'sigma', renderBeforeGroup: true,
+        options: [
+          { value: 'sigma', label: 'Known Population SD (σ) — a true z-test' },
+          { value: 'sample', label: 'Only the Sample SD (s) — large-sample approximation' },
+        ],
+        note: "A z-test technically requires a known population σ. If you only have the sample's own SD, picking this substitutes s for σ — a common approximation, but only justified for large samples (conventionally n ≥ 30); for smaller n, the 1-Sample t-Test accounts for that extra uncertainty properly instead." },
       { id: 'mean',  label: 'Sample Mean (x̄)',       default: 104.5 },
+      { id: 'sd',    label: 'Sample SD (s)',          default: 12,
+        showIf: v => v.sdSource === 'sample' },
       { id: 'n',     label: 'Sample Size (n)',        default: 30    },
-      { id: 'sigma', label: 'Population SD (σ)',      default: 12    },
+      { id: 'sigma', label: 'Population SD (σ)',      default: 12,
+        showIf: v => v.sdSource !== 'sample' },
       { id: 'mu0',   label: 'Hypothesized Mean (μ₀)', default: 100   },
       { id: 'alpha', label: 'Significance Level (α)', default: 0.05 },
       { id: 'tails', type: 'select', label: 'Test Direction', default: 'two',
@@ -2374,30 +2383,37 @@ const CALCULATORS = [
         note: "One-tailed here always tests for an increase above μ₀. If you actually expect a decrease, swap which value you enter as the Sample Mean vs. Hypothesized Mean, or use Two-Tailed if the direction isn't known in advance." },
     ],
 
-    example({ mean, sigma, n, mu0, alpha, tails }) {
+    example({ mean, sd, sigma, sdSource, n, mu0, alpha, tails }) {
       n = Math.round(n);
-      if (!isFinite(mean) || !isFinite(mu0) || !isFinite(sigma) || sigma <= 0 || !isFinite(n) || n < 1 ||
+      const usingSampleSD = sdSource === 'sample';
+      const sdUsed = usingSampleSD ? sd : sigma;
+      if (!isFinite(mean) || !isFinite(mu0) || !isFinite(sdUsed) || sdUsed <= 0 || !isFinite(n) || n < 1 ||
           !isFinite(alpha) || alpha <= 0 || alpha >= 1)
-        return 'Enter a sample mean, population SD, sample size, hypothesized mean, and significance level to see a worked medical example here.';
-      const se = sigma / Math.sqrt(n);
+        return 'Enter a sample mean, SD, sample size, hypothesized mean, and significance level to see a worked medical example here.';
+      const se = sdUsed / Math.sqrt(n);
       const z  = (mean - mu0) / se;
       const isTwoTailed = tails !== 'one';
       const pValue = isTwoTailed ? normalTwoTailedP(z) : 0.5 * (1 - erf(z / Math.SQRT2));
       const f  = v => +v.toFixed(2);
       const tailNote = isTwoTailed ? 'a two-tailed test (either direction counts)' : 'a one-tailed test (only an increase above μ₀ counts)';
-      return `A well-studied lab assay has a known population SD (σ=${sigma}) from decades of prior data. A clinic's sample of ${n} patients averages ${mean}, versus a reference benchmark of ${mu0}. Because σ is already known (not estimated from this sample), a z-test applies directly: z = ${f(z)}, using ${tailNote} at α = ${alpha}, ${formatPText(pValue)}.`;
+      const sdNote = usingSampleSD
+        ? `Its true population SD isn't known, so the sample's own SD (s=${sd}) stands in for σ — a reasonable approximation here since n=${n} is large.`
+        : `A well-studied lab assay has a known population SD (σ=${sigma}) from decades of prior data.`;
+      return `${sdNote} A clinic's sample of ${n} patients averages ${mean}, versus a reference benchmark of ${mu0}. Because σ is treated as known (not estimated in a way that needs a t-distribution), a z-test applies: z = ${f(z)}, using ${tailNote} at α = ${alpha}, ${formatPText(pValue)}.`;
     },
 
-    calculate({ mean, sigma, n, mu0, alpha, tails }) {
+    calculate({ mean, sd, sigma, sdSource, n, mu0, alpha, tails }) {
       n = Math.round(n);
+      const usingSampleSD = sdSource === 'sample';
+      const sdUsed = usingSampleSD ? sd : sigma;
       if (!isFinite(mean) || !isFinite(mu0)) return [err('Sample Mean and Hypothesized Mean are required')];
-      if (!isFinite(sigma) || sigma <= 0)    return [err('Population SD must be greater than 0')];
+      if (!isFinite(sdUsed) || sdUsed <= 0)  return [err(usingSampleSD ? 'Sample SD must be greater than 0' : 'Population SD must be greater than 0')];
       if (!isFinite(n) || n < 1)             return [err('Sample Size must be at least 1')];
       if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
       if (typeof jStat === 'undefined' || !jStat.normal)
         return [err('The statistics library failed to load — please refresh the page and try again.')];
 
-      const se = sigma / Math.sqrt(n);
+      const se = sdUsed / Math.sqrt(n);
       const z  = (mean - mu0) / se;
       const isTwoTailed = tails !== 'one';
 
@@ -2416,9 +2432,10 @@ const CALCULATORS = [
       const f = (n, dp = 4) => +(n.toFixed(dp));
       const ciPct = +(((1 - alpha) * 100).toFixed(2));
 
-      return [
+      const rows = [
         { label: `Sample Mean (x̄, ${ciPct}% CI)`,  value: f(mean), ci: [f(mean - margin), f(mean + margin)], isRatio: false, highlight: true },
-        { label: 'Standard Error (SE)',             value: f(se),   ci: null, isRatio: false },
+        { label: usingSampleSD ? 'Standard Error (SE, using sample SD)' : 'Standard Error (SE)',
+          value: f(se), ci: null, isRatio: false },
         { label: 'z-Statistic',                     value: f(z),    ci: null, isRatio: false, highlight: true },
         { label: `Critical Value (z, ${tailWord}-tailed, α = ${alpha})`,
           value: isTwoTailed ? `±${f(critZ)}` : f(critZ), ci: null, isRatio: false, highlight: true },
@@ -2434,6 +2451,15 @@ const CALCULATORS = [
             : `Fail to reject H₀ — no significant ${isTwoTailed ? 'difference from' : 'increase above'} μ₀`,
           ci: null, isRatio: false, isText: true },
       ];
+
+      if (usingSampleSD) {
+        rows.push({ label: 'Note — Sample SD Used in Place of σ', isText: true, ci: null, isRatio: false,
+          value: n >= 30
+            ? `s = ${f(sd, 2)} was substituted for an unknown population σ. This is a standard large-sample approximation — with n = ${n}, the Central Limit Theorem makes this z-test a reasonable choice.`
+            : `s = ${f(sd, 2)} was substituted for an unknown population σ, but that substitution is only well-justified for large samples (conventionally n ≥ 30). With n = ${n}, consider the 1-Sample t-Test instead — it's built for exactly this situation and won't understate the extra uncertainty from estimating σ.` });
+      }
+
+      return rows;
     }
   },
 
@@ -19914,6 +19940,7 @@ const NOTATION = {
   ],
   'one-sample-z-test': [
     { symbol: '\\sigma', meaning: 'Population SD — the known standard deviation of the underlying population (not estimated from the sample).' },
+    { symbol: 's', meaning: "Sample SD — used in place of σ only when the population SD isn't known, as a large-sample approximation." },
     { symbol: 'n', meaning: 'Sample Size — the number of observations in the sample.' },
     { symbol: 'SE', meaning: 'Standard Error of the sample mean, computed as the population SD divided by the square root of n.' },
     { symbol: '\\bar{x}', meaning: 'Sample Mean — the average observed in your data.' },

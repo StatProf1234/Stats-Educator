@@ -1772,10 +1772,19 @@ function renderColumnInputs(calc) {
       </div>`;
   }).join('');
 
-  const remaining = calc.inputs.filter(inp => !usedIds.has(inp.id));
-  const remainingHtml = remaining.length ? renderGrid({ ...calc, inputs: remaining }) : '';
+  // Any input not listed in a column (e.g. a shared alpha/tails selector,
+  // or a mode toggle that decides which field shows *inside* a column —
+  // e.g. "known population SD" vs. "sample SD only") renders as a plain
+  // grid. `renderBeforeGroup` puts it above the columns instead of below,
+  // same convention as renderGroupedInputs, since a mode toggle needs to
+  // be seen before the fields it switches, not after.
+  const remaining      = calc.inputs.filter(inp => !usedIds.has(inp.id));
+  const beforeInputs    = remaining.filter(inp => inp.renderBeforeGroup);
+  const afterInputs     = remaining.filter(inp => !inp.renderBeforeGroup);
+  const beforeHtml = beforeInputs.length ? renderGrid({ ...calc, inputs: beforeInputs }) : '';
+  const afterHtml  = afterInputs.length  ? renderGrid({ ...calc, inputs: afterInputs })  : '';
 
-  return `<div class="input-columns">${columnsHtml}</div>${remainingHtml}`;
+  return beforeHtml + `<div class="input-columns">${columnsHtml}</div>` + afterHtml;
 }
 
 // Renders calculators whose inputs come in repeated per-group sets
