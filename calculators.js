@@ -13091,21 +13091,28 @@ const CALCULATORS = [
       }
     ],
 
-    inputLayout: 'grid',
+    inputLayout: 'groups',
+    groupTerm:   'Group',
+    groupFields: [
+      { prefix: 'm',  label: 'Mean' },
+      { prefix: 'sd', label: 'SD' },
+      { prefix: 'n',  label: 'N' },
+    ],
+    groupShowIf: v => v.mode === 'summary',
     inputs: [
-      { id: 'mode', type: 'select', label: 'How is your data entered?', default: 'published',
+      { id: 'mode', type: 'select', label: 'How is your data entered?', default: 'published', renderBeforeGroup: true,
         options: [
           { value: 'published', label: 'Published estimate — mean difference & its 95% CI' },
           { value: 'summary',   label: 'Group summary data — means, SDs & Ns' },
         ],
         note: 'Pick "Published estimate" when a paper already reports the mean difference and CI. Pick "Group summary data" to compute both yourself from each group\'s own mean, SD, and N.' },
 
-      { id: 'm1', label: 'Group 1 Mean', default: 72, showIf: v => v.mode === 'summary' },
-      { id: 'sd1', label: 'Group 1 SD', default: 9, showIf: v => v.mode === 'summary' },
-      { id: 'n1', label: 'Group 1 N', default: 40, showIf: v => v.mode === 'summary' },
-      { id: 'm2', label: 'Group 2 Mean', default: 78, showIf: v => v.mode === 'summary' },
-      { id: 'sd2', label: 'Group 2 SD', default: 10, showIf: v => v.mode === 'summary' },
-      { id: 'n2', label: 'Group 2 N', default: 42, showIf: v => v.mode === 'summary' },
+      { id: 'm1', label: 'Group 1 Mean', default: 72 },
+      { id: 'sd1', label: 'Group 1 SD', default: 9 },
+      { id: 'n1', label: 'Group 1 N', default: 40 },
+      { id: 'm2', label: 'Group 2 Mean', default: 78 },
+      { id: 'sd2', label: 'Group 2 SD', default: 10 },
+      { id: 'n2', label: 'Group 2 N', default: 42 },
       { id: 'paired', type: 'select', label: 'Design', default: 'independent',
         showIf: v => v.mode === 'summary',
         options: [

@@ -1800,10 +1800,21 @@ function renderGroupedInputs(calc) {
     </div>
   `;
 
-  const otherInputs = calc.inputs.filter(inp => !groupedIds.has(inp.id));
-  const otherHtml = otherInputs.length ? renderGrid({ ...calc, inputs: otherInputs }) : '';
+  const otherInputs  = calc.inputs.filter(inp => !groupedIds.has(inp.id));
+  const beforeInputs = otherInputs.filter(inp => inp.renderBeforeGroup);
+  const afterInputs  = otherInputs.filter(inp => !inp.renderBeforeGroup);
+  const beforeHtml = beforeInputs.length ? renderGrid({ ...calc, inputs: beforeInputs }) : '';
+  const afterHtml  = afterInputs.length  ? renderGrid({ ...calc, inputs: afterInputs })  : '';
 
-  return groupTableHtml + otherHtml;
+  // calc.groupShowIf lets a calculator hide the whole group table (e.g.
+  // when a mode toggle elsewhere switches to a non-group data-entry
+  // path) — attachShowIfListeners toggles this wrapper the same way it
+  // toggles any single field's `field-<id>` wrapper.
+  const groupTableWrapped = typeof calc.groupShowIf === 'function'
+    ? `<div id="field-group-table">${groupTableHtml}</div>`
+    : groupTableHtml;
+
+  return beforeHtml + groupTableWrapped + afterHtml;
 }
 
 function render2x2(calc) {
@@ -1897,7 +1908,8 @@ function render2x2ExtraInputs(inputs) {
 // fields aren't relevant to the current mode, the same way it always has
 // to validate/branch on a mode value anyway.
 function attachShowIfListeners(calc) {
-  if (!calc.inputs.some(inp => typeof inp.showIf === 'function')) return;
+  const hasGroupShowIf = typeof calc.groupShowIf === 'function';
+  if (!calc.inputs.some(inp => typeof inp.showIf === 'function') && !hasGroupShowIf) return;
   const refresh = () => {
     const values = readInputs(calc);
     calc.inputs.forEach(inp => {
@@ -1905,6 +1917,10 @@ function attachShowIfListeners(calc) {
       const field = document.getElementById('field-' + inp.id);
       if (field) field.hidden = !inp.showIf(values);
     });
+    if (hasGroupShowIf) {
+      const groupField = document.getElementById('field-group-table');
+      if (groupField) groupField.hidden = !calc.groupShowIf(values);
+    }
   };
   calc.inputs.forEach(inp => {
     const el = document.getElementById('inp-' + inp.id);
