@@ -3791,6 +3791,16 @@ const CALCULATORS = [
         rows.push({ label: 'Rejection Region', isSVG: true, svg: normalAlphaRegionSVG(alpha, tails, tails === 'one' ? critOne : critTwo) });
       }
 
+      const tailLabel     = tails === 'one' ? 'one-tailed' : 'two-tailed';
+      const pForAlpha      = tails === 'one' ? upperTail : twoTailedP;
+      const isSignificant  = pForAlpha < alpha;
+      rows.push({
+        label: `Interpretation (α = ${alpha}, ${tailLabel})`, isText: true, ci: null, isRatio: false,
+        value: isSignificant
+          ? `Statistically significant — the ${tailLabel} p-value (${formatPValue(pForAlpha, 4)}) is below α = ${alpha}.`
+          : `Not statistically significant — the ${tailLabel} p-value (${formatPValue(pForAlpha, 4)}) is not below α = ${alpha}.`
+      });
+
       rows.push({ isSVG: true, svg: zTableHTML(effectiveZ) });
 
       return rows;
