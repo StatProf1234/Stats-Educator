@@ -3701,12 +3701,18 @@ const CALCULATORS = [
       {
         label: 'Critical Value',
         latex: 'z_{\\alpha/2}\\;\\text{(two-tailed)} \\qquad z_{\\alpha}\\;\\text{(one-tailed)}'
+      },
+      {
+        label: 'Inverse (Percentile → z)',
+        latex: 'z = \\Phi^{-1}\\!\\left(\\tfrac{\\text{percentile}}{100}\\right)'
       }
     ],
 
     inputLayout: 'grid',
     inputs: [
-      { id: 'z',     label: 'z-Value to Look Up',              default: 1.96 },
+      { id: 'z',          label: 'z-Value to Look Up',              default: 1.96 },
+      { id: 'percentile', label: 'Percentile to Look Up (%) — overrides z-Value above', default: '',
+        note: 'Fill this in to go the other direction: enter a percentage (e.g. 90) and get the z-score below which that percentage of the distribution falls, instead of entering a z-score directly.' },
       { id: 'alpha', label: 'Significance Level (α, two-tailed)', default: 0.05 },
       { id: 'tails', type: 'select', label: 'Shade Which Rejection Region?', default: 'two',
         note: 'Draws the standard normal curve below with this region shaded at the chosen α, alongside the reference table.',
@@ -3716,29 +3722,48 @@ const CALCULATORS = [
         ] },
     ],
 
-    example({ z, alpha }) {
+    example({ z, alpha, percentile }) {
+      const usingPercentile = isFinite(percentile) && percentile > 0 && percentile < 100;
+      if (usingPercentile) {
+        if (typeof jStat === 'undefined' || !jStat.normal) return 'Enter a z-value and significance level to see a worked medical example here.';
+        const effectiveZ = jStat.normal.inv(percentile / 100, 0, 1);
+        return `A pediatric growth chart reports that a healthy weight falls at or below the ${percentile}th percentile. That percentile corresponds to z = ${(+effectiveZ.toFixed(4))} standard deviations above the population mean — the score a child's actual weight would need to reach to sit exactly at that percentile.`;
+      }
       if (!isFinite(z) || !isFinite(alpha) || alpha <= 0 || alpha >= 1)
-        return 'Enter a z-value and significance level to see a worked medical example here.';
+        return 'Enter a z-value (or a percentile) and significance level to see a worked medical example here.';
       const phi = 0.5 * (1 + erf(z / Math.SQRT2));
       const twoTailedP = normalTwoTailedP(z);
       return `A newborn's birth weight is z = ${z} standard deviations from the population mean on a standard growth chart. Φ(z) = ${(+phi.toFixed(4))} means about ${(phi * 100).toFixed(1)}% of newborns weigh less than this one. The two-tailed p-value (${formatPValue(twoTailedP)}) tells you how unusual a deviation this large is if this baby truly came from the reference population.`;
     },
 
-    calculate({ z, alpha, tails }) {
-      if (!isFinite(z))                                 return [err('z-value is required')];
+    calculate({ z, alpha, tails, percentile }) {
+      const usingPercentile = isFinite(percentile);
+      if (usingPercentile && (percentile <= 0 || percentile >= 100))
+        return [err('Percentile must be between 0 and 100 (exclusive)')];
+      if (!usingPercentile && !isFinite(z))
+        return [err('Enter a z-value, or a percentile to look up instead')];
       if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
-
-      const phi        = 0.5 * (1 + erf(z / Math.SQRT2));
-      const upperTail  = 1 - phi;
-      const twoTailedP = normalTwoTailedP(z);
+      if (usingPercentile && (typeof jStat === 'undefined' || !jStat.normal))
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
 
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
-      const rows = [
-        { label: `Cumulative Probability Φ(${f(z, 2)})`, value: f(phi, 6), ci: null, isRatio: false, highlight: true },
-        { label: 'Upper-Tail Probability (1 − Φ(z))',    value: f(upperTail, 6), ci: null, isRatio: false },
-        { label: 'Two-Tailed p-value',                   value: formatPValue(twoTailedP), ci: null, isRatio: false },
-      ];
+      const effectiveZ  = usingPercentile ? jStat.normal.inv(percentile / 100, 0, 1) : z;
+      const phi         = 0.5 * (1 + erf(effectiveZ / Math.SQRT2));
+      const upperTail   = 1 - phi;
+      const twoTailedP  = normalTwoTailedP(effectiveZ);
+
+      const rows = [];
+
+      if (usingPercentile)
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: `Using Percentile override — the z-Value input above is ignored. The ${f(percentile, 2)}th percentile implies z = ${f(effectiveZ)}.` });
+
+      rows.push(
+        { label: `Cumulative Probability Φ(${f(effectiveZ, 2)})`, value: f(phi, 4), ci: null, isRatio: false, highlight: true },
+        { label: usingPercentile ? 'Implied z-Score' : 'Upper-Tail Probability (1 − Φ(z))', value: usingPercentile ? f(effectiveZ, 4) : f(upperTail, 4), ci: null, isRatio: false, highlight: usingPercentile },
+        { label: 'Two-Tailed p-value', value: formatPValue(twoTailedP, 4), ci: null, isRatio: false },
+      );
 
       if (typeof jStat !== 'undefined' && jStat.normal) {
         const critTwo = jStat.normal.inv(1 - alpha / 2, 0, 1);
@@ -3750,7 +3775,7 @@ const CALCULATORS = [
         rows.push({ label: 'Rejection Region', isSVG: true, svg: normalAlphaRegionSVG(alpha, tails, tails === 'one' ? critOne : critTwo) });
       }
 
-      rows.push({ isSVG: true, svg: zTableHTML(z) });
+      rows.push({ isSVG: true, svg: zTableHTML(effectiveZ) });
 
       return rows;
     }
@@ -19362,7 +19387,7 @@ const SEARCH_KEYWORDS = {
   'weighted-average':      ['weighted average', 'weighted mean', 'weighted score', 'weighted grade', 'course grade calculator', 'exam weights', 'combine exam scores', 'rubric score', 'composite score'],
 
   // Probability & Distributions
-  'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve'],
+  'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve', 'percentage to z score', 'percentile to z score', 'inverse normal', 'inverse cdf'],
   't-table':              ['t distribution', 't critical value table', "student's t table"],
   'zscore-sd-explorer':   ['z score calculator', 'raw score to z score', 'sd slider', 'standard deviation slider', 'bell curve interactive', 'normal distribution explorer', 'percentile from z score', 'target z score', 'shade rejection region', 'two tailed shading', 'one tailed shading', 'z of 1.96', 'z of 0.975'],
   't-distribution-explorer': ['t distribution curve', 'degrees of freedom slider', 't vs z', 'fat tails', 't curve shape', 'interactive t distribution'],
@@ -19597,6 +19622,7 @@ const NOTATION = {
   // Probability & Distributions
   'z-table': [
     { symbol: 'z', meaning: 'The z-value entered to look up — how many standard deviations a point is from the mean.' },
+    { symbol: '\\text{percentile}', meaning: 'The optional percentage entered instead of z — Φ⁻¹(percentile/100) gives the z-score below which that percentage of the distribution falls.' },
     { symbol: '\\Phi(z)', meaning: 'The cumulative probability that a standard normal value falls at or below z.' },
     { symbol: 'Z', meaning: 'A standard normal random variable, used to express the cumulative probability P(Z ≤ z).' },
     { symbol: '\\operatorname{erf}', meaning: 'The error function used internally to compute the normal cumulative probability.' },
