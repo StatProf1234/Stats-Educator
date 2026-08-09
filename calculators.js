@@ -3578,7 +3578,7 @@ const CALCULATORS = [
       const rows = [
         { label: 'Two-Tailed p-value',                value: formatPValue(pTwo), ci: null, isRatio: false, highlight: true },
         { label: 'One-Tailed p-value',                value: formatPValue(pOne), ci: null, isRatio: false },
-        { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true },
+        { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false },
         { label: `Critical Value (one-tailed, α = ${alpha})`, value: f(critOne), ci: null, isRatio: false },
       ];
 
@@ -3660,7 +3660,7 @@ const CALCULATORS = [
       const rows = [
         { label: 'Two-Tailed p-value',                value: formatPValue(pTwo), ci: null, isRatio: false, highlight: true },
         { label: 'One-Tailed p-value',                value: formatPValue(pOne), ci: null, isRatio: false },
-        { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true },
+        { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false },
         { label: `Critical Value (one-tailed, α = ${alpha})`, value: f(critOne), ci: null, isRatio: false },
       ];
 
@@ -3711,8 +3711,8 @@ const CALCULATORS = [
     inputLayout: 'grid',
     inputs: [
       { id: 'z',          label: 'z-Value to Look Up',              default: 1.96 },
-      { id: 'percentile', label: 'Percentile to Look Up (%) — overrides z-Value above', default: '',
-        note: 'Fill this in to go the other direction: enter a percentage (e.g. 90) and get the z-score below which that percentage of the distribution falls, instead of entering a z-score directly.' },
+      { id: 'percentile', label: 'Percentile / Confidence Level (%) — overrides z-Value above', default: '',
+        note: "Fill this in to go the other direction. With 'One-Tailed' selected below, this is a straight percentile (e.g. 95 → 1.6449, the z-score with 95% of the distribution below it). With 'Two-Tailed' selected, this is read as a confidence level (e.g. 95 → ±1.96, the cutoff enclosing the middle 95%)." },
       { id: 'alpha', label: 'Significance Level (α, two-tailed)', default: 0.05 },
       { id: 'tails', type: 'select', label: 'Shade Which Rejection Region?', default: 'two',
         note: 'Draws the standard normal curve below with this region shaded at the chosen α, alongside the reference table.',
@@ -3722,10 +3722,14 @@ const CALCULATORS = [
         ] },
     ],
 
-    example({ z, alpha, percentile }) {
+    example({ z, alpha, tails, percentile }) {
       const usingPercentile = isFinite(percentile) && percentile > 0 && percentile < 100;
       if (usingPercentile) {
         if (typeof jStat === 'undefined' || !jStat.normal) return 'Enter a z-value and significance level to see a worked medical example here.';
+        if (tails === 'two') {
+          const effectiveZ = jStat.normal.inv(0.5 + (percentile / 100) / 2, 0, 1);
+          return `A trial reports its results with a ${percentile}% confidence level. Read two-tailed, that confidence level corresponds to a critical z of ±${(+effectiveZ.toFixed(4))} — the cutoff enclosing the middle ${percentile}% of the standard normal distribution, with the remaining ${(+(100 - percentile).toFixed(4))}% split evenly between the two outer tails.`;
+        }
         const effectiveZ = jStat.normal.inv(percentile / 100, 0, 1);
         return `A pediatric growth chart reports that a healthy weight falls at or below the ${percentile}th percentile. That percentile corresponds to z = ${(+effectiveZ.toFixed(4))} standard deviations above the population mean — the score a child's actual weight would need to reach to sit exactly at that percentile.`;
       }
@@ -3748,20 +3752,32 @@ const CALCULATORS = [
 
       const f = (v, dp = 4) => +(v.toFixed(dp));
 
-      const effectiveZ  = usingPercentile ? jStat.normal.inv(percentile / 100, 0, 1) : z;
+      const usingTwoTailedPercentile = usingPercentile && tails === 'two';
+      const effectiveZ  = usingPercentile
+        ? (usingTwoTailedPercentile
+            ? jStat.normal.inv(0.5 + (percentile / 100) / 2, 0, 1)
+            : jStat.normal.inv(percentile / 100, 0, 1))
+        : z;
       const phi         = 0.5 * (1 + erf(effectiveZ / Math.SQRT2));
       const upperTail   = 1 - phi;
       const twoTailedP  = normalTwoTailedP(effectiveZ);
 
       const rows = [];
 
-      if (usingPercentile)
-        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
-          value: `Using Percentile override — the z-Value input above is ignored. The ${f(percentile, 2)}th percentile implies z = ${f(effectiveZ)}.` });
+      if (usingPercentile) {
+        const noteValue = usingTwoTailedPercentile
+          ? `Using Percentile/Confidence override, read two-tailed — the z-Value input above is ignored. A ${f(percentile, 2)}% confidence level implies a critical z of ±${f(effectiveZ)}.`
+          : `Using Percentile/Confidence override, read one-tailed — the z-Value input above is ignored. The ${f(percentile, 2)}th percentile implies z = ${f(effectiveZ)}.`;
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false, value: noteValue });
+      }
 
       rows.push(
         { label: `Cumulative Probability Φ(${f(effectiveZ, 2)})`, value: f(phi, 4), ci: null, isRatio: false, highlight: true },
-        { label: usingPercentile ? 'Implied z-Score' : 'Upper-Tail Probability (1 − Φ(z))', value: usingPercentile ? f(effectiveZ, 4) : f(upperTail, 4), ci: null, isRatio: false, highlight: usingPercentile },
+        {
+          label: usingTwoTailedPercentile ? 'Implied Critical z (two-tailed)' : usingPercentile ? 'Implied z-Score' : 'Upper-Tail Probability (1 − Φ(z))',
+          value: usingTwoTailedPercentile ? `±${f(effectiveZ, 4)}` : usingPercentile ? f(effectiveZ, 4) : f(upperTail, 4),
+          ci: null, isRatio: false, highlight: usingPercentile
+        },
         { label: 'Two-Tailed p-value', value: formatPValue(twoTailedP, 4), ci: null, isRatio: false },
       );
 
@@ -3769,7 +3785,7 @@ const CALCULATORS = [
         const critTwo = jStat.normal.inv(1 - alpha / 2, 0, 1);
         const critOne = jStat.normal.inv(1 - alpha, 0, 1);
         rows.push(
-          { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false, isText: true },
+          { label: `Critical Value (two-tailed, α = ${alpha})`, value: `±${f(critTwo)}`, ci: null, isRatio: false },
           { label: `Critical Value (one-tailed, α = ${alpha})`, value: f(critOne), ci: null, isRatio: false },
         );
         rows.push({ label: 'Rejection Region', isSVG: true, svg: normalAlphaRegionSVG(alpha, tails, tails === 'one' ? critOne : critTwo) });
