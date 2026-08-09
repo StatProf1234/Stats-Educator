@@ -612,6 +612,8 @@ const CALCULATORS = [
         { label: 'Pooled SD (s_pooled)', value: f(sp),    ci: null, isRatio: false },
         { label: "Cohen's d",            value: f(d),     ci: null, isRatio: false, highlight: true },
         { label: 'Interpretation',       value: interp,   ci: null, isRatio: false, isText: true },
+        { label: "Reference — Cohen's Effect-Size Thresholds (Cohen, 1988)", isText: true, ci: null, isRatio: false,
+          value: 'Small = 0.2, Medium = 0.5, Large = 0.8 (in pooled-SD units) — a statistical rule of thumb for how unusual an effect size is, not a judgment of whether it matters in any specific clinical or practical context.' },
       ];
     }
   },
@@ -13234,6 +13236,7 @@ const CALCULATORS = [
         const gLo = (loCI / pooledSD) * J;
         const gHi = (hiCI / pooledSD) * J;
         rows.push({ label: "Standardized Mean Difference (Hedges' g)", value: f(g), ci: [f(gLo), f(gHi)], isRatio: false,
+          domainKey: 'smd', // SD units, not the MD row's raw units — must not share its linear scale, or g's much smaller magnitude gets squashed into an unreadable sliver
           band: mid != null ? [f(-mid / pooledSD), f(mid / pooledSD)] : undefined });
       } else {
         rows.push({ label: 'Note — Standardized Mean Difference', isText: true, ci: null, isRatio: false,

@@ -2010,19 +2010,29 @@ function computeDomains(results) {
     ratioDomain  = [Math.exp(logMin - pad), Math.exp(logMax + pad)];
   }
 
-  // Difference domain (linear) — include null=0
+  // Difference domain (linear) — include null=0. Grouped by r.domainKey so
+  // rows in incommensurable units (e.g. a raw Mean Difference vs. a
+  // standardized Hedges' g from the same calculator) don't get forced onto
+  // one shared scale, which would squash whichever row has the smaller
+  // magnitude down to an unreadable sliver. Rows with no domainKey all
+  // share the 'default' bucket, matching the old single-domain behavior.
   const diffRows = withCI.filter(r => !r.isRatio);
-  let diffDomain = null;
-  if (diffRows.length) {
-    const vals = diffRows.flatMap(r => [r.value, r.ci[0], r.ci[1], 0]);
+  const diffGroups = {};
+  for (const r of diffRows) {
+    const key = r.domainKey || 'default';
+    (diffGroups[key] || (diffGroups[key] = [])).push(r);
+  }
+  const diffDomains = {};
+  for (const key in diffGroups) {
+    const vals = diffGroups[key].flatMap(r => [r.value, r.ci[0], r.ci[1], 0]);
     const mn   = Math.min(...vals);
     const mx   = Math.max(...vals);
     const span = mx - mn;
     const pad  = Math.max(span * 0.4, 0.05);
-    diffDomain = [mn - pad, mx + pad];
+    diffDomains[key] = [mn - pad, mx + pad];
   }
 
-  return { ratioDomain, diffDomain };
+  return { ratioDomain, diffDomains };
 }
 
 function showResults(results, calcId) {
@@ -2031,7 +2041,7 @@ function showResults(results, calcId) {
 
   const hasCI = results.some(r => r.ci && r.ci.length === 2);
   const cls   = hasCI ? 'has-ci' : 'no-ci';
-  const { ratioDomain, diffDomain } = computeDomains(results);
+  const { ratioDomain, diffDomains } = computeDomains(results);
 
   const headerCICell = hasCI
     ? `<div class="results-header-cell">95% CI</div>` : '';
@@ -2058,7 +2068,7 @@ function showResults(results, calcId) {
       if (r.ci && r.ci.length === 2) {
         const [lo, hi] = r.ci;
         const pt     = typeof r.value === 'number' ? r.value : 0;
-        const domain = r.isRatio ? ratioDomain : diffDomain;
+        const domain = r.isRatio ? ratioDomain : diffDomains[r.domainKey || 'default'];
         ciCell = `
           <div class="result-ci">
             ${forestSVG(pt, lo, hi, r.isRatio, domain, r.band)}
