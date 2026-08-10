@@ -13763,6 +13763,12 @@ function computeFragilityIndex(a, b, c, d) {
   const n1 = a + b, n2 = c + d;
   let steps = 0;
   const maxSteps = n1 + n2 + 5; // safety cap on actual modification steps
+  // modGroup = the group currently being modified by *increasing* its
+  // events (non-event → event), which is the group that starts with
+  // fewer events, per Walsh et al. If that group runs out of non-events
+  // to convert, we fall back to *decreasing* events in the other group
+  // instead — both moves narrow the gap between the two groups' event
+  // rates, so either keeps pushing p back toward (and past) 0.05.
   let modGroup = events1 <= events2 ? 1 : 2;
   const startingGroup = modGroup;
   let switchedGroups = false;
@@ -13770,21 +13776,32 @@ function computeFragilityIndex(a, b, c, d) {
   let p = fisherExactTwoSidedP(events1, nonEvents1, events2, nonEvents2);
 
   while (p < 0.05 && steps < maxSteps) {
-    const canModGroup1 = nonEvents1 > 0; // room to convert a non-event to an event in Group 1
-    const canModGroup2 = events2 > 0;    // room to convert an event to a non-event in Group 2
+    const canIncreaseGroup1 = nonEvents1 > 0; // room to convert a non-event to an event in Group 1
+    const canIncreaseGroup2 = nonEvents2 > 0; // room to convert a non-event to an event in Group 2
+    const canDecreaseGroup1 = events1 > 0;    // room to convert an event to a non-event in Group 1
+    const canDecreaseGroup2 = events2 > 0;    // room to convert an event to a non-event in Group 2
 
-    if (!canModGroup1 && !canModGroup2) {
-      // Both groups are fully exhausted in their respective directions —
-      // there is nowhere left to move, regardless of how many more
-      // "steps" the safety cap would still allow. Stop immediately
-      // rather than spinning on switch checks that never advance.
-      return { ok: false, error: 'This result stayed statistically significant even after every possible outcome in both groups was flipped — an unusually robust (or unusually small/extreme) table. The Fragility Index could not be computed within the available patients.' };
+    if (modGroup === 1) {
+      if (!canIncreaseGroup1) {
+        if (!canDecreaseGroup2) {
+          return { ok: false, error: 'This result stayed statistically significant even after every possible outcome in both groups was flipped — an unusually robust (or unusually small/extreme) table. The Fragility Index could not be computed within the available patients.' };
+        }
+        modGroup = 2; switchedGroups = true;
+        events2 -= 1; nonEvents2 += 1;
+      } else {
+        events1 += 1; nonEvents1 -= 1;
+      }
+    } else {
+      if (!canIncreaseGroup2) {
+        if (!canDecreaseGroup1) {
+          return { ok: false, error: 'This result stayed statistically significant even after every possible outcome in both groups was flipped — an unusually robust (or unusually small/extreme) table. The Fragility Index could not be computed within the available patients.' };
+        }
+        modGroup = 1; switchedGroups = true;
+        events1 -= 1; nonEvents1 += 1;
+      } else {
+        events2 += 1; nonEvents2 -= 1;
+      }
     }
-    if (modGroup === 1 && !canModGroup1) { modGroup = 2; switchedGroups = true; }
-    else if (modGroup === 2 && !canModGroup2) { modGroup = 1; switchedGroups = true; }
-
-    if (modGroup === 1) { events1 += 1; nonEvents1 -= 1; }
-    else { events2 -= 1; nonEvents2 += 1; }
 
     steps += 1;
     p = fisherExactTwoSidedP(events1, nonEvents1, events2, nonEvents2);
