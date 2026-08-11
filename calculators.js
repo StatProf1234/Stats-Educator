@@ -2230,12 +2230,10 @@ const CALCULATORS = [
         { label: 'Standard Error (SE)',             value: f(se),   ci: null, isRatio: false },
         { label: 'Degrees of Freedom (df)',         value: df,      ci: null, isRatio: false },
         { label: 't-Statistic',                     value: f(t),    ci: null, isRatio: false, highlight: true },
-        { label: `Critical Value (t, ${tailWord}-tailed, α = ${alpha}, df = ${df})`,
-          value: isTwoTailed ? `±${f(critT)}` : f(critT), ci: null, isRatio: false, highlight: true },
-        { label: `Critical Value (x, ${tailWord}-tailed, α = ${alpha})`,
+        { label: `Critical Value (t & x, ${tailWord}-tailed, α = ${alpha}, df = ${df})`,
           value: isTwoTailed
-            ? `≤ ${f(mu0 - critT * se, 2)} or ≥ ${f(mu0 + critT * se, 2)}`
-            : `≥ ${f(mu0 + critT * se, 2)}`,
+            ? `±${f(critT)}  (x ≤ ${f(mu0 - critT * se, 2)} or x ≥ ${f(mu0 + critT * se, 2)})`
+            : `${f(critT)}  (x ≥ ${f(mu0 + critT * se, 2)})`,
           ci: null, isRatio: false, highlight: true },
         { label: `p-value (${tailWord}-tailed)`,     value: formatPValue(pValue), ci: null, isRatio: false },
         { label: `Interpretation (α = ${alpha}, ${tailWord}-tailed)`,
@@ -2437,12 +2435,10 @@ const CALCULATORS = [
         { label: usingSampleSD ? 'Standard Error (SE, using sample SD)' : 'Standard Error (SE)',
           value: f(se), ci: null, isRatio: false },
         { label: 'z-Statistic',                     value: f(z),    ci: null, isRatio: false, highlight: true },
-        { label: `Critical Value (z, ${tailWord}-tailed, α = ${alpha})`,
-          value: isTwoTailed ? `±${f(critZ)}` : f(critZ), ci: null, isRatio: false, highlight: true },
-        { label: `Critical Value (x, ${tailWord}-tailed, α = ${alpha})`,
+        { label: `Critical Value (z & x, ${tailWord}-tailed, α = ${alpha})`,
           value: isTwoTailed
-            ? `≤ ${f(mu0 - critZ * se, 2)} or ≥ ${f(mu0 + critZ * se, 2)}`
-            : `≥ ${f(mu0 + critZ * se, 2)}`,
+            ? `±${f(critZ)}  (x ≤ ${f(mu0 - critZ * se, 2)} or x ≥ ${f(mu0 + critZ * se, 2)})`
+            : `${f(critZ)}  (x ≥ ${f(mu0 + critZ * se, 2)})`,
           ci: null, isRatio: false, highlight: true },
         { label: `p-value (${tailWord}-tailed)`,     value: formatPValue(pValue), ci: null, isRatio: false },
         { label: `Interpretation (α = ${alpha}, ${tailWord}-tailed)`,
