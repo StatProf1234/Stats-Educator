@@ -2103,7 +2103,7 @@ function showResults(results, calcId) {
     const valStr = (typeof r.value === 'number') ? String(r.value) : (r.value ?? '');
 
     let ciCell = '';
-    if (hasCI && !r.isText) {
+    if (hasCI && !r.isText && !r.wideValue) {
       if (r.ci && r.ci.length === 2) {
         const [lo, hi] = r.ci;
         const pt     = typeof r.value === 'number' ? r.value : 0;
@@ -2124,6 +2124,7 @@ function showResults(results, calcId) {
       r.isText    ? 'is-text-row' : '',
       r.highlight ? 'highlight' : '',
       r.isError   ? 'error-row' : '',
+      r.wideValue ? 'wide-value' : '',
     ].filter(Boolean).join(' ');
 
     const labelText = r.isText ? upperAscii(r.label) : r.label;

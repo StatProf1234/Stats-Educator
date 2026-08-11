@@ -2234,7 +2234,7 @@ const CALCULATORS = [
           value: isTwoTailed
             ? `±${f(critT)}  (x ≤ ${f(mu0 - critT * se, 2)} or x ≥ ${f(mu0 + critT * se, 2)})`
             : `${f(critT)}  (x ≥ ${f(mu0 + critT * se, 2)})`,
-          ci: null, isRatio: false, highlight: true },
+          ci: null, isRatio: false, highlight: true, wideValue: true },
         { label: `p-value (${tailWord}-tailed)`,     value: formatPValue(pValue), ci: null, isRatio: false },
         { label: `Interpretation (α = ${alpha}, ${tailWord}-tailed)`,
           value: isSignificant
@@ -2439,7 +2439,7 @@ const CALCULATORS = [
           value: isTwoTailed
             ? `±${f(critZ)}  (x ≤ ${f(mu0 - critZ * se, 2)} or x ≥ ${f(mu0 + critZ * se, 2)})`
             : `${f(critZ)}  (x ≥ ${f(mu0 + critZ * se, 2)})`,
-          ci: null, isRatio: false, highlight: true },
+          ci: null, isRatio: false, highlight: true, wideValue: true },
         { label: `p-value (${tailWord}-tailed)`,     value: formatPValue(pValue), ci: null, isRatio: false },
         { label: `Interpretation (α = ${alpha}, ${tailWord}-tailed)`,
           value: isSignificant

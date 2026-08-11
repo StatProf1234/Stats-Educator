@@ -2555,6 +2555,22 @@ body {
   font-size: 16px;
 }
 
+/* Opt-in for a row whose value is a compound string (e.g. a critical
+   value shown alongside its raw-units equivalent) that's too long for
+   the normal narrow value column and would otherwise wrap into a
+   cramped stack under the label. Lets the value cell expand across
+   the row's remaining columns (including the CI column, when present,
+   since a wideValue row never has its own CI) instead of shortening
+   the content to fit. */
+.result-row.wide-value .result-value {
+  grid-column: 2 / -1;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .result-row.wide-value .result-value { white-space: normal; }
+}
+
 .result-ci {
   display: flex;
   flex-direction: column;
