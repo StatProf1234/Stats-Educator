@@ -12252,6 +12252,163 @@ const CALCULATORS = [
     }
   },
 
+  /* ── MULTIPLE COMPARISONS CORRECTION ──────────────────────────────────
+     Generic Bonferroni / Holm / Benjamini-Hochberg (FDR) correction
+     applied directly to p-values the user enters — unlike Tukey's HSD,
+     Holm-Šídák, or Dunn's test (which compute their own pairwise tests
+     from raw group data), this one takes p-values already reported
+     somewhere else (e.g. a published paper's table) so a reader can
+     independently check whether a stated multiplicity correction
+     actually holds up, without re-running the underlying tests.      */
+  {
+    id:          'multiplicity-correction',
+    name:        'Multiple Comparisons Correction',
+    hint:        'Bonferroni / Holm / Benjamini-Hochberg on your own p-values',
+    category:    'ANOVA',
+    description: "Applies Bonferroni, Holm, and Benjamini-Hochberg (FDR) corrections to a set of p-values you enter directly — lets you independently check whether a paper's stated multiplicity correction actually holds up.",
+
+    formulas: [
+      {
+        label: 'Bonferroni Correction',
+        latex: '\\alpha_{Bonf} = \\dfrac{\\alpha}{m}, \\qquad p_{(i)}^{Bonf} = \\min\\!\\big(1,\\; m\\,p_i\\big)'
+      },
+      {
+        label: "Holm's Step-Down Adjustment",
+        latex: 'p_{(i)}^{Holm} = \\max_{j \\le i}\\big\\{\\min(1,\\,(m-j+1)\\,p_{(j)})\\big\\}'
+      },
+      {
+        label: 'Benjamini-Hochberg (FDR) Step-Up Adjustment',
+        latex: 'p_{(i)}^{BH} = \\min_{j \\ge i}\\left\\{\\min\\!\\left(1,\\,\\dfrac{m}{j}\\,p_{(j)}\\right)\\right\\}'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Comparison',
+    groupMax: 12,
+    groupFields: [
+      { prefix: 'name', label: 'Label (optional)' },
+      { prefix: 'p',    label: 'p-value' },
+    ],
+    inputs: [
+      { id: 'name1', type: 'text', label: 'Comparison 1 Label (optional)', default: '' },
+      { id: 'p1',    label: 'Comparison 1 p-value', default: 0.001 },
+      { id: 'name2', type: 'text', label: 'Comparison 2 Label (optional)', default: '' },
+      { id: 'p2',    label: 'Comparison 2 p-value', default: 0.008 },
+      { id: 'name3', type: 'text', label: 'Comparison 3 Label (optional)', default: '' },
+      { id: 'p3',    label: 'Comparison 3 p-value', default: 0.015 },
+      { id: 'name4', type: 'text', label: 'Comparison 4 Label (optional)', default: '' },
+      { id: 'p4',    label: 'Comparison 4 p-value', default: 0.031 },
+      { id: 'name5', type: 'text', label: 'Comparison 5 Label (optional)', default: '' },
+      { id: 'p5',    label: 'Comparison 5 p-value', default: 0.044 },
+      { id: 'name6', type: 'text', label: 'Comparison 6 Label (optional)', default: '' },
+      { id: 'p6',    label: 'Comparison 6 p-value', default: 0.048 },
+      { id: 'name7', type: 'text', label: 'Comparison 7 Label (optional)', default: '' },
+      { id: 'p7',    label: 'Comparison 7 p-value', default: 0.062 },
+      { id: 'name8',  type: 'text', label: 'Comparison 8 Label (optional)', default: '' },
+      { id: 'p8',     label: 'Comparison 8 p-value (optional)', default: '' },
+      { id: 'name9',  type: 'text', label: 'Comparison 9 Label (optional)', default: '' },
+      { id: 'p9',     label: 'Comparison 9 p-value (optional)', default: '' },
+      { id: 'name10', type: 'text', label: 'Comparison 10 Label (optional)', default: '' },
+      { id: 'p10',    label: 'Comparison 10 p-value (optional)', default: '' },
+      { id: 'name11', type: 'text', label: 'Comparison 11 Label (optional)', default: '' },
+      { id: 'p11',    label: 'Comparison 11 p-value (optional)', default: '' },
+      { id: 'name12', type: 'text', label: 'Comparison 12 Label (optional)', default: '' },
+      { id: 'p12',    label: 'Comparison 12 p-value (optional)', default: '' },
+      { id: 'alpha', type: 'slider', label: 'Family-Wise Significance Level (α)', default: 0.05, min: 0.01, max: 0.10, step: 0.01,
+        format: v => v.toFixed(2) },
+      { id: 'statedAlpha', label: "Paper's Stated Corrected α (optional)", default: '',
+        note: 'If a paper reports a Bonferroni-corrected threshold (e.g. "α = 0.05/6 = 0.00833"), enter that number here to check it against 0.05 divided by however many comparisons you actually entered above — a mismatched denominator (correcting for 6 comparisons when the table actually shows 7) is a common reporting error.' },
+    ],
+
+    example(values) {
+      const { comparisons } = gatherComparisons(values);
+      const alpha = values.alpha;
+      if (comparisons.length < 2 || !isFinite(alpha) || alpha <= 0 || alpha >= 1)
+        return 'Enter a p-value for at least 2 comparisons to see a worked medical example here.';
+      const m = comparisons.length;
+      const pVals = comparisons.map(c => c.p);
+      const bonf = pVals.map(p => Math.min(1, p * m));
+      const holm = holmAdjust(pVals);
+      const bh   = bhAdjust(pVals);
+      const nRaw  = pVals.filter(p => p < alpha).length;
+      const nBonf = bonf.filter(p => p < alpha).length;
+      const nHolm = holm.filter(p => p < alpha).length;
+      const nBH   = bh.filter(p => p < alpha).length;
+      return `A paper's table reports ${m} p-values from separate comparisons, ${nRaw} of which look "significant" at the uncorrected α = ${alpha.toFixed(2)}. Once you correct for having tested ${m} hypotheses at once, only ${nBonf} survive(s) the conservative Bonferroni correction, ${nHolm} survive(s) the less conservative Holm step-down procedure, and ${nBH} survive(s) the Benjamini-Hochberg false discovery rate adjustment — the very same p-values can support a different number of "significant" findings depending entirely on which correction (if any) gets applied.`;
+    },
+
+    calculate(values) {
+      const { comparisons } = gatherComparisons(values);
+      if (comparisons.length < 2) return [err('Enter a p-value for at least 2 comparisons')];
+      if (comparisons.some(c => c.p < 0 || c.p > 1)) return [err('Every p-value must be between 0 and 1')];
+      const alpha = values.alpha;
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
+
+      const m = comparisons.length;
+      const pVals = comparisons.map(c => c.p);
+      const bonfAdj = pVals.map(p => Math.min(1, p * m));
+      const holmAdj = holmAdjust(pVals);
+      const bhAdjP  = bhAdjust(pVals);
+      const bonferroniAlpha = alpha / m;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Number of Comparisons (m)', value: m, ci: null, isRatio: false },
+        { label: 'Uncorrected α', value: alpha.toFixed(2), ci: null, isRatio: false },
+        { label: 'Bonferroni-Corrected α (α / m)', value: f(bonferroniAlpha), ci: null, isRatio: false, highlight: true },
+      ];
+
+      const stated = values.statedAlpha;
+      if (stated !== '' && stated != null && isFinite(stated)) {
+        const mismatch = Math.abs(stated - bonferroniAlpha) > 0.0005;
+        rows.push({
+          label: 'Stated vs. Actual Bonferroni α', isText: true, ci: null, isRatio: false, highlight: mismatch,
+          value: mismatch
+            ? `The paper's stated α = ${f(stated)} does not match α / m = ${alpha.toFixed(2)} / ${m} = ${f(bonferroniAlpha)} for the ${m} comparisons entered above — check whether it actually corrected for the right number of comparisons.`
+            : `The paper's stated α = ${f(stated)} matches α / m = ${f(bonferroniAlpha)} for these ${m} comparisons.`
+        });
+      }
+
+      comparisons.forEach((c, idx) => {
+        const raw = c.p, bf = bonfAdj[idx], hl = holmAdj[idx], bhv = bhAdjP[idx];
+        rows.push({
+          label: `${c.label} — raw / Bonferroni / Holm / BH-adjusted p`,
+          isText: true, ci: null, isRatio: false,
+          highlight: hl < alpha,
+          value: `${formatPText(raw)}  |  Bonf. ${formatPText(bf)}${bf < alpha ? ' *' : ''}  |  Holm ${formatPText(hl)}${hl < alpha ? ' *' : ''}  |  BH ${formatPText(bhv)}${bhv < alpha ? ' *' : ''}`
+        });
+      });
+
+      const nRaw  = pVals.filter(p => p < alpha).length;
+      const nBonf = bonfAdj.filter(p => p < alpha).length;
+      const nHolm = holmAdj.filter(p => p < alpha).length;
+      const nBH   = bhAdjP.filter(p => p < alpha).length;
+      rows.push({
+        label: 'Significant Comparisons', isText: true, ci: null, isRatio: false, highlight: true,
+        value: `${nRaw} of ${m} at uncorrected α — ${nBonf} after Bonferroni, ${nHolm} after Holm, ${nBH} after Benjamini-Hochberg (FDR).`
+      });
+
+      // 12 — this calculator's own groupMax, the most comparisons it can
+      // ever take, so the axis never implies coverage beyond what a
+      // user could actually enter.
+      const fwerMax = 12;
+      const uncorrectedFwer = 1 - Math.pow(1 - alpha, m);
+      rows.push({ label: 'Uncorrected Family-Wise Error Rate', value: `${f(uncorrectedFwer * 100, 1)}%`, ci: null, isRatio: false, isText: true, highlight: true });
+      rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(alpha, m, fwerMax) });
+
+      rows.push({
+        label: 'Method', isText: true, ci: null, isRatio: false,
+        value: "Bonferroni multiplies each p-value by m (equivalently, divides α by m) — simple, but increasingly conservative as m grows. Holm applies the same logic step-by-step, correcting the smallest p-value the most and each successive one less; it's never less powerful than Bonferroni and rejects at least as many. Benjamini-Hochberg instead controls the false discovery rate — the expected proportion of false positives among findings called \"significant\" — rather than the family-wise error rate (the chance of any false positive at all) that the other two target, which usually makes it the most powerful of the three at the cost of tolerating a few more false positives among a larger set of true ones."
+      });
+      rows.push({
+        label: 'Note', isText: true, isHtml: true, ci: null, isRatio: false,
+        value: 'Enter every comparison a paper actually performed, not just the ones it highlighted as significant — a corrected α that only accounts for a subset of the comparisons made will understate how easily a "significant" result could have arisen by chance. See <a href="#learn/appraisal-tails-and-multiplicity">One-Tailed vs. Two-Tailed Tests, and When Multiple Comparisons Change the Rules</a> for the family-wise error rate reasoning behind this.'
+      });
+
+      return rows;
+    }
+  },
+
   /* ── SHAPIRO-WILK TEST ────────────────────────────────────────────────
      Tests whether a sample is consistent with a normal distribution —
      the assumption behind t-tests, ANOVA, and Pearson correlation.
@@ -14063,6 +14220,25 @@ function gatherMRInstruments(values, maxInstruments = 10) {
   return { instruments };
 }
 
+// Reads name{i}/p{i} pairs out of the raw input values for
+// 'multiplicity-correction', one row per comparison. A row only needs
+// its p-value — the label is cosmetic — so unlike gatherEffectStudies
+// there's no "both or neither" pairing to enforce.
+function comparisonLabel(values, i) {
+  const name = values['name' + i];
+  const trimmed = (name == null ? '' : String(name)).trim();
+  return trimmed || `Comparison ${i}`;
+}
+function gatherComparisons(values, maxComparisons = 12) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const comparisons = [];
+  for (let i = 1; i <= maxComparisons; i++) {
+    const p = values['p' + i];
+    if (provided(p)) comparisons.push({ label: comparisonLabel(values, i), p });
+  }
+  return { comparisons };
+}
+
 // Egger's test regression: OLS of each study's standardized effect
 // (effect/SE) on its precision (1/SE) — algebraically the same as a
 // weighted regression of the raw effect on SE with weights 1/SE²,
@@ -14692,6 +14868,30 @@ function holmSidakAdjust(pValues) {
     runningMax = Math.max(runningMax, raw);
     adjusted[origIdx] = Math.min(1, runningMax);
   });
+  return adjusted;
+}
+
+// Benjamini-Hochberg step-up FDR adjustment, matching R's
+// p.adjust(method = "BH") — controls the false discovery rate rather
+// than the family-wise error rate that Bonferroni/Holm/Holm-Šídák
+// target, so it's usually the most powerful of the three (more true
+// positives called "significant", at the cost of tolerating a few
+// more false ones among them). Walks from the largest p-value down to
+// the smallest, taking a running minimum, since each p_(i)*m/i must be
+// no larger than every later (bigger-p, bigger-i) step's own value.
+// Returns adjusted p-values in the SAME order as the input array.
+function bhAdjust(pValues) {
+  const m = pValues.length;
+  const order = pValues.map((_, i) => i).sort((a, b) => pValues[a] - pValues[b]);
+  const adjusted = new Array(m);
+  let runningMin = 1;
+  for (let rank = m - 1; rank >= 0; rank--) {
+    const origIdx = order[rank];
+    const i = rank + 1; // 1-based rank
+    const raw = pValues[origIdx] * m / i;
+    runningMin = Math.min(runningMin, raw);
+    adjusted[origIdx] = Math.min(1, runningMin);
+  }
   return adjusted;
 }
 
@@ -18397,6 +18597,7 @@ const CALCULATOR_INDEX = [
   { id: 'tukeys-hsd',           name: "Tukey's HSD Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons controlling family-wise error rate after ANOVA.',               status: 'available' },
   { id: 'levenes-test',         name: "Levene's Test (Brown-Forsythe)",  category: 'ANOVA',                       description: "Tests whether two or more groups have equal variances — the precondition check for a standard (pooled-variance) ANOVA. For the two-group case, current guidance is to skip this test and simply use Welch's t-test by default instead.", status: 'available' },
   { id: 'holm-sidak-test',      name: "Holm-Šídák Test",                category: 'ANOVA',                       description: 'Post-hoc pairwise comparisons following ANOVA, using pooled-variance t-tests with the Holm-Šídák step-down correction for multiple comparisons.', status: 'available' },
+  { id: 'multiplicity-correction', name: 'Multiple Comparisons Correction', category: 'ANOVA',                    description: "Applies Bonferroni, Holm, and Benjamini-Hochberg (FDR) corrections to a set of p-values you enter directly — lets you independently check whether a paper's stated multiplicity correction actually holds up.", status: 'available' },
   { id: 'shapiro-wilk-test',    name: 'Shapiro-Wilk Test',               category: 'ANOVA',                       description: 'Tests whether a sample of continuous data is consistent with a normal distribution — the assumption behind parametric tests like the t-test and ANOVA.', status: 'available' },
   { id: 'repeated-measures-anova', name: 'Repeated Measures ANOVA',      category: 'ANOVA',                       description: 'A within-subjects Analysis of Variance (ANOVA) that analyzes data from designs where the same subjects are measured under multiple conditions.',   status: 'available' },
   { id: 'mauchlys-test',        name: "Mauchly's Test of Sphericity",   category: 'ANOVA',                       description: 'Tests whether the variances of the differences between every pair of repeated-measures conditions are equal — the sphericity assumption behind Repeated Measures ANOVA.', status: 'available' },
@@ -18526,6 +18727,7 @@ const WIZARD_TREE = {
       { label: 'Pool results across multiple studies (meta-analysis)',               next: 'metaResult' },
       { label: 'Check how fragile a significant trial result is',                    next: 'fragilityResult' },
       { label: 'Decide whether I need multilevel/hierarchical modeling',             next: 'multilevelGoal' },
+      { label: 'Correct a set of p-values for testing many comparisons at once',     next: 'multiplicityResult' },
     ]
   },
 
@@ -18560,6 +18762,12 @@ const WIZARD_TREE = {
   fragilityResult: {
     results: [
       { id: 'fragility-index', why: "Counts how many patients' outcomes would need to flip before a statistically significant 2×2 result stops being significant." },
+    ]
+  },
+
+  multiplicityResult: {
+    results: [
+      { id: 'multiplicity-correction', why: "Enter each comparison's p-value directly (e.g. straight from a paper's table) and compare Bonferroni, Holm, and Benjamini-Hochberg (FDR) corrections side by side — useful for checking whether a paper's own stated correction actually matches how many comparisons it made." },
     ]
   },
 
@@ -18855,7 +19063,23 @@ const WIZARD_TREE = {
     question: 'Do you want to quantify the strength of a relationship, or predict/model one variable from another(s)?',
     options: [
       { label: 'Just quantify the strength/direction of association',    next: 'corrStrengthGoal' },
-      { label: 'Predict or model one variable from another (regression)', next: 'regressionGoal' },
+      { label: 'Predict or model one variable from another (regression)', next: 'regressionClusterCheck' },
+    ]
+  },
+
+  // Catches the case a plain regression question doesn't ask about on
+  // its own: rows that aren't independent observations because several
+  // belong to the same subject (repeated visits/timepoints) or cluster
+  // (e.g., patients within the same clinic). Pooling those rows into
+  // an ordinary regression as if each were independent inflates the
+  // effective n and shrinks SEs artificially, which is exactly the
+  // failure mode multilevelGoal/multilevelClusterSize (reused below)
+  // already routes toward ICC + design-effect for.
+  regressionClusterCheck: {
+    question: 'Are multiple observations in your data linked to the same subject over time (e.g., repeated visits, multiple lab draws) or to the same cluster (e.g., patients within the same clinic), rather than one independent row per subject?',
+    options: [
+      { label: 'No — one independent observation per subject', next: 'regressionGoal' },
+      { label: 'Yes — repeated/longitudinal measurements or clustering', next: 'multilevelClusterSize' },
     ]
   },
   corrStrengthGoal: {
@@ -19614,6 +19838,7 @@ const SEARCH_KEYWORDS = {
   'manova':                 ['manova', 'multivariate analysis of variance', 'multiple outcome variables', 'wilks lambda', "wilks' lambda", "pillai's trace", 'pillai trace', 'two correlated outcomes'],
   'tukeys-hsd':             ["tukey's hsd", 'post hoc test', 'pairwise comparison after anova', 'which groups differ'],
   'holm-sidak-test':        ['holm-sidak test', 'holm sidak', 'post hoc test', 'pairwise comparison after anova', 'multiple comparisons correction', 'step-down sidak'],
+  'multiplicity-correction': ['bonferroni correction', 'bonferroni', 'holm correction', 'holm step-down', 'benjamini-hochberg', 'false discovery rate', 'fdr correction', 'p-value adjustment', 'multiple testing correction', 'corrected alpha', 'family-wise error rate'],
   'shapiro-wilk-test':      ['shapiro-wilk test', 'shapiro wilk', 'test for normality', 'normality assumption', 'is my data normally distributed'],
   'repeated-measures-anova': ['repeated measures anova', 'same subjects multiple conditions'],
   'mauchlys-test': ['mauchly test', 'mauchly\'s w', 'sphericity test', 'sphericity assumption', 'test of sphericity', 'rm anova assumption'],
@@ -20213,6 +20438,16 @@ const NOTATION = {
     { symbol: 'm', meaning: 'Total number of pairwise comparisons being adjusted for.' },
     { symbol: '\\alpha', meaning: 'Significance level, set by the slider — the per-comparison threshold if left uncorrected, and the family-wise rate Holm-Šídák holds to after correction.' },
     { symbol: '\\text{FWER}', meaning: 'Family-wise error rate — the chance of at least one false positive across all m comparisons if each were tested uncorrected at α.' },
+  ],
+  'multiplicity-correction': [
+    { symbol: 'p_i', meaning: 'Unadjusted p-value you entered for comparison i, as reported for that comparison elsewhere (e.g. in a paper\'s table).' },
+    { symbol: 'm', meaning: 'Total number of comparisons being corrected for.' },
+    { symbol: '\\alpha', meaning: 'Family-wise significance level, set by the slider — the threshold each adjusted p-value is judged against.' },
+    { symbol: '\\alpha_{Bonf}', meaning: 'Bonferroni-corrected significance level, α divided by m.' },
+    { symbol: 'p_{(i)}^{Bonf}', meaning: 'Bonferroni-adjusted p-value for comparison i.' },
+    { symbol: 'p_{(i)}^{Holm}', meaning: "Holm-adjusted p-value for the i-th ranked comparison (comparisons sorted from smallest to largest raw p-value)." },
+    { symbol: 'p_{(i)}^{BH}', meaning: 'Benjamini-Hochberg (FDR)-adjusted p-value for the i-th ranked comparison.' },
+    { symbol: 'p_{(j)}', meaning: 'Unadjusted p-value of the j-th comparison once all comparisons are sorted from smallest to largest.' },
   ],
   'shapiro-wilk-test': [
     { symbol: 'W', meaning: "Shapiro-Wilk test statistic — how closely the sample's shape matches a normal distribution (closer to 1 = more normal)." },
