@@ -19477,6 +19477,7 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-appraising-systematic-reviews', why: 'Protocol registration, search strategy, risk-of-bias assessment, PRISMA, AMSTAR-2, ROBIS.' },
     { id: 'appraisal-meta-analysis-reading', why: 'The statistical side — heterogeneity, fixed vs. random effects, publication bias.' },
     { id: 'appraisal-grade', why: 'How much confidence the pooled result actually deserves.' },
+    { id: 'appraisal-grade-vs-conclusions', why: "Once you've found the GRADE rating, check it directly against the paper's own Conclusions wording — the two are written separately, and often don't agree." },
   ]},
   res_scoping:   { results: [ { id: 'appraisal-appraising-scoping-reviews', why: 'A different purpose from a systematic review — mapping a literature, not pooling an effect.' } ] },
   res_realist:   { results: [ { id: 'appraisal-appraising-realist-reviews', why: 'A different unit of analysis from a systematic review — context-mechanism-outcome configurations explaining why an intervention works, for whom, and under what circumstances.' } ] },
@@ -19535,6 +19536,7 @@ const LEARN_WIZARD_TREE = {
     { id: 'appraisal-meta-analysis-reading', why: "Heterogeneity, fixed vs. random effects, and why pooling can't fix flawed primary studies." },
     { id: 'appraisal-bias-tools', why: 'A map of which tool answers which question — CONSORT, RoB 2, AMSTAR-2, GRADE, and more.' },
     { id: 'appraisal-grade', why: 'Certainty of evidence and strength of recommendation are two different questions.' },
+    { id: 'appraisal-grade-vs-conclusions', why: "A paper's own certainty rating and the confidence of its Conclusions section are two independently written things — checking whether they actually agree is a distinct skill from understanding GRADE itself." },
   ]},
   res_pitfall: { results: [
     { id: 'appraisal-table2-fallacy', why: "Only the exposure of interest in a regression table was built to be unconfounded — the rest weren't." },
@@ -22457,6 +22459,7 @@ const GUIDES = [
       { id: 'cronbachs-alpha', why: "Computes the internal-consistency reliability coefficient this guide's reliability section covers." },
       { id: 'icc', why: 'Computes the test-retest reliability coefficient this guide distinguishes from internal consistency.' },
       { id: 'mid-calculator', why: "Computes the distribution-based and anchor-based MID estimates this guide's interpretability section covers." },
+      { id: 'reference-mcid-pro-instruments', why: 'A lookup table of published MID values for five commonly used instruments (VAS pain, OHIP-14, EQ-5D-5L, ODI, PHQ-9), for when deriving your own estimate isn\'t necessary.' },
       { id: 'appraisal-appraising-rcts', why: 'Covers intention-to-treat analysis and missing-outcome handling in general — the same principles this guide applies specifically to PRO dropout.' },
       { id: 'appraisal-effect-measures', why: 'The same statistical-vs-clinical-significance distinction this guide applies to MID, covered there for RR/OR/absolute effects.' },
       { id: 'appraisal-survey-research', why: 'The broader response-bias and question-design issues that apply to any self-report questionnaire, not just validated PROMs.' },
@@ -22779,6 +22782,7 @@ const GUIDES = [
     ],
     related: [
       { id: 'md-vs-mid', why: 'Turns "is this significant" into "is this important" directly — comparing a mean difference\'s own confidence interval against a minimal important difference rather than its point estimate.' },
+      { id: 'reference-mcid-pro-instruments', why: 'Published MID reference values for five commonly used PRO instruments, to plug into the MD vs. MID calculator directly.' },
       { id: 'fragility-index', why: 'Quantifies exactly how many patients a "significant" result depends on — a concrete way to weigh whether statistical significance reflects a robust finding.' },
       { id: 'sample-size-2mean', why: 'Calculates the sample size needed to detect a given effect size — directly relevant to whether a "significant" result was ever a fair test.' },
       { id: 'posthoc-power', why: 'Estimates the power an already-completed study had to detect a given effect.' },
@@ -23320,6 +23324,49 @@ const GUIDES = [
       { id: 'appraisal-meta-analysis-reading', why: 'Covers the heterogeneity and precision concepts that feed directly into the inconsistency and imprecision domains here.' },
       { id: 'appraisal-effect-measures', why: 'Covers the relative vs. absolute effect distinction referenced in a GRADE Summary of Findings table.' },
       { id: 'md-vs-mid', why: "Operationalizes the imprecision domain's core question — whether a confidence interval is narrow enough, relative to a meaningful threshold, to trust the estimate." },
+      { id: 'appraisal-grade-vs-conclusions', why: "A paper's own certainty rating and the confidence of its Conclusions section are two independently written things — this companion guide covers checking whether they actually agree." },
+    ],
+  },
+
+  {
+    id: 'appraisal-grade-vs-conclusions',
+    category: 'Evidence Synthesis & Certainty',
+    title: "When a Paper's Conclusions Outrun Its Own GRADE Rating",
+    blurb: 'A systematic review can rate an outcome "very low certainty" in its own GRADE table and still describe that same outcome in flatly confident language a few pages later in the Conclusions — a mismatch worth checking for by name, not assumed away.',
+    dek: `Running GRADE and writing the Abstract/Conclusions are two separate acts, usually by the same authors but on a delay, and nothing forces the second to be recalibrated against the first. Reading a certainty-graded paper well means checking both pieces against each other directly, rather than trusting whichever one is easier to find.`,
+    sections: [
+      {
+        heading: 'The mismatch, in one sentence',
+        html: `<p>A GRADE Summary of Findings table rates certainty <em>per outcome</em> (see the companion guide linked below for the full framework), but a paper's Conclusions section is written once, in ordinary narrative prose, to summarize the whole study for a reader who may never reach the table at all. When a review reports several outcomes at different certainty levels — say, a very-low-certainty finding for the primary symptom outcome alongside a moderate-certainty finding for a secondary one — the Conclusions sentence covering both easily flattens them into one confident-sounding claim, simply because a single sentence is a poor container for two different certainty levels sitting side by side.</p>`,
+      },
+      {
+        heading: 'A hypothetical illustration',
+        html: `<p>Suppose a systematic review pools trials of an adjunct therapy added to a standard treatment, reporting on two outcomes. Its own GRADE table might read:</p>
+<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Outcome</th><th style="text-align:left;">Pooled Effect</th><th style="text-align:left;">Certainty</th><th style="text-align:left;">Reason for Downgrading</th></tr></thead><tbody>
+<tr><td>Symptom severity (primary outcome)</td><td style="text-align:left;">MD &minus;4.1 (&minus;7.8 to &minus;0.4)</td><td style="text-align:left;">&#8853;&#9711;&#9711;&#9711; Very Low</td><td style="text-align:left;">Downgraded for risk of bias (assessors unblinded), inconsistency (I&sup2; = 81%), and imprecision (wide CI, few events)</td></tr>
+<tr><td>Broader quality-of-life composite (secondary outcome)</td><td style="text-align:left;">MD &minus;3.3 (&minus;5.0 to &minus;1.6)</td><td style="text-align:left;">&#8853;&#8853;&#8853;&#9711; Moderate</td><td style="text-align:left;">Downgraded once, for imprecision only</td></tr>
+</tbody></table></div>
+<p>Yet its Conclusions section might read simply: "This therapy improves both symptom severity and quality of life, and should be considered a standard adjunct to care." Read on its own, that sentence treats both outcomes as equally settled. Read against the table above, one of the two claims it makes rests on evidence downgraded three full levels — bias, inconsistency, and imprecision all stacking on the very outcome the therapy is chiefly being proposed to treat — while the other rests on a single, more modest imprecision penalty. Nothing in the sentence itself signals that difference.</p>`,
+      },
+      {
+        heading: 'Why this happens, structurally',
+        html: `<p>Four ordinary features of how papers get written and reported make this mismatch common rather than exceptional, without anyone involved doing anything unusual. The GRADE Summary of Findings table is frequently placed in a supplementary appendix rather than the main text, while the Conclusions section is written for the audience — often clinicians skimming an abstract — least likely to ever open that appendix. No reporting checklist closes this gap either: PRISMA and AMSTAR-2 check whether GRADE was performed and reported at all, not whether the paper's own downstream prose was calibrated back against it. Multiple outcomes rated at genuinely different certainty levels naturally get compressed into one summary sentence, since a Conclusions section is written to summarize a whole study, not to reproduce a multi-row table in prose. And a plain narrative pull toward a clean, actionable-sounding takeaway pushes phrasing toward confidence regardless of what the certainty column actually says — the same pull that produces the statistical-significance-read-as-importance error covered in the companion guide on clinical significance.</p>`,
+      },
+      {
+        heading: 'A 3-step check any reader can run',
+        html: `<p><strong>1. Find the certainty rating for the specific outcome you care about</strong> — not one overall "quality" verdict for the whole review, since (as the companion GRADE guide covers) certainty is assessed per outcome. If a review discusses its findings with confidence but never formally graded certainty for any outcome at all, that absence is itself informative, not a neutral gap.</p><p><strong>2. Read the exact sentence in the Abstract or Conclusions covering that outcome</strong>, and check whether its hedging language scales with the certainty rating. Very-low or low-certainty evidence should be described tentatively — "may reduce," "these findings suggest," "further research is needed before" — not asserted as settled fact; a flat, unhedged claim sitting on top of a low-certainty rating is the mismatch this guide is about.</p><p><strong>3. When the two disagree, act on the certainty rating, not the rhetoric.</strong> This is exactly the discipline a guideline panel is supposed to already apply when turning a certainty rating into a recommendation strength (see the companion GRADE guide's section on that distinction) — a careful reader is simply applying the same discipline one step earlier, to the paper's own summary of itself.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>Before accepting a systematic review's headline claim, find the GRADE rating for that specific outcome and reread the claim with the rating in hand. If the certainty is very low or low and the prose reads as settled anyway, trust the table over the sentence — the table is the more disciplined, and more falsifiable, of the two.</p>`,
+      },
+    ],
+    related: [
+      { id: 'appraisal-grade', why: 'Full explanation of the GRADE framework this guide assumes as background — how certainty is assessed per outcome, and how it differs from recommendation strength.' },
+      { id: 'appraisal-clinical-significance', why: 'The same "confident-sounding language outrunning what the numbers actually support" pattern, applied to statistical vs. clinical significance instead of certainty ratings.' },
+      { id: 'appraisal-meta-analysis-reading', why: 'Covers the heterogeneity statistics (I², prediction intervals) that feed the inconsistency domain in the hypothetical GRADE table above.' },
+      { id: 'appraisal-appraising-systematic-reviews', why: 'Covers appraising the review this certainty rating is built on, before checking whether its own conclusions matched that rating.' },
+      { id: 'appraisal-too-good-to-be-true', why: 'Places this specific mismatch within a broader checklist of ways a result gets overinterpreted.' },
     ],
   },
 
@@ -24844,6 +24891,49 @@ const GUIDES = [
       { id: 'power-with-graph', why: 'Visualizes the H0/Ha distribution overlap this page\'s decision rule and power both depend on.' },
       { id: 't-distribution-explorer', why: 'Shows the z-vs-t reference distribution choice this page\'s test-statistic table depends on.' },
       { id: 'shapiro-wilk-test', why: 'Tests the normality assumption behind every parametric (t- and F-based) row in the test-statistic table above.' },
+    ],
+  },
+
+  {
+    id: 'reference-mcid-pro-instruments',
+    category: 'Quick Reference',
+    title: 'Minimal Important Differences for Common PRO Instruments',
+    blurb: 'Published MID/MCID reference values for five widely used patient-reported outcome instruments, each with its own citation and caveat — a starting lookup, not a substitute for checking the primary source.',
+    dek: `A statistically significant mean difference on a patient-reported outcome (PRO) instrument is only half the question a careful reader asks — the other half is whether that difference is large enough to matter, which requires knowing the instrument's own minimal important difference (MID, also called MCID). This page is a lookup table of published values for a handful of commonly used instruments, meant to be read alongside the <a href="#md-vs-mid">MD vs. MID calculator</a>, not as a replacement for the methodology behind how any single number below was derived.`,
+    sections: [
+      {
+        heading: 'How to use this table',
+        html: `<p>Find the row matching the instrument reported in whatever you're reading, note the commonly cited value, then read the caveat column before treating it as a fixed threshold — for every instrument below, published MID estimates vary by population, condition, and estimation method, sometimes considerably. The "commonly cited" value is a reasonable default when nothing more specific is available for the population in question, not a universal constant. Once you have a candidate MID, plug it into the <a href="#md-vs-mid">MD vs. MID calculator</a> alongside the paper's own reported mean difference and confidence interval to see whether the entire interval clears the threshold, falls entirely short of it, or straddles it ambiguously.</p>`,
+      },
+      {
+        heading: 'Reference Table',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Instrument</th><th style="text-align:left;">Score Range</th><th style="text-align:left;">Commonly Cited MID/MCID</th><th style="text-align:left;">Key Caveat</th><th style="text-align:left;">Source</th></tr></thead><tbody>
+<tr><td>Visual Analog Scale (VAS), Pain</td><td style="text-align:left;">0&ndash;100 mm</td><td style="text-align:left;">&asymp; 10 mm (published range 8&ndash;40 mm)</td><td style="text-align:left;">A systematic review of 37 studies could not settle on a single value &mdash; the threshold shifts with baseline pain severity, acute vs. chronic pain, and estimation method.</td><td style="text-align:left;">Olsen et al., 2017, <em>BMC Medicine</em></td></tr>
+<tr><td>Oral Health Impact Profile-14 (OHIP-14)</td><td style="text-align:left;">0&ndash;56</td><td style="text-align:left;">&asymp; 3 points</td><td style="text-align:left;">Derived in a removable-partial-denture population; the value scales with item count, not a fixed percentage of the range &mdash; roughly 7 points for the 20-item OHIP-20, 14 for the full 49-item OHIP-49, and 2 for the ultra-short OHIP-5.</td><td style="text-align:left;">Myint Oo et al., 2020, <em>Journal of Dentistry</em></td></tr>
+<tr><td>EQ-5D-5L Index (health utility)</td><td style="text-align:left;">roughly &minus;0.3 to 1 (varies by country value set; 1 = full health)</td><td style="text-align:left;">No single accepted value &mdash; published estimates commonly range from &asymp;0.03 to over 0.3</td><td style="text-align:left;">Unusually condition-dependent even by this table's standards: a long-COVID cohort's reported MID (&asymp;0.26) and a post-PCI coronary cohort's (&asymp;0.07) are not interchangeable — always check that the borrowed MID was derived in a genuinely comparable population.</td><td style="text-align:left;">Coretti et al. systematic review; Henry et al., instrument-defined estimates</td></tr>
+<tr><td>Oswestry Disability Index (ODI)</td><td style="text-align:left;">0&ndash;100%</td><td style="text-align:left;">&asymp; 10 percentage points (commonly cited)</td><td style="text-align:left;">At least six distinct calculation methods have been proposed for the ODI specifically — absolute changes from 5 to 17 points, and relative changes from 30% to 50% — with no consensus on which is correct.</td><td style="text-align:left;">Schwind et al., 2013, <em>Journal of Manual &amp; Manipulative Therapy</em></td></tr>
+<tr><td>PHQ-9 (depression severity)</td><td style="text-align:left;">0&ndash;27</td><td style="text-align:left;">&ge; 5 points (2 &times; standard error of measurement)</td><td style="text-align:left;">The original threshold assumed one MID regardless of starting severity; more recent work suggests the true MID is much smaller near mild baseline depression and considerably larger near severe baseline depression.</td><td style="text-align:left;">L&ouml;we et al., 2004, <em>Medical Care</em></td></tr>
+</tbody></table></div><p class="ref-table-note">Every "commonly cited" value above is a starting reference, not a fixed constant — see the Key Caveat column, and the primary source itself, before applying one to a population it wasn't derived in.</p>`,
+      },
+      {
+        heading: 'Why the same instrument gets more than one number',
+        html: `<p>Every row above has a range or a caveat rather than one clean figure, and that is a finding about MIDs in general, not a gap in this particular table. Distribution-based estimates (tied to the scale's own measurement noise) and anchor-based estimates (tied to what patients themselves report noticing) routinely disagree because they answer different questions — see <a href="#learn/appraisal-patient-reported-outcomes">Appraising Patient-Reported Outcome Measures</a> for that distinction in full, and the <a href="#mid-calculator">MID calculator</a> for computing both kinds directly from your own data. On top of that methodological split, an MID estimated in one condition, population, or baseline severity band routinely doesn't transfer cleanly to another — the EQ-5D-5L row above is the starkest example on this page, but the same warning applies, to a lesser degree, to every row.</p>`,
+      },
+      {
+        heading: 'This list is deliberately short',
+        html: `<p>This page covers five instruments with well-documented (if still debated) MID literature — it is a starting lookup, not an exhaustive registry. If the instrument in front of you isn't listed here, search "[instrument name] minimal important difference" for its own validation literature, check whether the original psychometric development paper proposed one, or, if no anchor-based MID has ever been published for it, use the <a href="#mid-calculator">MID calculator</a> on this site to derive a distribution-based estimate directly from your own data as a fallback.</p>`,
+      },
+      {
+        heading: 'Reading tip',
+        html: `<p>When a paper reports a statistically significant change on one of these instruments, check whether it also states the MID it's judging that change against — and if so, whether that MID's source population resembles the one being studied. A paper that reports significance without ever mentioning an MID at all is asking the reader to supply the "does this matter" judgment entirely on their own; this table exists to make that judgment easier to make honestly.</p>`,
+      },
+    ],
+    related: [
+      { id: 'md-vs-mid', why: 'Compares a mean difference and its 95% CI against any of the MID values on this page — the CI, not just the point estimate, is what should be checked against the threshold.' },
+      { id: 'mid-calculator', why: 'Estimates a distribution-based (and optional anchor-based) MID directly from your own data, for an instrument or population not covered by a published value on this page.' },
+      { id: 'appraisal-patient-reported-outcomes', why: 'Full explanation of distribution-based vs. anchor-based MID estimation, and the other PROM appraisal questions (validity, reliability, responsiveness) that sit alongside it.' },
+      { id: 'appraisal-clinical-significance', why: 'The general statistical-vs-clinical-significance distinction this page\'s reference values let a reader apply concretely, instrument by instrument.' },
+      { id: 'data-likert-scales', why: 'Every instrument on this page is a summated multi-item scale — covers why that composite score is conventionally treated as continuous in the first place.' },
     ],
   },
 
