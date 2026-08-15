@@ -584,7 +584,7 @@ function renderFrontDoor() {
         </div>
       </div>
       <div class="frontdoor-hero-img">
-        <img src="assets/hero-desk.jpg" alt="A desk with a laptop showing a bell-curve chart, a stethoscope, a calculator, a coffee mug printed with the normal-distribution formula, and an open notebook of statistics notes beside a book titled The Biostat Toolkit.">
+        <img src="assets/hero-desk.png" alt="A desk with a laptop showing a bell-curve chart, a stethoscope, a calculator, a coffee mug printed with the normal-distribution formula, and an open notebook of statistics notes beside a book titled The Biostat Toolkit.">
       </div>
     </div>
 
