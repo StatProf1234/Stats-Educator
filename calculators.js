@@ -466,6 +466,135 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 1b. MANTEL-HAENSZEL STRATIFIED 2×2 ANALYSIS ─────────────────────
+     Pools an OR and RR across k 2×2 exposure/outcome tables (one per
+     confounder stratum — site, age band, sex, etc.) using the classic
+     Mantel & Haenszel (1959) weighting, which — unlike naively summing
+     all strata into one crude table — stays valid even with sparse or
+     zero-cell strata, and unlike a full regression model needs no
+     distributional assumptions beyond the stratification itself.
+     Variance of ln(OR_MH) uses the Robins-Breslow-Greenland (1986)
+     formula (matches R's mantelhaen.test()); variance of ln(RR_MH)
+     uses the Greenland-Robins (1985) formula. The CMH chi-square test
+     (with continuity correction, matching mantelhaen.test()'s default)
+     tests the pooled null of no association in any stratum.          */
+  {
+    id:          'mantel-haenszel',
+    name:        'Mantel-Haenszel Stratified 2×2 Analysis',
+    hint:        'OR_MH = Σ(a·d/n) / Σ(b·c/n), pooled across strata',
+    category:    'Epidemiology & Risk',
+    description: 'Pools an odds ratio and risk ratio across several 2×2 exposure/outcome tables — one per confounder stratum (site, age band, sex) — using the Mantel-Haenszel method, tests the pooled association, and flags whether the crude (unstratified) and adjusted estimates differ enough to suggest confounding by the stratification variable.',
+
+    formulas: [
+      {
+        label: 'Mantel-Haenszel Odds Ratio',
+        latex: 'OR_{MH} = \\dfrac{\\sum_i a_id_i/n_i}{\\sum_i b_ic_i/n_i}'
+      },
+      {
+        label: 'Mantel-Haenszel Risk Ratio',
+        latex: 'RR_{MH} = \\dfrac{\\sum_i a_i(c_i+d_i)/n_i}{\\sum_i c_i(a_i+b_i)/n_i}'
+      },
+      {
+        label: 'Robins-Breslow-Greenland Variance of ln(OR_MH)',
+        latex: '\\text{Var}\\big[\\ln(OR_{MH})\\big] = \\dfrac{\\sum P_iR_i}{2R_\\bullet^2} + \\dfrac{\\sum(P_iS_i+Q_iR_i)}{2R_\\bullet S_\\bullet} + \\dfrac{\\sum Q_iS_i}{2S_\\bullet^2}'
+      },
+      {
+        label: 'Cochran-Mantel-Haenszel Chi-Square Test',
+        latex: '\\chi^2_{MH} = \\dfrac{\\big(\\,|\\sum_i a_i - \\sum_i E(a_i)| - 0.5\\,\\big)^2}{\\sum_i \\text{Var}(a_i)}, \\quad E(a_i) = \\dfrac{n_{1i}(a_i+c_i)}{n_i}'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Stratum',
+    groupFields: [
+      { prefix: 'a', label: 'Exposed + Event (a)' },
+      { prefix: 'b', label: 'Exposed + No Event (b)' },
+      { prefix: 'c', label: 'Unexposed + Event (c)' },
+      { prefix: 'd', label: 'Unexposed + No Event (d)' },
+    ],
+    groupMax: 10,
+    inputs: strataInputs([
+      { a: 5,  b: 45, c: 10, d: 90 },
+      { a: 15, b: 35, c: 20, d: 80 },
+      { a: 25, b: 25, c: 35, d: 65 },
+    ], 10),
+
+    example(values) {
+      const { strata, error } = gatherStrata2x2(values, 10);
+      if (error || strata.length < 2 || strata.some(s => s.a < 0 || s.b < 0 || s.c < 0 || s.d < 0 || s.n < 2))
+        return 'Enter a, b, c, and d for at least 2 strata (each with at least 2 subjects) to see a worked medical example here.';
+      const { orMH, crudeOR } = mantelHaenszelCore(strata);
+      if (!isFinite(orMH) || !isFinite(crudeOR)) return 'Enter strata without a zero row or column total to see a worked medical example here.';
+      const f = v => +v.toFixed(2);
+      const pctDiff = Math.abs(crudeOR - orMH) / orMH * 100;
+      return `Across ${strata.length} strata (e.g. age bands, sites, or another confounder), the crude odds ratio — computed by just adding up all the exposed/unexposed and event/no-event counts as if there were no stratification — is ${f(crudeOR)}, while the Mantel-Haenszel-adjusted odds ratio is ${f(orMH)}. Those two estimates differ by about ${f(pctDiff)}%, ${pctDiff >= 10 ? 'enough to cross the common 10% change-in-estimate rule of thumb for meaningful confounding by whatever the strata represent' : 'not enough to suggest the stratification variable is meaningfully confounding the crude association here'}.`;
+    },
+
+    calculate(values) {
+      const { strata, error } = gatherStrata2x2(values, 10);
+      if (error) return [err(error)];
+      if (strata.length < 2) return [err('Enter a, b, c, and d for at least 2 strata — Mantel-Haenszel needs multiple strata to adjust across')];
+      if (strata.some(s => s.a < 0 || s.b < 0 || s.c < 0 || s.d < 0)) return [err('Every cell must be zero or greater')];
+      if (strata.some(s => s.n < 2)) return [err('Each stratum must have at least 2 total subjects')];
+
+      const core = mantelHaenszelCore(strata);
+      const { orMH, rrMH, varLnOR, varLnRR, crudeOR, crudeCI, chi2, pValue, perStratum } = core;
+
+      if (!isFinite(orMH)) return [err('Every stratum has b·c = 0 — the Mantel-Haenszel odds ratio is undefined here (perfect separation). Check for a data-entry error or a stratum with an empty row/column.')];
+      if (!isFinite(rrMH)) return [err('Every stratum has c·(a+b) = 0 — the Mantel-Haenszel risk ratio is undefined here. Check for a data-entry error or a stratum with an empty row/column.')];
+      if (!isFinite(chi2)) return [err('Cannot compute the Cochran-Mantel-Haenszel test — the strata contain no variability in exposure or outcome (every stratum is a degenerate 2×2 table).')];
+
+      const Z = 1.96;
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const seLnOR = Math.sqrt(varLnOR);
+      const ciOR = [Math.exp(Math.log(orMH) - Z * seLnOR), Math.exp(Math.log(orMH) + Z * seLnOR)];
+      const seLnRR = Math.sqrt(varLnRR);
+      const ciRR = [Math.exp(Math.log(rrMH) - Z * seLnRR), Math.exp(Math.log(rrMH) + Z * seLnRR)];
+
+      const rows = [
+        { label: 'Strata Entered (k)', value: strata.length, ci: null, isRatio: false, isText: true },
+      ];
+
+      const correctedStrata = [];
+      perStratum.forEach((s, idx) => {
+        rows.push({
+          label: `${strata[idx].label} — Within-Stratum Odds Ratio`,
+          value: f(s.or), ci: [f(s.ciLow), f(s.ciHigh)], isRatio: true,
+        });
+        if (s.corrected) correctedStrata.push(strata[idx].label);
+      });
+
+      rows.push({ label: 'Crude (Unstratified) Odds Ratio', value: f(crudeOR), ci: [f(crudeCI[0]), f(crudeCI[1])], isRatio: true });
+      rows.push({ label: 'Mantel-Haenszel Adjusted Odds Ratio (OR_MH)', value: f(orMH), ci: [f(ciOR[0]), f(ciOR[1])], isRatio: true, highlight: true });
+      rows.push({ label: 'Mantel-Haenszel Adjusted Risk Ratio (RR_MH)', value: f(rrMH), ci: [f(ciRR[0]), f(ciRR[1])], isRatio: true, highlight: true });
+
+      rows.push({ label: 'Cochran-Mantel-Haenszel Chi-Square (df = 1)', value: f(chi2), ci: null, isRatio: false });
+      rows.push({ label: 'Cochran-Mantel-Haenszel p-value', value: formatPValue(pValue), ci: null, isRatio: false, highlight: pValue < 0.05 });
+
+      const pctDiff = Math.abs(crudeOR - orMH) / orMH * 100;
+      const confounded = pctDiff >= 10;
+      rows.push({
+        label: 'Confounding Check (Crude vs. Adjusted)', isText: true, ci: null, isRatio: false, highlight: confounded,
+        value: `The crude OR (${f(crudeOR)}) and the Mantel-Haenszel-adjusted OR (${f(orMH)}) differ by about ${f(pctDiff, 1)}% — ${confounded ? 'at or above the common 10% change-in-estimate rule of thumb (Rothman & Greenland), suggesting the stratification variable is meaningfully confounding the crude association' : "below the common 10% change-in-estimate rule of thumb, so the stratification variable doesn't appear to be meaningfully confounding the crude association here"}.`
+      });
+
+      if (correctedStrata.length) {
+        rows.push({
+          label: 'Note on Zero Cells', isText: true, ci: null, isRatio: false,
+          value: `${correctedStrata.join(', ')} contained a zero cell, so a 0.5 continuity correction was applied to that stratum's own displayed odds ratio and CI above (standard practice for a single sparse 2×2 table). The pooled OR_MH, RR_MH, and CMH test above did not need this correction — one of the Mantel-Haenszel method's advantages over naive pooling is that it stays valid across strata with sparse or zero cells.`
+        });
+      }
+
+      rows.push({
+        label: 'Method', isText: true, isHtml: true, ci: null, isRatio: false,
+        value: `Each stratum's own odds ratio is a·d/(b·c) with a Woolf (logit-scale) 95% CI, shown above for reference — but the strength of stratified analysis is the pooled Mantel-Haenszel estimate, which weights each stratum by its precision rather than averaging the per-stratum ratios directly. The Cochran-Mantel-Haenszel chi-square tests whether that pooled association is significant, adjusting for the strata; it assumes the true OR is reasonably similar across strata (no strong effect modification). If the per-stratum ORs above look very different from each other rather than just noisy versions of the same number, that assumption may not hold — check with a formal homogeneity test (e.g. Breslow-Day, not currently implemented in this app) or compare two strata directly with the <a href="#interaction-test">Test for Interaction Between Two Effects</a> calculator, rather than trusting a single pooled estimate.`
+      });
+
+      return rows;
+    }
+  },
+
   /* ── 2. OR → NNTB & NNTH ──────────────────────────────────────────────
      Source: OR to NNT and NNH.R — NNT/NNH renamed to NNTB/NNTH (the
      current GRADE/Cochrane terminology), since "NNT" alone doesn't say
@@ -3017,6 +3146,117 @@ const CALCULATORS = [
         { label: 'z (α/2)', value: f(zAlpha), ci: null, isRatio: false },
         { label: 'z (power)', value: f(zPower), ci: null, isRatio: false },
       ];
+    }
+  },
+
+  /* ── 26c. SAMPLE SIZE — SURVIVAL ANALYSIS (SCHOENFELD) ────────────────
+     Schoenfeld's (1983) formula for the number of events a log-rank
+     test or (univariate) Cox model needs to detect a given hazard
+     ratio — the standard method behind PASS/gsDesign/powerSurvEpi's
+     survival sample-size routines. Distinct from every other
+     calculator in this category: power here depends on the number of
+     EVENTS observed, not the number of subjects enrolled, so this
+     also converts events → total N via a user-supplied overall event
+     probability (accounting for accrual, follow-up length, and
+     censoring in aggregate, rather than modeling each explicitly).   */
+  {
+    id:          'sample-size-survival',
+    name:        'Sample Size — Survival Analysis (Log-Rank / Cox PH)',
+    hint:        'd = (z_α/2+z_power)²(1+r)² / (r·ln(HR)²), Schoenfeld',
+    category:    'Power & Sample Size',
+    description: "Determines the number of events — and, given an expected overall event probability, the total sample size — needed for a two-group log-rank test or Cox proportional-hazards model to detect a specified hazard ratio, using Schoenfeld's formula. Unlike the other sample-size calculators here, power depends on the number of events observed, not the number of subjects enrolled.",
+
+    formulas: [
+      {
+        label: 'Required Number of Events (Schoenfeld)',
+        latex: 'd = \\dfrac{(z_{\\alpha/2}+z_{power})^2(1+r)^2}{r\\,(\\ln HR)^2}'
+      },
+      {
+        label: 'Total Sample Size from Events',
+        latex: 'N = \\left\\lceil \\dfrac{d}{\\bar p_{\\text{event}}} \\right\\rceil, \\qquad n_1 = \\dfrac{r}{1+r}N, \\;\\; n_2 = \\dfrac{1}{1+r}N'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'alpha',   label: 'Significance Level (α, two-tailed)',                default: 0.05 },
+      { id: 'power',   label: 'Target Power (1−β)',                               default: 0.80 },
+      { id: 'hr',      label: 'Hazard Ratio to Detect (HR)',                      default: 0.65 },
+      { id: 'r',       label: 'Allocation Ratio (Experimental : Control)',        default: 1 },
+      { id: 'eventProb', label: 'Expected Overall Event Probability (0–1, optional)', default: 0.60,
+        note: 'The anticipated proportion of ALL enrolled subjects (pooled across both arms) who will experience the event by the planned end of follow-up — accounting for accrual, follow-up duration, and loss to follow-up in aggregate, rather than modeling each separately. Estimate it from your control arm\'s expected event rate by that time (from a pilot study, historical cohort, or the published literature), averaged with the experimental arm\'s expected rate under the hazard ratio above. Leave blank to see only the required number of events.' },
+    ],
+
+    example({ alpha, power, hr, r, eventProb }) {
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1 || !isFinite(power) || power <= 0 || power >= 1 ||
+          !isFinite(hr) || hr <= 0 || hr === 1 || !isFinite(r) || r <= 0 ||
+          typeof jStat === 'undefined' || !jStat.normal)
+        return 'Enter alpha, target power, a hazard ratio other than 1, and an allocation ratio to see a worked medical example here.';
+      const zAlpha = jStat.normal.inv(1 - alpha / 2, 0, 1);
+      const zPower = jStat.normal.inv(power, 0, 1);
+      const lnHR = Math.log(hr);
+      const d = ((zAlpha + zPower) ** 2 * (1 + r) ** 2) / (r * lnHR ** 2);
+      const dEvents = Math.ceil(d);
+      const f = (v, dp = 2) => +v.toFixed(dp);
+      const provided = eventProb !== '' && eventProb != null && isFinite(eventProb) && eventProb > 0 && eventProb <= 1;
+      if (!provided)
+        return `To detect a hazard ratio of ${f(hr)} between two arms (allocation ratio ${r}:1) at α = ${alpha} and ${(power * 100).toFixed(0)}% power, a log-rank test or Cox model needs ${dEvents} total events — power here comes from the number of events observed, not the number of subjects enrolled, which is why this calculator stops at events unless you also enter an expected event probability.`;
+      const N = Math.ceil(d / eventProb);
+      const n1 = Math.round(N * r / (1 + r));
+      const n2 = N - n1;
+      return `To detect a hazard ratio of ${f(hr)} between two arms (allocation ratio ${r}:1) at α = ${alpha} and ${(power * 100).toFixed(0)}% power, a log-rank test or Cox model needs ${dEvents} total events. Assuming about ${(eventProb * 100).toFixed(0)}% of enrolled patients will experience the event by the planned end of follow-up, that means enrolling ${N} patients overall (${n1} experimental, ${n2} control) — a reminder that anything which slows event accrual (slower enrollment, better-than-expected survival, more loss to follow-up than planned) erodes power even if enrollment hits its numeric target, because power tracks events, not enrolled subjects.`;
+    },
+
+    calculate({ alpha, power, hr, r, eventProb }) {
+      if (!isFinite(alpha) || alpha <= 0 || alpha >= 1) return [err('Significance Level must be between 0 and 1 (exclusive)')];
+      if (!isFinite(power) || power <= 0 || power >= 1) return [err('Target Power must be between 0 and 1 (exclusive)')];
+      if (!isFinite(hr) || hr <= 0)                     return [err('Hazard Ratio must be greater than 0')];
+      if (hr === 1)                                     return [err('Hazard Ratio must not equal 1 — there would be no effect to detect')];
+      if (!isFinite(r) || r <= 0)                       return [err('Allocation Ratio must be greater than 0')];
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const zAlpha = jStat.normal.inv(1 - alpha / 2, 0, 1);
+      const zPower = jStat.normal.inv(power, 0, 1);
+      const lnHR   = Math.log(hr);
+      const d      = ((zAlpha + zPower) ** 2 * (1 + r) ** 2) / (r * lnHR ** 2);
+      const dEvents = Math.ceil(d);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Required Number of Events (d)', value: dEvents, ci: null, isRatio: false, highlight: true },
+      ];
+
+      const provided = eventProb !== '' && eventProb != null && isFinite(eventProb);
+      if (provided) {
+        if (eventProb <= 0 || eventProb > 1) return [err('Expected Overall Event Probability must be between 0 (exclusive) and 1 (inclusive)')];
+        const N  = Math.ceil(d / eventProb);
+        const n1 = Math.round(N * r / (1 + r));
+        const n2 = N - n1;
+        rows.push({ label: 'Required Total Sample Size (N)',   value: N,  ci: null, isRatio: false, highlight: true });
+        rows.push({ label: 'Experimental Group Size (n₁)',     value: n1, ci: null, isRatio: false });
+        rows.push({ label: 'Control Group Size (n₂)',          value: n2, ci: null, isRatio: false });
+      } else {
+        rows.push({
+          label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'Enter an Expected Overall Event Probability above to convert this event count into a total (and per-arm) subject count — otherwise this calculator can only tell you how many events are needed, not how many subjects to enroll to get them.'
+        });
+      }
+
+      rows.push({ label: 'z (α/2)',    value: f(zAlpha), ci: null, isRatio: false });
+      rows.push({ label: 'z (power)',  value: f(zPower), ci: null, isRatio: false });
+
+      rows.push({
+        label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `Power in a survival analysis comes from the number of events observed, not the number of subjects enrolled — ${dEvents} events are needed regardless of how many patients that takes to accrue. Anything that slows event accrual relative to plan (slower enrollment, better-than-expected survival in either arm, more loss to follow-up than assumed) directly erodes power even if total enrollment still hits its numeric target, which is why interim analyses in event-driven trials are typically scheduled by event count rather than by calendar time or enrollment count.`
+      });
+      rows.push({
+        label: 'Assumptions', isText: true, isHtml: true, ci: null, isRatio: false,
+        value: `Schoenfeld's formula assumes proportional hazards hold over the entire follow-up period (a constant HR, not one that changes over time) and that events accrue as assumed by the Expected Overall Event Probability above. It does not itself model accrual rate, staggered entry, or a specific censoring distribution — those are folded into that one probability, which is this calculator's main simplification versus a full accrual-and-follow-up-based sample size tool. Once the trial is underway or complete, estimate the survival curves with <a href="#kaplan-meier">Kaplan-Meier</a>, test the group difference with the <a href="#log-rank-test">Log-Rank Test</a>, and estimate the hazard ratio itself with <a href="#cox-ph">Cox Proportional Hazards</a>.`
+      });
+
+      return rows;
     }
   },
 
@@ -12244,8 +12484,12 @@ const CALCULATORS = [
       rows.push({ label: 'Uncorrected Family-Wise Error Rate', value: `${f(uncorrectedFwer * 100, 1)}%`, ci: null, isRatio: false, isText: true, highlight: true });
       rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(alpha, pairs.length, fwerMax) });
       rows.push({
+        label: 'Why It\'s 1 − (1 − α)ᵐ, Not (1 − α)ᵐ', isText: true, ci: null, isRatio: false,
+        value: `Each of the ${pairs.length} pairwise tests independently has a (1 − ${alpha.toFixed(2)}) chance of not producing a false positive, so (1 − ${alpha.toFixed(2)})^${pairs.length} = ${f(Math.pow(1 - alpha, pairs.length) * 100, 1)}% is the chance none of them do. The family-wise error rate is the complement of that — the chance at least one does — which is why the formula subtracts the whole (1 − α)^m term from 1 rather than raising (1 − α) to the mth power on its own and stopping there.`
+      });
+      rows.push({
         label: 'Why the Correction Matters', isText: true, ci: null, isRatio: false,
-        value: `Testing all ${pairs.length} pairs at an uncorrected α = ${alpha.toFixed(2)} each would carry a 1−(1−${alpha.toFixed(2)})^${pairs.length} = ${f(uncorrectedFwer * 100, 1)}% chance of at least one false positive by chance alone — the Holm-Šídák step-down correction above holds that family-wise rate back down to ≈${f(alpha * 100, 1)}%.`
+        value: `Testing all ${pairs.length} pairs at an uncorrected α = ${alpha.toFixed(2)} each would carry a 1−(1−${alpha.toFixed(2)})^${pairs.length} = ${f(uncorrectedFwer * 100, 1)}% chance of at least one false positive by chance alone — the Holm-Šídák step-down correction above holds that family-wise rate back down to ≈${f(alpha * 100, 1)}%. (That ${f(uncorrectedFwer * 100, 1)}% assumes independent tests; these pairwise comparisons share the ANOVA's pooled variance and, with more than 3 groups, overlapping group membership across pairs, so they're correlated and the true uncorrected rate is somewhat lower than this upper-bound estimate.)`
       });
 
       return rows;
@@ -12279,6 +12523,10 @@ const CALCULATORS = [
       {
         label: 'Benjamini-Hochberg (FDR) Step-Up Adjustment',
         latex: 'p_{(i)}^{BH} = \\min_{j \\ge i}\\left\\{\\min\\!\\left(1,\\,\\dfrac{m}{j}\\,p_{(j)}\\right)\\right\\}'
+      },
+      {
+        label: 'Uncorrected Family-Wise Error Rate',
+        latex: '\\text{FWER} = 1-(1-\\alpha)^{m}'
       }
     ],
 
@@ -12394,6 +12642,14 @@ const CALCULATORS = [
       const fwerMax = 12;
       const uncorrectedFwer = 1 - Math.pow(1 - alpha, m);
       rows.push({ label: 'Uncorrected Family-Wise Error Rate', value: `${f(uncorrectedFwer * 100, 1)}%`, ci: null, isRatio: false, isText: true, highlight: true });
+      rows.push({
+        label: 'Why It\'s 1 − (1 − α)ᵐ, Not (1 − α)ᵐ', isText: true, ci: null, isRatio: false,
+        value: `Each of the ${m} tests independently has a (1 − ${alpha.toFixed(2)}) chance of not producing a false positive, so (1 − ${alpha.toFixed(2)})^${m} = ${f(Math.pow(1 - alpha, m) * 100, 1)}% is the chance none of them do. The family-wise error rate is the complement of that — the chance at least one does — which is why the formula subtracts the whole (1 − α)^m term from 1 rather than raising (1 − α) to the mth power on its own and stopping there.`
+      });
+      rows.push({
+        label: 'Note on the Independence Assumption', isText: true, ci: null, isRatio: false,
+        value: `This ${f(uncorrectedFwer * 100, 1)}% is a theoretical baseline — the chance of at least one false positive across ${m} tests if all null hypotheses were true and the tests were independent — not something computed from your specific p-values. If your comparisons are correlated (e.g., the same outcome measured across overlapping subgroups, or nested contrasts), the true family-wise error rate under the null is typically lower than this figure, so treat it as an illustrative upper bound rather than an exact estimate for your data.`
+      });
       rows.push({ label: 'Family-Wise Error Rate vs. Number of Comparisons', isSVG: true, svg: familywiseErrorSVG(alpha, m, fwerMax) });
 
       rows.push({
@@ -15558,6 +15814,111 @@ function gatherGroups(values) {
   return { groups };
 }
 
+// Generates a{i}/b{i}/c{i}/d{i} input fields for i = 1..maxStrata — the
+// 'groups' input layout's column-per-stratum shape, but with a 2×2
+// table's four cells as the field set instead of gatherGroups()'s
+// mean/sd/n. Used by Mantel-Haenszel's per-stratum 2×2 tables.
+function strataInputs(defaults, maxStrata = 10) {
+  const inputs = [];
+  for (let i = 1; i <= maxStrata; i++) {
+    const s = defaults[i - 1] || { a: '', b: '', c: '', d: '' };
+    inputs.push({ id: `a${i}`, label: `Stratum ${i} — Exposed + Event (a)`,     default: s.a });
+    inputs.push({ id: `b${i}`, label: `Stratum ${i} — Exposed + No Event (b)`,   default: s.b });
+    inputs.push({ id: `c${i}`, label: `Stratum ${i} — Unexposed + Event (c)`,    default: s.c });
+    inputs.push({ id: `d${i}`, label: `Stratum ${i} — Unexposed + No Event (d)`, default: s.d });
+  }
+  return inputs;
+}
+
+// Reads a{i}/b{i}/c{i}/d{i} for i = 1..maxStrata into per-stratum 2×2
+// tables, returning only the fully-filled-in strata. A stratum with
+// some but not all four cells filled in is reported as an error, same
+// convention as gatherGroups().
+function gatherStrata2x2(values, maxStrata = 10) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const strata = [];
+  for (let i = 1; i <= maxStrata; i++) {
+    const a = values['a' + i], b = values['b' + i], c = values['c' + i], d = values['d' + i];
+    const any = provided(a) || provided(b) || provided(c) || provided(d);
+    const all = provided(a) && provided(b) && provided(c) && provided(d);
+    if (all) {
+      strata.push({ label: `Stratum ${i}`, a, b, c, d, n: a + b + c + d });
+    } else if (any) {
+      return { error: `Stratum ${i}: enter a, b, c, and d together, or leave all four blank` };
+    }
+  }
+  return { strata };
+}
+
+// Core Mantel-Haenszel computation shared by the calculate() and
+// example() functions of the Mantel-Haenszel Stratified 2×2 Analysis
+// calculator — pooled OR/RR, their variances (Robins-Breslow-Greenland
+// for ln(OR_MH), Greenland-Robins for ln(RR_MH)), the crude
+// (unstratified) OR, the continuity-corrected-if-needed per-stratum
+// OR/CI, and the Cochran-Mantel-Haenszel chi-square test (with the
+// standard 0.5 continuity correction, matching R's mantelhaen.test()).
+function mantelHaenszelCore(strata) {
+  let sumOR_R = 0, sumOR_S = 0;       // OR_MH numerator/denominator: a·d/n, b·c/n
+  let sumP_R = 0, sumQ_S = 0, sumPS_QR = 0; // Robins-Breslow-Greenland variance pieces
+  let sumRR_num = 0, sumRR_den = 0;   // RR_MH numerator/denominator: a·n2/n, c·n1/n
+  let sumRRvarPiece = 0;              // Greenland-Robins RR variance numerator
+  let sumA = 0, sumEA = 0, sumVarA = 0; // CMH chi-square pieces
+  let crudeA = 0, crudeB = 0, crudeC = 0, crudeD = 0;
+
+  const perStratum = strata.map(s => {
+    const { a, b, c, d, n } = s;
+    const n1 = a + b, n2 = c + d;
+
+    const R = a * d / n, S = b * c / n;
+    sumOR_R += R; sumOR_S += S;
+    const P = (a + d) / n, Q = (b + c) / n;
+    sumP_R += P * R;
+    sumQ_S += Q * S;
+    sumPS_QR += P * S + Q * R;
+
+    sumRR_num += a * n2 / n;
+    sumRR_den += c * n1 / n;
+    sumRRvarPiece += (n1 * n2 * (a + c) - a * c * n) / (n * n);
+
+    sumA += a;
+    const Ea = n1 * (a + c) / n;
+    sumEA += Ea;
+    sumVarA += (n1 * n2 * (a + c) * (b + d)) / (n * n * (n - 1));
+
+    crudeA += a; crudeB += b; crudeC += c; crudeD += d;
+
+    // Per-stratum crude OR — Woolf logit CI, with a 0.5 continuity
+    // correction if any cell is 0 (a single sparse 2×2 table, unlike
+    // the pooled MH estimate, can't be computed without it).
+    const corrected = a === 0 || b === 0 || c === 0 || d === 0;
+    const [ca, cb, cc, cd] = corrected ? [a + 0.5, b + 0.5, c + 0.5, d + 0.5] : [a, b, c, d];
+    const or = (ca * cd) / (cb * cc);
+    const seLnOR = Math.sqrt(1 / ca + 1 / cb + 1 / cc + 1 / cd);
+    const ciLow = Math.exp(Math.log(or) - 1.96 * seLnOR);
+    const ciHigh = Math.exp(Math.log(or) + 1.96 * seLnOR);
+    return { or, ciLow, ciHigh, corrected };
+  });
+
+  const orMH = sumOR_R / sumOR_S;
+  const rrMH = sumRR_num / sumRR_den;
+  const varLnOR = sumP_R / (2 * sumOR_R ** 2) + sumPS_QR / (2 * sumOR_R * sumOR_S) + sumQ_S / (2 * sumOR_S ** 2);
+  const varLnRR = sumRRvarPiece / (sumRR_num * sumRR_den);
+
+  const crudeOR = (crudeA * crudeD) / (crudeB * crudeC);
+  const crudeCorrected = crudeA === 0 || crudeB === 0 || crudeC === 0 || crudeD === 0;
+  const [ka, kb, kc, kd] = crudeCorrected
+    ? [crudeA + 0.5, crudeB + 0.5, crudeC + 0.5, crudeD + 0.5]
+    : [crudeA, crudeB, crudeC, crudeD];
+  const crudeORCorrected = (ka * kd) / (kb * kc);
+  const seCrude = Math.sqrt(1 / ka + 1 / kb + 1 / kc + 1 / kd);
+  const crudeCI = [Math.exp(Math.log(crudeORCorrected) - 1.96 * seCrude), Math.exp(Math.log(crudeORCorrected) + 1.96 * seCrude)];
+
+  const chi2 = (Math.abs(sumA - sumEA) - 0.5) ** 2 / sumVarA;
+  const pValue = chiSquarePValue(chi2);
+
+  return { orMH, rrMH, varLnOR, varLnRR, crudeOR: crudeORCorrected, crudeCI, chi2, pValue, perStratum };
+}
+
 // Standard 1-way ANOVA sums-of-squares decomposition from per-group
 // summary statistics (equivalent to computing from raw data).
 function anovaStats(groups) {
@@ -18639,6 +19000,7 @@ const CALCULATOR_INDEX = [
   { id: 'sample-size-2prop',    name: 'Sample Size — Difference of Two Proportions', category: 'Power & Sample Size', description: 'Determines the per-group sample size needed to detect a difference between two independent proportions, given alpha and target power.', status: 'available' },
   { id: 'design-effect',        name: 'Design Effect & Effective Sample Size', category: 'Power & Sample Size', description: 'Converts an ICC and average cluster size into a design effect and discounts a naive sample size down to its effective, independent-information size.', status: 'available' },
   { id: 'sample-size-cluster-rct', name: 'Sample Size — Cluster-Randomized Trial (Two Proportions)', category: 'Power & Sample Size', description: 'Cluster-randomization-adjusted version of the two-proportion sample size formula, reporting per-arm n and number of clusters needed.', status: 'available' },
+  { id: 'sample-size-survival', name: 'Sample Size — Survival Analysis (Log-Rank / Cox PH)', category: 'Power & Sample Size', description: "Determines the number of events — and, given an expected event probability, the total sample size — needed to detect a specified hazard ratio with a log-rank test or Cox proportional hazards model, using Schoenfeld's formula.", status: 'available' },
   { id: 'sample-size-anova-f',  name: "Sample Size — ANOVA (Cohen's f)", category: 'Power & Sample Size', description: "Determines the per-cell sample size needed to detect a specified Cohen's f effect size for a fixed-effects ANOVA main effect or interaction, covering both one-way and factorial designs.", status: 'available' },
   { id: 'sample-size-survey',   name: 'Sample Size for a Survey',        category: 'Power & Sample Size',         description: 'Determines how many respondents are needed to estimate a population proportion within a target margin of error, with optional finite-population correction and response-rate adjustment.', status: 'available' },
   { id: 'power-ppv-fpp',        name: 'Power, Effect Size, PPV & FPP',   category: 'Power & Sample Size',         description: 'Links statistical power to positive predictive value and false positive probability.',          status: 'available' },
@@ -18649,6 +19011,7 @@ const CALCULATOR_INDEX = [
   { id: 'measures-of-association', name: 'Measures of Association',      category: 'Epidemiology & Risk',         description: 'Computes AR, ARD, RR, RRD, OR, and NNTB/NNTH with 95% CIs from a 2×2 exposure-outcome table.',           status: 'available' },
   { id: 'rr-or-baseline-risk-explorer', name: 'RR/OR & Baseline Risk Explorer', category: 'Epidemiology & Risk',   description: 'Holds RR or OR fixed while you slide baseline risk, showing how the absolute risk difference, NNT, and 2×2 table change even though the relative effect does not.', status: 'available' },
   { id: 'nested-case-control',  name: 'Nested Case-Control (1:1 Matched)', category: 'Epidemiology & Risk',       description: 'Computes a matched odds ratio from 1:1 nested case-control pairs — a direct estimate of the incidence rate ratio due to risk-set sampling.', status: 'available' },
+  { id: 'mantel-haenszel',      name: 'Mantel-Haenszel Stratified 2×2 Analysis', category: 'Epidemiology & Risk', description: 'Pools an odds ratio and risk ratio across several 2×2 tables — one per confounder stratum (site, age band, sex) — using the Mantel-Haenszel method, tests the pooled association, and flags whether the crude and adjusted estimates differ enough to suggest confounding.', status: 'available' },
   { id: 'se-lnrr-lnor',            name: 'SE of ln(RR) & ln(OR) — 2×2 Table', category: 'Epidemiology & Risk',   description: 'Computes the standard error of a difference in proportions, ln(RR), and ln(OR) from a 2×2 table of exposure and outcome counts.', status: 'available' },
   { id: 'se-rate',                 name: 'Standard Error of a Rate',      category: 'Epidemiology & Risk',        description: 'Computes the standard error of an incidence rate from the number of events and total person-time.', status: 'available' },
   { id: 'se-rate-ratio',           name: 'Standard Error of a Rate Ratio', category: 'Epidemiology & Risk',       description: "Computes the standard error of ln(Rate Ratio) and a 95% CI from two groups' event counts and person-time.", status: 'available' },
@@ -19187,6 +19550,12 @@ const WIZARD_TREE = {
       { label: "Multiple studies' OR/RR estimates to pool",                              next: 'predIntResult' },
       { label: 'Two subgroup effect estimates I want to compare (interaction test)',      next: 'interactionTestResult' },
       { label: 'Matched pairs from a nested case-control study (1:1)',                    next: 'nestedCaseControlResult' },
+      { label: 'Several 2×2 tables across strata (site, age band) I want to pool while adjusting for confounding', next: 'mantelHaenszelResult' },
+    ]
+  },
+  mantelHaenszelResult: {
+    results: [
+      { id: 'mantel-haenszel', why: 'Pools an odds ratio and risk ratio across your strata using the Mantel-Haenszel method, tests the pooled association, and flags whether the crude and adjusted estimates differ enough to suggest confounding.' },
     ]
   },
   nestedCaseControlResult: {
@@ -19284,8 +19653,10 @@ const WIZARD_TREE = {
       { label: 'Two independent proportions',                      next: 'ss2propResult' },
       { label: "I'm not testing a hypothesis — I just want to estimate a proportion (e.g. a survey)", next: 'ssSurveyResult' },
       { label: 'Two proportions, but randomizing by cluster (clinic, school, community) rather than by individual', next: 'ssClusterResult' },
+      { label: 'Time-to-event (survival) outcome — log-rank test or Cox regression', next: 'ssSurvivalResult' },
     ]
   },
+  ssSurvivalResult: { results: [ { id: 'sample-size-survival', why: "Required number of events — and, given an expected event probability, the total sample size — to detect a hazard ratio via Schoenfeld's formula. Power here depends on events observed, not subjects enrolled." } ] },
   ss1meanResult: { results: [ { id: 'sample-size-1mean', why: 'Required n to detect a difference from a hypothesized mean.' } ] },
   ss2meanResult: { results: [ { id: 'sample-size-2mean', why: 'Required per-group n to detect a difference between two independent means.' } ] },
   ssAnovaResult: { results: [ { id: 'sample-size-anova-f', why: "Required per-cell n from Cohen's f, for a one-way ANOVA or for a main effect/interaction within a larger factorial design." } ] },
@@ -19881,6 +20252,7 @@ const SEARCH_KEYWORDS = {
   'sample-size-2prop':  ['sample size for two proportions', 'sample size two independent proportions', 'rct sample size', 'randomized controlled trial sample size', 'cohort study sample size'],
   'design-effect':      ['design effect', 'deff', 'effective sample size', 'intraclass correlation adjustment', 'cluster adjustment', 'multilevel sample size'],
   'sample-size-cluster-rct': ['cluster randomized trial sample size', 'cluster rct sample size', 'sample size for cluster randomization', 'number of clusters needed', 'group randomized trial sample size'],
+  'sample-size-survival': ['survival sample size', 'schoenfeld formula', 'number of events needed', 'cox regression sample size', 'log-rank sample size', 'log rank sample size', 'time-to-event sample size', 'events needed hazard ratio', 'survival power analysis', 'events required survival analysis'],
   'sample-size-anova-f': ['sample size for anova', "cohen's f sample size", 'a priori power analysis anova', 'sample size main effect', 'sample size interaction', 'sample size factorial design', 'gpower anova', 'noncentral f sample size', 'how many per group anova', 'ncp', 'non-centrality parameter', 'noncentrality parameter'],
   'sample-size-survey': ['survey sample size', 'how many people to survey', 'margin of error', 'estimate a proportion', 'poll sample size', 'questionnaire sample size', 'response rate'],
   'power-ppv-fpp':      ['false positive risk', 'positive predictive value of a significant result'],
@@ -19890,6 +20262,7 @@ const SEARCH_KEYWORDS = {
   // Epidemiology & Risk
   'measures-of-association': ['relative risk', 'odds ratio', 'risk difference', '2x2 exposure outcome table', 'rct treatment effect', 'randomized controlled trial results', 'arr', 'rrr', 'cohort study', 'case-control study', 'nntb', 'nnth', 'nnt', 'nnh', 'number needed to treat', 'number needed to harm'],
   'nested-case-control': ['nested case-control', 'matched case-control study', 'risk-set sampling', 'incidence density sampling', 'matched odds ratio', '1:1 matching'],
+  'mantel-haenszel': ['mantel-haenszel', 'mantel haenszel test', 'cochran-mantel-haenszel', 'cmh test', 'stratified odds ratio', 'pooled odds ratio', 'adjusted odds ratio stratified', 'combine 2x2 tables', 'confounding adjustment', 'stratified analysis', 'breslow-day'],
   'rr-or-baseline-risk-explorer': ['baseline risk simulator', 'hold rr constant', 'hold or constant', 'rr vs or', 'relative risk vs absolute risk', 'absolute risk difference simulator', 'nnt simulator', 'why rr and or diverge', 'risk ratio odds ratio explorer'],
   'se-lnrr-lnor':            ['standard error of log relative risk', 'se of log odds ratio', 'cohort study', 'case-control study'],
   'se-rate':                 ['standard error of an incidence rate', 'cohort study'],
@@ -20279,6 +20652,16 @@ const NOTATION = {
     { symbol: 'b, c', meaning: 'The two discordant cell counts — pairs where the case was exposed and the control was not (b), or the reverse (c).' },
     { symbol: 'OR_{\\text{matched}}', meaning: 'Matched Odds Ratio — b divided by c. Because of risk-set sampling, this directly estimates the incidence rate ratio.' },
   ],
+  'mantel-haenszel': [
+    { symbol: 'a_i, b_i, c_i, d_i', meaning: "Stratum i's own 2×2 cell counts: exposed+event, exposed+no event, unexposed+event, unexposed+no event." },
+    { symbol: 'n_i', meaning: 'Total subjects in stratum i (a_i + b_i + c_i + d_i).' },
+    { symbol: 'n_{1i}, n_{2i}', meaning: "Stratum i's exposed total (a_i+b_i) and unexposed total (c_i+d_i)." },
+    { symbol: 'OR_{MH}', meaning: 'Mantel-Haenszel-adjusted odds ratio — the pooled association across all strata, weighted by each stratum\'s precision.' },
+    { symbol: 'RR_{MH}', meaning: 'Mantel-Haenszel-adjusted risk ratio — same pooling logic as OR_MH, on the risk-ratio scale.' },
+    { symbol: 'P_i, Q_i, R_i, S_i', meaning: 'Robins-Breslow-Greenland variance components for stratum i, used to build the CI around ln(OR_MH): P_i=(a_i+d_i)/n_i, Q_i=(b_i+c_i)/n_i, R_i=a_id_i/n_i, S_i=b_ic_i/n_i.' },
+    { symbol: 'E(a_i)', meaning: "Expected count in cell a_i under the null of no association within stratum i, given that stratum's margins — the hypergeometric mean." },
+    { symbol: '\\chi^2_{MH}', meaning: 'Cochran-Mantel-Haenszel chi-square statistic, testing the pooled null of no association in any stratum, adjusting for the strata.' },
+  ],
   'cochrans-q': [
     { symbol: 'Q', meaning: "Cochran's Q statistic testing whether success rates differ across the k paired conditions." },
     { symbol: 'k', meaning: 'Number of matched conditions (columns) each subject was tested on.' },
@@ -20450,6 +20833,7 @@ const NOTATION = {
     { symbol: 'p_{(i)}^{Holm}', meaning: "Holm-adjusted p-value for the i-th ranked comparison (comparisons sorted from smallest to largest raw p-value)." },
     { symbol: 'p_{(i)}^{BH}', meaning: 'Benjamini-Hochberg (FDR)-adjusted p-value for the i-th ranked comparison.' },
     { symbol: 'p_{(j)}', meaning: 'Unadjusted p-value of the j-th comparison once all comparisons are sorted from smallest to largest.' },
+    { symbol: '\\text{FWER}', meaning: 'Family-wise error rate — the chance of at least one false positive across all m comparisons if each were tested uncorrected at α.' },
   ],
   'shapiro-wilk-test': [
     { symbol: 'W', meaning: "Shapiro-Wilk test statistic — how closely the sample's shape matches a normal distribution (closer to 1 = more normal)." },
@@ -20788,6 +21172,14 @@ const NOTATION = {
     { symbol: 'k_{\\text{arm}}', meaning: 'Number of clusters needed per arm — n_arm divided by the average cluster size, rounded up.' },
     { symbol: 'm', meaning: 'Average Cluster Size (m) — the typical number of individuals per cluster.' },
     { symbol: '\\rho', meaning: 'Intraclass Correlation (ICC, ρ) — how strongly outcomes within the same cluster resemble each other.' },
+  ],
+  'sample-size-survival': [
+    { symbol: 'd', meaning: 'Required Number of Events — the number of observed events (not enrolled subjects) a log-rank test or Cox model needs to reach the target power.' },
+    { symbol: 'HR', meaning: 'Hazard Ratio to Detect — the between-group hazard ratio the study is powered to find.' },
+    { symbol: 'r', meaning: 'Allocation Ratio — the ratio of experimental-arm to control-arm sample size (r = 1 for equal allocation).' },
+    { symbol: '\\bar p_{\\text{event}}', meaning: 'Expected Overall Event Probability — the anticipated proportion of all enrolled subjects who will experience the event by the planned end of follow-up.' },
+    { symbol: 'N', meaning: 'Required total sample size — the number of events divided by the expected overall event probability, rounded up.' },
+    { symbol: 'n_1, n_2', meaning: 'Required experimental- and control-arm sample sizes, splitting N according to the allocation ratio r.' },
   ],
   'sample-size-anova-f': [
     { symbol: 'f', meaning: "Cohen's f — the standardized effect size for the ANOVA effect being tested (small ≈ 0.10, medium ≈ 0.25, large ≈ 0.40)." },
@@ -24570,6 +24962,26 @@ const GUIDES = [
   },
 
   {
+    id: 'reference-user-guide',
+    category: 'Quick Reference',
+    title: 'The Biostat Toolkit — User Guide (Downloadable PDF)',
+    blurb: 'A downloadable PDF walkthrough of the site as a whole — what it is, how the calculators, Learn Hub, and decision wizards fit together, and how to get the most out of it offline, in print, or as a citable handout.',
+    dek: `Everything in this PDF also lives on the site itself, interactively — this download exists for when a static, offline, or printable copy is more useful than the live app: onboarding a student or new team member, attaching to a course syllabus, or reading on a device without reliable access to the site.`,
+    sections: [
+      {
+        heading: 'Download',
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Guide</th><th style="text-align:left;">What's Inside</th><th>Download</th></tr></thead><tbody>
+<tr><td>Biostat Toolkit User Guide</td><td style="text-align:left;">An overview of the site's calculators, Learn Hub, and "Which Calculator/Design Should I Use?" wizards, plus guidance on getting the most out of each.</td><td><a href="assets/Biostat-Toolkit-User-Guide.pdf" download>Biostat-Toolkit-User-Guide.pdf</a></td></tr>
+</tbody></table></div>`,
+      },
+      {
+        heading: 'Keeping This Guide Current',
+        html: `<p>This PDF is a snapshot, not a live view — as calculators and guides are added to the site, this file is updated separately and may lag behind for a period. If something here doesn't match what you see on the live site, the site itself is the current version; the calculator count and category list on the <a href="#learn">Learn hub</a> and the <a href="#">home page</a> always reflect exactly what's available right now.</p>`,
+      },
+    ],
+  },
+
+  {
     id: 'reference-glossary-abbreviations',
     category: 'Quick Reference',
     title: 'Glossary of Statistical Abbreviations and Symbols',
@@ -24582,7 +24994,7 @@ const GUIDES = [
       },
       {
         heading: 'Quick Index (A–Z)',
-        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><ul class="ref-quick-index"><li><a href="#gloss-accuracy">Accuracy</a></li><li><a href="#gloss-af-paf">AF / PAF</a></li><li><a href="#gloss-agree-ii">AGREE II</a></li><li><a href="#gloss-alpha">&alpha; (alpha)</a></li><li><a href="#gloss-amstar-2">AMSTAR-2</a></li><li><a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a></li><li><a href="#gloss-aor">aOR</a></li><li><a href="#gloss-ar">AR</a></li><li><a href="#gloss-ard">ARD</a></li><li><a href="#gloss-art-anova">ART ANOVA</a></li><li><a href="#gloss-arr">ARR</a></li><li><a href="#gloss-ate">ATE</a></li><li><a href="#gloss-auc">AUC</a></li><li><a href="#gloss-auprc">AUPRC / PR-AUC</a></li><li><a href="#gloss-auroc">AUROC</a></li><li><a href="#gloss-axis">AXIS</a></li><li><a href="#gloss-beta">&beta; (beta)</a></li><li><a href="#gloss-cdf">CDF</a></li><li><a href="#gloss-cer">CER</a></li><li><a href="#gloss-ci">CI</a></li><li><a href="#gloss-confusion-matrix">Confusion Matrix</a></li><li><a href="#gloss-consort">CONSORT</a></li><li><a href="#gloss-cri">CrI</a></li><li><a href="#gloss-cv">CV</a></li><li><a href="#gloss-d-g">d / g</a></li><li><a href="#gloss-deff">DEFF</a></li><li><a href="#gloss-df">df</a></li><li><a href="#gloss-eer">EER</a></li><li><a href="#gloss-f1">F1 Score</a></li><li><a href="#gloss-glm">GLM</a></li><li><a href="#gloss-glmm">GLMM</a></li><li><a href="#gloss-grade">GRADE</a></li><li><a href="#gloss-h0-ha">H0 / Ha (H1)</a></li><li><a href="#gloss-hksj">HKSJ</a></li><li><a href="#gloss-hr">HR</a></li><li><a href="#gloss-i2">I&sup2;</a></li><li><a href="#gloss-icc">ICC</a></li><li><a href="#gloss-ipw">IPW</a></li><li><a href="#gloss-iqr">IQR</a></li><li><a href="#gloss-itt-pp">ITT / PP</a></li><li><a href="#gloss-jbi">JBI</a></li><li><a href="#gloss-kappa">&kappa; (kappa)</a></li><li><a href="#gloss-lr">LR+ / LR&minus;</a></li><li><a href="#gloss-n-N">n / N</a></li><li><a href="#gloss-ncp">NCP (λ)</a></li><li><a href="#gloss-nnh">NNH</a></li><li><a href="#gloss-nnt">NNT</a></li><li><a href="#gloss-nntb">NNTB</a></li><li><a href="#gloss-nnth">NNTH</a></li><li><a href="#gloss-nos">NOS</a></li><li><a href="#gloss-or">OR</a></li><li><a href="#gloss-p-hat">p (proportion)</a></li><li><a href="#gloss-p-value">p (p-value)</a></li><li><a href="#gloss-pi">PI</a></li><li><a href="#gloss-ppv-npv">PPV / NPV</a></li><li><a href="#gloss-precision">Precision</a></li><li><a href="#gloss-prisma">PRISMA</a></li><li><a href="#gloss-prisma-scr">PRISMA-ScR</a></li><li><a href="#gloss-q">Q</a></li><li><a href="#gloss-quadas-2">QUADAS-2</a></li><li><a href="#gloss-quips">QUIPS</a></li><li><a href="#gloss-r-rho">r / &rho;</a></li><li><a href="#gloss-r-multcorr">R (mult. correlation)</a></li><li><a href="#gloss-r2-corr">r&sup2; (single predictor)</a></li><li><a href="#gloss-r2-model">R&sup2; (regression)</a></li><li><a href="#gloss-rct">RCT</a></li><li><a href="#gloss-recall">Recall</a></li><li><a href="#gloss-rob-2">RoB 2</a></li><li><a href="#gloss-robins-i">ROBINS-I</a></li><li><a href="#gloss-robis">ROBIS</a></li><li><a href="#gloss-roc">ROC</a></li><li><a href="#gloss-rr">RR</a></li><li><a href="#gloss-rrd">RRD</a></li><li><a href="#gloss-rrr">RRR</a></li><li><a href="#gloss-s-sigma">s / &sigma;</a></li><li><a href="#gloss-sd">SD</a></li><li><a href="#gloss-se-sem">SE / SEM</a></li><li><a href="#gloss-sens-spec">Sens / Spec</a></li><li><a href="#gloss-strobe">STROBE</a></li><li><a href="#gloss-tau">&tau; (Kendall's tau)</a></li><li><a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a></li><li><a href="#gloss-tpr-fpr">TPR / FPR</a></li><li><a href="#gloss-var">Var</a></li><li><a href="#gloss-x-X">x / X</a></li><li><a href="#gloss-x-bar">x&#772; (x-bar)</a></li></ul>`,
+        html: `<p>Every abbreviation on this page, alphabetically &mdash; click one to jump straight to its entry below, if you don't already know which topic table it lives in. If the highlighted term isn't immediately visible once its section opens, scroll within that section to find it.</p><ul class="ref-quick-index"><li><a href="#gloss-accuracy">Accuracy</a></li><li><a href="#gloss-af-paf">AF / PAF</a></li><li><a href="#gloss-agree-ii">AGREE II</a></li><li><a href="#gloss-alpha">&alpha; (alpha)</a></li><li><a href="#gloss-amstar-2">AMSTAR-2</a></li><li><a href="#gloss-anova-family">ANOVA / ANCOVA / MANOVA</a></li><li><a href="#gloss-aor">aOR</a></li><li><a href="#gloss-ar">AR</a></li><li><a href="#gloss-ard">ARD</a></li><li><a href="#gloss-art-anova">ART ANOVA</a></li><li><a href="#gloss-arr">ARR</a></li><li><a href="#gloss-ate">ATE</a></li><li><a href="#gloss-auc">AUC</a></li><li><a href="#gloss-auprc">AUPRC / PR-AUC</a></li><li><a href="#gloss-auroc">AUROC</a></li><li><a href="#gloss-axis">AXIS</a></li><li><a href="#gloss-beta">&beta; (beta)</a></li><li><a href="#gloss-cdf">CDF</a></li><li><a href="#gloss-cer">CER</a></li><li><a href="#gloss-ci">CI</a></li><li><a href="#gloss-confusion-matrix">Confusion Matrix</a></li><li><a href="#gloss-consort">CONSORT</a></li><li><a href="#gloss-cri">CrI</a></li><li><a href="#gloss-cv">CV</a></li><li><a href="#gloss-d-g">d / g</a></li><li><a href="#gloss-deff">DEFF</a></li><li><a href="#gloss-df">df</a></li><li><a href="#gloss-eer">EER</a></li><li><a href="#gloss-f1">F1 Score</a></li><li><a href="#gloss-fwer">FWER</a></li><li><a href="#gloss-glm">GLM</a></li><li><a href="#gloss-glmm">GLMM</a></li><li><a href="#gloss-grade">GRADE</a></li><li><a href="#gloss-h0-ha">H0 / Ha (H1)</a></li><li><a href="#gloss-hksj">HKSJ</a></li><li><a href="#gloss-hr">HR</a></li><li><a href="#gloss-i2">I&sup2;</a></li><li><a href="#gloss-icc">ICC</a></li><li><a href="#gloss-ipw">IPW</a></li><li><a href="#gloss-iqr">IQR</a></li><li><a href="#gloss-itt-pp">ITT / PP</a></li><li><a href="#gloss-jbi">JBI</a></li><li><a href="#gloss-kappa">&kappa; (kappa)</a></li><li><a href="#gloss-lr">LR+ / LR&minus;</a></li><li><a href="#gloss-n-N">n / N</a></li><li><a href="#gloss-ncp">NCP (λ)</a></li><li><a href="#gloss-nnh">NNH</a></li><li><a href="#gloss-nnt">NNT</a></li><li><a href="#gloss-nntb">NNTB</a></li><li><a href="#gloss-nnth">NNTH</a></li><li><a href="#gloss-nos">NOS</a></li><li><a href="#gloss-or">OR</a></li><li><a href="#gloss-p-hat">p (proportion)</a></li><li><a href="#gloss-p-value">p (p-value)</a></li><li><a href="#gloss-pi">PI</a></li><li><a href="#gloss-ppv-npv">PPV / NPV</a></li><li><a href="#gloss-precision">Precision</a></li><li><a href="#gloss-prisma">PRISMA</a></li><li><a href="#gloss-prisma-scr">PRISMA-ScR</a></li><li><a href="#gloss-q">Q</a></li><li><a href="#gloss-quadas-2">QUADAS-2</a></li><li><a href="#gloss-quips">QUIPS</a></li><li><a href="#gloss-r-rho">r / &rho;</a></li><li><a href="#gloss-r-multcorr">R (mult. correlation)</a></li><li><a href="#gloss-r2-corr">r&sup2; (single predictor)</a></li><li><a href="#gloss-r2-model">R&sup2; (regression)</a></li><li><a href="#gloss-rct">RCT</a></li><li><a href="#gloss-recall">Recall</a></li><li><a href="#gloss-rob-2">RoB 2</a></li><li><a href="#gloss-robins-i">ROBINS-I</a></li><li><a href="#gloss-robis">ROBIS</a></li><li><a href="#gloss-roc">ROC</a></li><li><a href="#gloss-rr">RR</a></li><li><a href="#gloss-rrd">RRD</a></li><li><a href="#gloss-rrr">RRR</a></li><li><a href="#gloss-s-sigma">s / &sigma;</a></li><li><a href="#gloss-sd">SD</a></li><li><a href="#gloss-se-sem">SE / SEM</a></li><li><a href="#gloss-sens-spec">Sens / Spec</a></li><li><a href="#gloss-strobe">STROBE</a></li><li><a href="#gloss-tau">&tau; (Kendall's tau)</a></li><li><a href="#gloss-tau2">&tau;&sup2; (tau-squared)</a></li><li><a href="#gloss-tpr-fpr">TPR / FPR</a></li><li><a href="#gloss-var">Var</a></li><li><a href="#gloss-x-X">x / X</a></li><li><a href="#gloss-x-bar">x&#772; (x-bar)</a></li></ul>`,
       },
       {
         heading: 'Probability & Distributions',
@@ -24594,7 +25006,7 @@ const GUIDES = [
       },
       {
         heading: 'Hypothesis Testing & Inference',
-        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-alpha"></span>α (alpha)</td><td>Significance level</td><td style="text-align:left;">The pre-specified threshold (conventionally 0.05) for the Type I error rate &mdash; the chance of rejecting a true null hypothesis.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr><tr><td><span id="gloss-beta"></span>β (beta)</td><td>Type II error rate</td><td style="text-align:left;">The chance of failing to reject a false null hypothesis. Power = 1 &minus; β.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a>, <a href="#power-calculations">Power Calculations</a></td></tr><tr><td><span id="gloss-ci"></span>CI</td><td>Confidence Interval</td><td style="text-align:left;">A range constructed so that, over many repeated studies, that construction method would capture the true value a stated percentage (e.g., 95%) of the time. Because a CI is built by inverting the same hypothesis test that produces a p-value, whether it contains H0's null value is equivalent to that test's rejection-region check (see H0/Ha row below).</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a>; <a href="#gloss-h0-ha">H0/Ha</a></td></tr><tr><td><span id="gloss-cri"></span>CrI</td><td>Credible Interval</td><td style="text-align:left;">The Bayesian counterpart to a CI. Unlike a CI, it does support a direct probability statement &mdash; but only relative to the prior used.</td><td style="text-align:left;"><a href="#bayesian-cri">Bayesian Credible Intervals</a>; <a href="#learn/appraisal-interval-types">Confidence Interval, Credible Interval, or Prediction Interval? (Learn guide)</a></td></tr><tr><td><span id="gloss-h0-ha"></span>H0 / Ha (H1)</td><td>Null / Alternative Hypothesis</td><td style="text-align:left;">H0 typically states "no effect" or "no difference"; Ha (or H1) states the effect the study is designed to detect. A confidence interval doubles as a rejection-region check: any hypothesized value falling <em>outside</em> a 95% CI is exactly the set of values a two-sided test would reject at &alpha; = 0.05 &mdash; checking whether a CI contains the null value is the same test as checking whether p &lt; 0.05.</td><td style="text-align:left;"><a href="#gloss-ci">CI</a>; <a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a></td></tr><tr><td><span id="gloss-ncp"></span>NCP (λ)</td><td>Non-Centrality Parameter</td><td style="text-align:left;">Quantifies how far a true alternative effect shifts a test statistic's null (central) distribution into its "non-central" form — the basis for computing power under the non-central t, F, or &chi;&sup2; distributions. This app builds it explicitly for the noncentral-F ANOVA sample-size search (&lambda; = f&sup2;&middot;N); the other power calculators here use a simpler z-based shift instead, which doesn't need a distinct non-central distribution.</td><td style="text-align:left;"><a href="#sample-size-anova-f">Sample Size — ANOVA (Cohen's f)</a>; <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts (plain-English explanation)</a></td></tr><tr><td><span id="gloss-p-value"></span>p</td><td>p-value</td><td style="text-align:left;">The probability of seeing a result at least as extreme as the observed one, if the null hypothesis were true. Not the probability that the null hypothesis is true &mdash; and a different p from the sample proportion in the Descriptive Statistics table above.</td><td style="text-align:left;"><a href="#learn/appraisal-p-values">What a P-Value Actually Means (Learn guide)</a></td></tr><tr><td><span id="gloss-pi"></span>PI</td><td>Prediction Interval</td><td style="text-align:left;">Where one new study or one new individual observation would plausibly fall &mdash; always at least as wide as the corresponding CI.</td><td style="text-align:left;"><a href="#meta-analysis">Meta-Analysis (Q, τ², I², PI)</a>; <a href="#learn/appraisal-interval-types">interval-types Learn guide</a></td></tr></tbody></table></div>`,
+        html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-alpha"></span>α (alpha)</td><td>Significance level</td><td style="text-align:left;">The pre-specified threshold (conventionally 0.05) for the Type I error rate &mdash; the chance of rejecting a true null hypothesis.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a></td></tr><tr><td><span id="gloss-beta"></span>β (beta)</td><td>Type II error rate</td><td style="text-align:left;">The chance of failing to reject a false null hypothesis. Power = 1 &minus; β.</td><td style="text-align:left;"><a href="#type1-type2-errors">Type I &amp; Type II Error Explorer</a>, <a href="#power-calculations">Power Calculations</a></td></tr><tr><td><span id="gloss-ci"></span>CI</td><td>Confidence Interval</td><td style="text-align:left;">A range constructed so that, over many repeated studies, that construction method would capture the true value a stated percentage (e.g., 95%) of the time. Because a CI is built by inverting the same hypothesis test that produces a p-value, whether it contains H0's null value is equivalent to that test's rejection-region check (see H0/Ha row below).</td><td style="text-align:left;"><a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a>; <a href="#gloss-h0-ha">H0/Ha</a></td></tr><tr><td><span id="gloss-cri"></span>CrI</td><td>Credible Interval</td><td style="text-align:left;">The Bayesian counterpart to a CI. Unlike a CI, it does support a direct probability statement &mdash; but only relative to the prior used.</td><td style="text-align:left;"><a href="#bayesian-cri">Bayesian Credible Intervals</a>; <a href="#learn/appraisal-interval-types">Confidence Interval, Credible Interval, or Prediction Interval? (Learn guide)</a></td></tr><tr><td><span id="gloss-fwer"></span>FWER</td><td>Family-Wise Error Rate</td><td style="text-align:left;">The chance of at least one false positive across a whole set of m comparisons if each were tested uncorrected at α, assuming independent tests: 1 &minus; (1 &minus; α)<sup>m</sup> &mdash; the complement of "none of the m tests are a false positive," (1 &minus; α)<sup>m</sup>, not that quantity on its own. Climbs quickly with m, which is the whole justification for applying a multiplicity correction rather than testing each comparison at the nominal α.</td><td style="text-align:left;"><a href="#multiplicity-correction">Multiple Comparisons Correction</a>; <a href="#holm-sidak-test">Holm-Šídák Test</a>; <a href="#learn/appraisal-tails-and-multiplicity">One-Tailed vs. Two-Tailed Tests, and When Multiple Comparisons Change the Rules (Learn guide)</a></td></tr><tr><td><span id="gloss-h0-ha"></span>H0 / Ha (H1)</td><td>Null / Alternative Hypothesis</td><td style="text-align:left;">H0 typically states "no effect" or "no difference"; Ha (or H1) states the effect the study is designed to detect. A confidence interval doubles as a rejection-region check: any hypothesized value falling <em>outside</em> a 95% CI is exactly the set of values a two-sided test would reject at &alpha; = 0.05 &mdash; checking whether a CI contains the null value is the same test as checking whether p &lt; 0.05.</td><td style="text-align:left;"><a href="#gloss-ci">CI</a>; <a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers (Learn guide)</a></td></tr><tr><td><span id="gloss-ncp"></span>NCP (λ)</td><td>Non-Centrality Parameter</td><td style="text-align:left;">Quantifies how far a true alternative effect shifts a test statistic's null (central) distribution into its "non-central" form — the basis for computing power under the non-central t, F, or &chi;&sup2; distributions. This app builds it explicitly for the noncentral-F ANOVA sample-size search (&lambda; = f&sup2;&middot;N); the other power calculators here use a simpler z-based shift instead, which doesn't need a distinct non-central distribution.</td><td style="text-align:left;"><a href="#sample-size-anova-f">Sample Size — ANOVA (Cohen's f)</a>; <a href="#learn/reference-glossary-concepts">Glossary of Statistical Concepts (plain-English explanation)</a></td></tr><tr><td><span id="gloss-p-value"></span>p</td><td>p-value</td><td style="text-align:left;">The probability of seeing a result at least as extreme as the observed one, if the null hypothesis were true. Not the probability that the null hypothesis is true &mdash; and a different p from the sample proportion in the Descriptive Statistics table above.</td><td style="text-align:left;"><a href="#learn/appraisal-p-values">What a P-Value Actually Means (Learn guide)</a></td></tr><tr><td><span id="gloss-pi"></span>PI</td><td>Prediction Interval</td><td style="text-align:left;">Where one new study or one new individual observation would plausibly fall &mdash; always at least as wide as the corresponding CI.</td><td style="text-align:left;"><a href="#meta-analysis">Meta-Analysis (Q, τ², I², PI)</a>; <a href="#learn/appraisal-interval-types">interval-types Learn guide</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Effect Measures (Epidemiology & Clinical Research)',
