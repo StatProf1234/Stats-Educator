@@ -36,11 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
     route();
   });
 
-  // Brand click: always go home, even when already at # (no hashchange fires then)
+  // Brand click: always go to the front door, even when already there
+  // (no hashchange fires in that case, since the hash doesn't change).
   document.querySelector('.sidebar-brand').addEventListener('click', e => {
-    if (location.hash === '' || location.hash === '#') {
+    if (location.hash === '#home') {
       e.preventDefault();
-      renderHome();
+      renderFrontDoor();
     }
   });
 
@@ -202,9 +203,26 @@ function trackPageview() {
   }
 }
 
+// Remembers which of the three hubs (calculators/learn/designs) a
+// visitor last actually browsed, so a bare '#' on a later visit can
+// skip straight back there instead of re-showing the front door every
+// time — see route()'s handling of hash === '' below. localStorage
+// (not sessionStorage) deliberately, so the preference survives
+// closing the tab; wrapped in try/catch since some browsers throw on
+// localStorage access in private-browsing/storage-blocked contexts,
+// and losing this preference should never break navigation.
+function rememberLastHub(hub) {
+  try { localStorage.setItem('lastHub', hub); } catch (e) { /* storage unavailable — remembering is best-effort only */ }
+}
+
 function route() {
   trackPageview();
   const hash = location.hash.slice(1);
+
+  if (hash === 'home') {
+    renderFrontDoor();
+    return;
+  }
   if (hash === 'wizard' || hash.startsWith('wizard/')) {
     renderWizard(hash === 'wizard' ? [] : hash.slice('wizard/'.length).split('/'));
     return;
@@ -218,17 +236,45 @@ function route() {
     return;
   }
   if (hash === 'designs') {
+    rememberLastHub('designs');
     renderDesignsHub();
     return;
   }
   if (hash === 'learn' || hash.startsWith('learn/')) {
+    rememberLastHub('learn');
     if (hash === 'learn') { renderLearnHub(); return; }
     const guide = GUIDES.find(g => g.id === hash.slice('learn/'.length));
     guide ? renderGuide(guide) : renderLearnHub();
     return;
   }
+  if (hash === 'calculators') {
+    rememberLastHub('calculators');
+    renderHome();
+    return;
+  }
   const calc = CALCULATORS.find(c => c.id === hash);
-  calc ? renderCalculator(calc) : renderHome();
+  if (calc) {
+    rememberLastHub('calculators');
+    renderCalculator(calc);
+    return;
+  }
+
+  // A genuinely empty hash — the very first visit to the site, or a
+  // returning visitor who cleared it — is the one case route() treats
+  // specially: first-timers (no remembered hub) see the neutral front
+  // door; returning visitors skip straight to whichever hub they used
+  // last. Any other unrecognized hash (a stale/typo'd link) still
+  // falls back to the Calculator Index, same as always.
+  if (hash === '') {
+    const lastHub = (() => { try { return localStorage.getItem('lastHub'); } catch (e) { return null; } })();
+    if (lastHub === 'learn' || lastHub === 'designs' || lastHub === 'calculators') {
+      location.hash = lastHub;
+      return;
+    }
+    renderFrontDoor();
+    return;
+  }
+  renderHome();
 }
 
 // Home/"Full Calculator Index" page category sections default CLOSED —
@@ -474,7 +520,7 @@ function hubToggleHtml(active) {
   const link = (href, label, key) => `<a href="${href}" class="hub-toggle-link${active === key ? ' active' : ''}">${label}</a>`;
   return `
     <div class="hub-toggle">
-      ${link('#', 'Calculators', 'calculators')}
+      ${link('#calculators', 'Calculators', 'calculators')}
       ${link('#learn', 'Learn', 'learn')}
       ${link('#designs', 'Designs', 'designs')}
     </div>`;
@@ -498,6 +544,145 @@ const HOME_CATEGORY_ORDER = [
   'Bayesian & Meta-Analysis',
   'Genetics & Genomics',
 ];
+
+// The site's actual landing page — see route()'s handling of a bare
+// '#' and the explicit '#home' route. No hub-toggle here on purpose:
+// this page sits above the three-way toggle, so showing it would
+// wrongly imply one of the three is already selected. Every count and
+// category name below is pulled live from the same data the other
+// three hubs use, so this never drifts out of sync as calculators,
+// guides, or designs are added.
+function renderFrontDoor() {
+  const { total: calcTotal, categories: calcCatCount } = calculatorCountSummary();
+  const { total: guideTotal, categories: guideCatCount } = guideCountSummary();
+  const designTotal = DESIGN_GLANCE_CATEGORIES.reduce((s, c) => s + c.keys.length, 0);
+  const designCatCount = DESIGN_GLANCE_CATEGORIES.length;
+
+  const calcCats  = HOME_CATEGORY_ORDER.slice(0, 3);
+  const guideCats = [...new Set(GUIDES.map(g => g.category))].slice(0, 3);
+  const designCats = DESIGN_GLANCE_CATEGORIES.slice(0, 3).map(c => c.category);
+
+  const listHtml = (cats, total, unit) => {
+    const items = cats.map(c => `<div class="frontdoor-card-list-item">${esc(c)}</div>`).join('');
+    const more = total - cats.length;
+    const moreHtml = more > 0 ? `<div class="frontdoor-card-list-more">+${more} more ${unit}</div>` : '';
+    return `<div class="frontdoor-card-list">${items}${moreHtml}</div>`;
+  };
+
+  view().innerHTML = `
+    <div class="frontdoor-hero">
+      <div class="frontdoor-hero-text">
+        <div class="frontdoor-title">The Biostat Toolkit</div>
+        <p class="frontdoor-sub">Calculators, study-design reference, and critical-appraisal guides for coursework, journal clubs, and clinical research.</p>
+
+        <div class="frontdoor-search">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.4"/>
+            <line x1="11.2" y1="11.2" x2="15" y2="15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <input type="text" id="frontdoor-search-input" placeholder="Search calculators, guides, or study designs…" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <div class="frontdoor-hero-img">
+        <img src="assets/hero-desk.jpg" alt="A desk with a laptop showing a bell-curve chart, a stethoscope, a calculator, a coffee mug printed with the normal-distribution formula, and an open notebook of statistics notes beside a book titled The Biostat Toolkit.">
+      </div>
+    </div>
+
+    <div class="frontdoor-grid">
+      <div class="frontdoor-card c-blue">
+        <a class="frontdoor-card-main" href="#calculators">
+          <div class="frontdoor-card-icon" aria-hidden="true">
+            <svg viewBox="0 0 64 64">
+              <rect x="10" y="6" width="44" height="52" rx="9" fill="#DCE6FB" stroke="#4E6EDB" stroke-width="1.5"/>
+              <rect x="16" y="12" width="32" height="13" rx="2.5" fill="#1E1A47"/>
+              <text x="32" y="21.5" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" fill="#EEEAF8">x&#772; = 128.4</text>
+              <rect x="16" y="30" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="27" y="30" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="38" y="30" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="16" y="40" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="27" y="40" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="38" y="40" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="16" y="50" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="27" y="50" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+              <rect x="38" y="50" width="7" height="7" rx="1.8" fill="#4E6EDB"/>
+            </svg>
+          </div>
+          <div class="frontdoor-card-eyebrow">Statistical Calculator Library</div>
+          <div class="frontdoor-card-name">Calculators</div>
+          <div class="frontdoor-card-count">${calcTotal} calculators across ${calcCatCount} categories.</div>
+          ${listHtml(calcCats, calcCatCount, 'categories')}
+          <div class="frontdoor-card-cta">Browse calculators →</div>
+        </a>
+        <a class="frontdoor-card-wizard" href="#wizard">Not sure which one? Take the quiz</a>
+      </div>
+
+      <div class="frontdoor-card c-green">
+        <a class="frontdoor-card-main" href="#designs">
+          <div class="frontdoor-card-icon" aria-hidden="true">
+            <svg viewBox="0 0 64 64">
+              <line x1="32" y1="12" x2="18" y2="28" stroke="#9CC77A" stroke-width="2"/>
+              <line x1="32" y1="12" x2="46" y2="28" stroke="#9CC77A" stroke-width="2"/>
+              <line x1="18" y1="28" x2="10" y2="46" stroke="#9CC77A" stroke-width="2"/>
+              <line x1="18" y1="28" x2="24" y2="46" stroke="#9CC77A" stroke-width="2"/>
+              <line x1="46" y1="28" x2="40" y2="46" stroke="#9CC77A" stroke-width="2"/>
+              <line x1="46" y1="28" x2="54" y2="46" stroke="#9CC77A" stroke-width="2"/>
+              <circle cx="32" cy="12" r="5.5" fill="#6FA84A"/>
+              <circle cx="18" cy="28" r="6.5" fill="#2E6B2E"/>
+              <circle cx="46" cy="28" r="6.5" fill="#2E6B2E"/>
+              <circle cx="10" cy="46" r="4.5" fill="#6FA84A"/>
+              <circle cx="24" cy="46" r="4.5" fill="#6FA84A"/>
+              <circle cx="40" cy="46" r="4.5" fill="#6FA84A"/>
+              <circle cx="54" cy="46" r="4.5" fill="#6FA84A"/>
+            </svg>
+          </div>
+          <div class="frontdoor-card-eyebrow">Research Design Reference</div>
+          <div class="frontdoor-card-name">Study designs</div>
+          <div class="frontdoor-card-count">${designTotal} designs across ${designCatCount} groups.</div>
+          ${listHtml(designCats, designCatCount, 'groups')}
+          <div class="frontdoor-card-cta">Browse designs →</div>
+        </a>
+        <a class="frontdoor-card-wizard" href="#designwizard">Not sure which one? Take the quiz</a>
+      </div>
+
+      <div class="frontdoor-card c-amber">
+        <a class="frontdoor-card-main" href="#learn">
+          <div class="frontdoor-card-icon" aria-hidden="true">
+            <svg viewBox="0 0 64 64">
+              <path d="M20,14 Q32,3 44,14" fill="none" stroke="#3B2E6B" stroke-width="1.8" stroke-linecap="round"/>
+              <circle cx="32" cy="5" r="2" fill="#3B2E6B"/>
+              <rect x="10" y="14" width="44" height="42" rx="6" fill="#E4DCF5" stroke="#8B6FC9" stroke-width="1.5"/>
+              <line x1="32" y1="14" x2="32" y2="56" stroke="#7A5FB8" stroke-width="1.5"/>
+              <line x1="16" y1="24" x2="27" y2="24" stroke="#9B85CE" stroke-width="1.5"/>
+              <line x1="16" y1="32" x2="27" y2="32" stroke="#9B85CE" stroke-width="1.5"/>
+              <line x1="16" y1="40" x2="27" y2="40" stroke="#9B85CE" stroke-width="1.5"/>
+              <line x1="37" y1="24" x2="48" y2="24" stroke="#9B85CE" stroke-width="1.5"/>
+              <line x1="37" y1="32" x2="48" y2="32" stroke="#9B85CE" stroke-width="1.5"/>
+              <line x1="37" y1="40" x2="48" y2="40" stroke="#9B85CE" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <div class="frontdoor-card-eyebrow">Critical Appraisal &amp; Reference</div>
+          <div class="frontdoor-card-name">Learn</div>
+          <div class="frontdoor-card-count">${guideTotal} guides across ${guideCatCount} categories.</div>
+          ${listHtml(guideCats, guideCatCount, 'categories')}
+          <div class="frontdoor-card-cta">Browse guides →</div>
+        </a>
+        <a class="frontdoor-card-wizard" href="#learnwizard">Not sure which one? Take the quiz</a>
+      </div>
+    </div>
+  `;
+
+  // Mirrors into the sidebar's own search field and reuses its exact
+  // existing input pipeline (buildNav + applyActiveState), rather than
+  // building a second, separate results list just for this page.
+  const frontdoorSearchEl = document.getElementById('frontdoor-search-input');
+  frontdoorSearchEl.addEventListener('input', () => {
+    const sidebarSearchEl = document.getElementById('search');
+    sidebarSearchEl.value = frontdoorSearchEl.value;
+    sidebarSearchEl.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  scrollToPendingCategoryOrTop();
+}
 
 function renderHome() {
   // Group CALCULATOR_INDEX by category, preserving insertion order
@@ -1105,7 +1290,7 @@ function renderLearnHub() {
       <span class="wizard-banner-text">Not sure where to start? Answer a few quick questions to find the right guide.</span>
       <span class="wizard-banner-arrow">→</span>
     </a>
-    <a class="wizard-banner alt-banner" href="#">
+    <a class="wizard-banner alt-banner" href="#calculators">
       <span class="wizard-banner-icon">C</span>
       <span class="wizard-banner-text">${calcTotal} calculators across ${calcCategories} categories — ${calcAvailLabel}.</span>
       <span class="wizard-banner-arrow">→</span>
@@ -1352,9 +1537,9 @@ function renderCalculator(calc) {
 
   view().innerHTML = `
     <div class="page-breadcrumb">
-      <a href="#">Calculators</a>
+      <a href="#calculators">Calculators</a>
       <span class="page-crumb-sep">›</span>
-      <a href="#" data-expand-cat="${esc(calc.category)}" data-expand-target="home">${esc(calc.category)}</a>
+      <a href="#calculators" data-expand-cat="${esc(calc.category)}" data-expand-target="home">${esc(calc.category)}</a>
       <span class="page-crumb-sep">›</span>
       <span class="page-crumb-current">${esc(calc.name)}</span>
     </div>
@@ -1490,9 +1675,9 @@ function renderExplorerCalculator(calc) {
 
   view().innerHTML = `
     <div class="page-breadcrumb">
-      <a href="#">Calculators</a>
+      <a href="#calculators">Calculators</a>
       <span class="page-crumb-sep">›</span>
-      <a href="#" data-expand-cat="${esc(calc.category)}" data-expand-target="home">${esc(calc.category)}</a>
+      <a href="#calculators" data-expand-cat="${esc(calc.category)}" data-expand-target="home">${esc(calc.category)}</a>
       <span class="page-crumb-sep">›</span>
       <span class="page-crumb-current">${esc(calc.name)}</span>
     </div>

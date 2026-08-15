@@ -24976,7 +24976,7 @@ const GUIDES = [
       },
       {
         heading: 'Keeping This Guide Current',
-        html: `<p>This PDF is a snapshot, not a live view — as calculators and guides are added to the site, this file is updated separately and may lag behind for a period. If something here doesn't match what you see on the live site, the site itself is the current version; the calculator count and category list on the <a href="#learn">Learn hub</a> and the <a href="#">home page</a> always reflect exactly what's available right now.</p>`,
+        html: `<p>This PDF is a snapshot, not a live view — as calculators and guides are added to the site, this file is updated separately and may lag behind for a period. If something here doesn't match what you see on the live site, the site itself is the current version; the calculator count and category list on the <a href="#learn">Learn hub</a> and the <a href="#calculators">Calculator Index</a> always reflect exactly what's available right now.</p>`,
       },
     ],
   },
