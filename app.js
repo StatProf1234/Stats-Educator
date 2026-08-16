@@ -204,15 +204,17 @@ function trackPageview() {
 }
 
 // Remembers which of the three hubs (calculators/learn/designs) a
-// visitor last actually browsed, so a bare '#' on a later visit can
-// skip straight back there instead of re-showing the front door every
-// time — see route()'s handling of hash === '' below. localStorage
-// (not sessionStorage) deliberately, so the preference survives
-// closing the tab; wrapped in try/catch since some browsers throw on
-// localStorage access in private-browsing/storage-blocked contexts,
-// and losing this preference should never break navigation.
+// visitor last actually browsed, so a bare '#' on a later visit in the
+// SAME browser session can skip straight back there instead of
+// re-showing the front door every time — see route()'s handling of
+// hash === '' below. sessionStorage (not localStorage) deliberately,
+// so the front door reappears on a fresh visit (new tab/window opened
+// later, or the browser reopened) rather than being remembered
+// permanently; wrapped in try/catch since some browsers throw on
+// storage access in private-browsing/storage-blocked contexts, and
+// losing this preference should never break navigation.
 function rememberLastHub(hub) {
-  try { localStorage.setItem('lastHub', hub); } catch (e) { /* storage unavailable — remembering is best-effort only */ }
+  try { sessionStorage.setItem('lastHub', hub); } catch (e) { /* storage unavailable — remembering is best-effort only */ }
 }
 
 function route() {
@@ -259,14 +261,15 @@ function route() {
     return;
   }
 
-  // A genuinely empty hash — the very first visit to the site, or a
-  // returning visitor who cleared it — is the one case route() treats
-  // specially: first-timers (no remembered hub) see the neutral front
-  // door; returning visitors skip straight to whichever hub they used
-  // last. Any other unrecognized hash (a stale/typo'd link) still
-  // falls back to the Calculator Index, same as always.
+  // A genuinely empty hash — the first visit of a browser session, or
+  // a returning visitor within that same session who cleared it — is
+  // the one case route() treats specially: no remembered hub yet (a
+  // fresh session) shows the neutral front door; having already
+  // visited a hub earlier in this session skips straight back to it.
+  // Any other unrecognized hash (a stale/typo'd link) still falls back
+  // to the Calculator Index, same as always.
   if (hash === '') {
-    const lastHub = (() => { try { return localStorage.getItem('lastHub'); } catch (e) { return null; } })();
+    const lastHub = (() => { try { return sessionStorage.getItem('lastHub'); } catch (e) { return null; } })();
     if (lastHub === 'learn' || lastHub === 'designs' || lastHub === 'calculators') {
       location.hash = lastHub;
       return;
