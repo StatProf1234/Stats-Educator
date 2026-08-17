@@ -585,6 +585,8 @@ function renderFrontDoor() {
           </svg>
           <input type="text" id="frontdoor-search-input" placeholder="Search calculators, guides, or study designs…" autocomplete="off" spellcheck="false">
         </div>
+
+        <a class="frontdoor-guide-link" href="#learn/reference-user-guide">New here? Download the User Guide (PDF) →</a>
       </div>
       <div class="frontdoor-hero-img">
         <img src="assets/hero-desk.png" alt="A desk with a laptop showing a bell-curve chart, a stethoscope, a calculator, a coffee mug printed with the normal-distribution formula, and an open notebook of statistics notes beside a book titled The Biostat Toolkit.">
