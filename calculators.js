@@ -6377,7 +6377,7 @@ const CALCULATORS = [
     name:        'Multiple Linear Regression',
     hint:        'ŷ = β₀+β₁x₁+…+βₖxₖ, β̂=(X\'X)⁻¹X\'y',
     category:    'Correlation & Regression',
-    description: 'Fits a linear model with two or more predictors at once, estimating each coefficient, its standard error, R², adjusted R², and overall significance.',
+    description: 'Fits a linear model with two or more predictors at once, estimating each coefficient, its standard error, R², adjusted R², overall significance, and each predictor\'s Variance Inflation Factor (VIF) as a collinearity diagnostic.',
 
     formulas: [
       {
@@ -6391,6 +6391,10 @@ const CALCULATORS = [
       {
         label: 'R², Adjusted R² & Overall F-Test',
         latex: 'R^2 = 1-\\dfrac{SSE}{SST} \\qquad R^2_{adj} = 1-(1-R^2)\\dfrac{n-1}{n-k-1} \\qquad F = \\dfrac{SSR/k}{SSE/(n-k-1)}'
+      },
+      {
+        label: 'Variance Inflation Factor (Collinearity Diagnostic)',
+        latex: 'VIF_j = \\dfrac{1}{1-R_j^2}, \\quad R_j^2 = \\text{R}^2 \\text{ from regressing } X_j \\text{ on every other predictor}'
       }
     ],
 
@@ -6480,6 +6484,7 @@ const CALCULATORS = [
 
       const f = (v, dp = 4) => +(v.toFixed(dp));
       const isSignificant = pF < 0.05;
+      const vifs = computeVIFs(X);
 
       const rows = [
         { label: 'Sample Size (n) / Predictors (k)', value: `${n} / ${k}`, ci: null, isRatio: false, isText: true },
@@ -6489,11 +6494,16 @@ const CALCULATORS = [
       ];
 
       for (let j = 1; j <= k; j++) {
+        const vif = vifs[j - 1];
         rows.push(
           { label: `Coefficient ${subscriptLabel('β', j)} (${subscriptLabel('X', j)})`, value: f(beta[j]),
             ci: [f(ciBeta[j][0]), f(ciBeta[j][1])], isRatio: false, highlight: true },
           { label: `SE(${subscriptLabel('β', j)}), t & p-value`, isText: true, ci: null, isRatio: false,
             value: `SE = ${f(seBeta[j])}, t = ${f(tStats[j])}, ${formatPText(pStats[j])}` },
+          isFinite(vif)
+            ? { label: `VIF (${subscriptLabel('X', j)})`, value: f(vif, 2), ci: null, isRatio: false }
+            : { label: `VIF (${subscriptLabel('X', j)})`, isText: true, ci: null, isRatio: false,
+                value: `Undefined — ${subscriptLabel('X', j)} is (near-)perfectly predictable from the other predictor(s) alone.` },
         );
       }
 
@@ -6505,6 +6515,17 @@ const CALCULATORS = [
         { label: 'Interpretation (α = 0.05)', isText: true, ci: null, isRatio: false,
           value: isSignificant ? 'Reject H₀ — the model as a whole significantly predicts Y' : 'Fail to reject H₀ — the model does not significantly predict Y' },
       );
+
+      // Only surfaced when it's actually informative — a fully clean
+      // set of predictors (every VIF well below 5) doesn't need this
+      // explained, mirroring how the EPV note in Multiple Logistic
+      // Regression only appears when EPV is actually low.
+      const maxVIF = Math.max(...vifs);
+      if (!isFinite(maxVIF) || maxVIF >= 5) {
+        const severity = !isFinite(maxVIF) || maxVIF >= 10 ? 'severe' : 'moderate';
+        rows.push({ label: 'Note on Collinearity', isText: true, ci: null, isRatio: false,
+          value: `At least one predictor has a Variance Inflation Factor (VIF) of ${isFinite(maxVIF) ? f(maxVIF, 1) : '∞ (perfectly predictable from the others)'} — ${severity} multicollinearity with the other predictor(s) in this model. VIF quantifies how much a coefficient's variance is inflated by its correlation with the other predictors (VIF_j = 1/(1−R²ⱼ), where R²ⱼ comes from regressing that one predictor on all the others); a conventional rule of thumb flags VIF ≥ 5 as concerning and VIF ≥ 10 as severe. High collinearity doesn't bias the coefficients themselves, but it inflates their standard errors and widens their CIs, and can make individual coefficients unstable (sensitive to small changes in the data) even when the model's overall R² and F-test look fine — consider dropping or combining redundant predictors, or interpreting the affected coefficient(s) cautiously.` });
+      }
 
       return rows;
     }
@@ -6648,7 +6669,7 @@ const CALCULATORS = [
     name:        'Multiple Logistic Regression',
     hint:        'logit(P)=β₀+β₁x₁+…+βₖxₖ, aOR=e^β (adjusted)',
     category:    'Correlation & Regression',
-    description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor in the model constant — plus its 95% CI, Wald test, and the model's overall likelihood-ratio test.",
+    description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor in the model constant — plus its 95% CI, Wald test, the model's overall likelihood-ratio test, events per variable (EPV), and each predictor's Variance Inflation Factor (VIF) as a collinearity diagnostic.",
 
     formulas: [
       {
@@ -6670,6 +6691,10 @@ const CALCULATORS = [
       {
         label: "Firth's Penalized Score (bias-reduced fitting option, below)",
         latex: 'X^\\top\\big(y-\\hat p+h\\,(\\tfrac12-\\hat p)\\big)=0, \\quad h_i = \\hat p_i(1-\\hat p_i)\\,x_i^\\top(X^\\top WX)^{-1}x_i'
+      },
+      {
+        label: 'Variance Inflation Factor (Collinearity Diagnostic)',
+        latex: 'VIF_j = \\dfrac{1}{1-R_j^2}, \\quad R_j^2 = \\text{R}^2 \\text{ from regressing } X_j \\text{ on every other predictor}'
       }
     ],
 
@@ -6764,6 +6789,7 @@ const CALCULATORS = [
       const f = (v, dp = 4) => +(v.toFixed(dp));
       const nEventsMinority = Math.min(nEvents, n - nEvents);
       const epv = nEventsMinority / k;
+      const vifs = computeVIFs(X);
 
       const rows = [
         { label: 'Sample Size (n) / Predictors (k)', value: `${n} / ${k}`, ci: null, isRatio: false, isText: true },
@@ -6810,6 +6836,11 @@ const CALCULATORS = [
           { label: `Adjusted Odds Ratio (${subscriptLabel('aOR', j)}) = e^${subscriptLabel('β', j)}`, value: f(aOR),
             ci: [f(ciOR[0]), f(ciOR[1])], isRatio: true, highlight: true },
         );
+        const vif = vifs[j - 1];
+        rows.push(isFinite(vif)
+          ? { label: `VIF (${subscriptLabel('X', j)})`, value: f(vif, 2), ci: null, isRatio: false }
+          : { label: `VIF (${subscriptLabel('X', j)})`, isText: true, ci: null, isRatio: false,
+              value: `Undefined — ${subscriptLabel('X', j)} is (near-)perfectly predictable from the other predictor(s) alone.` });
       }
 
       rows.push(
@@ -6823,6 +6854,15 @@ const CALCULATORS = [
       if (epv < 10) {
         rows.push({ label: 'Note on Sample Size', isText: true, ci: null, isRatio: false,
           value: `Only about ${f(epv, 1)} events per predictor (the rarer of Y=1/Y=0, divided by k) — below the conventional rule-of-thumb minimum of 10 events per variable (EPV). Coefficients and CIs above may be unstable; treat them cautiously and consider this exploratory until replicated in a larger sample.` });
+      }
+
+      // Only surfaced when it's actually informative — see the
+      // identical threshold logic in Multiple Linear Regression.
+      const maxVIF = Math.max(...vifs);
+      if (!isFinite(maxVIF) || maxVIF >= 5) {
+        const severity = !isFinite(maxVIF) || maxVIF >= 10 ? 'severe' : 'moderate';
+        rows.push({ label: 'Note on Collinearity', isText: true, ci: null, isRatio: false,
+          value: `At least one predictor has a Variance Inflation Factor (VIF) of ${isFinite(maxVIF) ? f(maxVIF, 1) : '∞ (perfectly predictable from the others)'} — ${severity} multicollinearity with the other predictor(s) in this model. VIF quantifies how much a coefficient's variance is inflated by its correlation with the other predictors (VIF_j = 1/(1−R²ⱼ), where R²ⱼ comes from regressing that one predictor on all the others); a conventional rule of thumb flags VIF ≥ 5 as concerning and VIF ≥ 10 as severe. High collinearity doesn't bias the adjusted odds ratios themselves, but it inflates their standard errors and widens their CIs, and can make individual coefficients unstable even when the model's overall likelihood-ratio test looks fine — consider dropping or combining redundant predictors, or interpreting the affected aOR(s) cautiously.` });
       }
 
       // A dynamic, per-predictor explanation built from THIS model's
@@ -18468,6 +18508,39 @@ function matrixInverse(A) {
   return M.map(row => row.slice(n));
 }
 
+// VIF_j = 1/(1-R_j^2), where R_j^2 comes from regressing predictor j
+// on every OTHER predictor (plus an intercept) via the same OLS
+// machinery used for the main fit. VIF is a property of the design
+// matrix alone — it never touches Y or the link function — so this
+// one helper serves both Multiple Linear Regression and Multiple
+// Logistic Regression unchanged. X must already include the leading
+// intercept column of 1s; returns one VIF per predictor column (in
+// predictor order, excluding the intercept). A predictor perfectly
+// predictable from the others (R_j^2 = 1) returns Infinity rather
+// than throwing, since callers already know at this point that the
+// FULL X'X was invertible — a single auxiliary regression being
+// singular is a real, reportable "perfect collinearity among a
+// subset of predictors" result, not a data-entry error.
+function computeVIFs(X) {
+  const k = X[0].length - 1; // predictor columns, excluding the intercept
+  const vifs = [];
+  for (let j = 1; j <= k; j++) {
+    const target = X.map(row => row[j]);
+    const others = X.map(row => [1, ...row.slice(1, j), ...row.slice(j + 1)]);
+    const OtX = matrixTranspose(others);
+    const OtOinv = matrixInverse(matrixMultiply(OtX, others));
+    if (!OtOinv) { vifs.push(Infinity); continue; }
+    const beta = matrixMultiply(OtOinv, matrixMultiply(OtX, target.map(v => [v]))).map(row => row[0]);
+    const fitted = others.map(row => row.reduce((s, x, m) => s + x * beta[m], 0));
+    const mean = target.reduce((s, v) => s + v, 0) / target.length;
+    const SSE = target.reduce((s, v, i) => s + (v - fitted[i]) ** 2, 0);
+    const SST = target.reduce((s, v) => s + (v - mean) ** 2, 0);
+    const R2 = SST === 0 ? 1 : 1 - SSE / SST;
+    vifs.push(R2 >= 1 ? Infinity : 1 / (1 - R2));
+  }
+  return vifs;
+}
+
 // Fits a multivariable logistic regression by Newton-Raphson / IRLS —
 // no closed form exists once there are 2+ predictors, unlike the
 // single-predictor case in 'Logistic Regression (2×2)' (β₁ = ln(OR)
@@ -18997,9 +19070,9 @@ const CALCULATOR_INDEX = [
   { id: 'spearman-rho',         name: "Spearman's Rank Correlation",     category: 'Correlation & Regression',    description: 'Non-parametric measure of monotonic association between two ranked variables.',                 status: 'available' },
   { id: 'kendalls-tau',         name: "Kendall's τ",                     category: 'Correlation & Regression',    description: 'Non-parametric correlation based on the number of concordant vs. discordant pairs.',            status: 'available' },
   { id: 'simple-regression',    name: 'Simple Linear Regression',        category: 'Correlation & Regression',    description: 'Fits a straight line to data and estimates slope, intercept, R², and significance.',            status: 'available' },
-  { id: 'multiple-regression',  name: 'Multiple Linear Regression',      category: 'Correlation & Regression',    description: 'Fits a linear model with two or more predictors at once, estimating each coefficient, its standard error, R², adjusted R², and overall significance.', status: 'available' },
+  { id: 'multiple-regression',  name: 'Multiple Linear Regression',      category: 'Correlation & Regression',    description: 'Fits a linear model with two or more predictors at once, estimating each coefficient, its standard error, R², adjusted R², overall significance, and each predictor\'s Variance Inflation Factor (VIF) as a collinearity diagnostic.', status: 'available' },
   { id: 'logistic-regression',  name: 'Logistic Regression (2×2)',       category: 'Correlation & Regression',    description: 'Estimates the log-odds and OR from a 2×2 table using logistic regression.',                     status: 'available' },
-  { id: 'multiple-logistic-regression', name: 'Multiple Logistic Regression', category: 'Correlation & Regression', description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor constant — plus its 95% CI, Wald test, and the model's overall likelihood-ratio test.", status: 'available' },
+  { id: 'multiple-logistic-regression', name: 'Multiple Logistic Regression', category: 'Correlation & Regression', description: "Fits a logistic regression model with two or more predictors at once, giving each predictor's adjusted odds ratio (aOR) — holding every other predictor constant — plus its 95% CI, Wald test, the model's overall likelihood-ratio test, events per variable (EPV), and each predictor's Variance Inflation Factor (VIF) as a collinearity diagnostic.", status: 'available' },
   { id: 'multivariable-predictor', name: 'Multivariable Outcome Predictor', category: 'Correlation & Regression', description: 'Computes a predicted outcome — or predicted probability — for a new individual from a linear or logistic equation you supply: an intercept plus a coefficient and a value for each predictor (e.g. diet, health behavior, medication use).', status: 'available' },
 
   // ── 8. EFFECT SIZES & AGREEMENT ──────────────────────────────────────
@@ -20250,9 +20323,9 @@ const SEARCH_KEYWORDS = {
   'spearman-rho':         ["spearman's rho", 'rank correlation', 'monotonic relationship', 'ordinal correlation'],
   'kendalls-tau':         ["kendall's tau", 'concordant discordant pairs', 'correlation with ties'],
   'simple-regression':    ['simple linear regression', 'line of best fit', 'one predictor regression', 'predict y from x'],
-  'multiple-regression':  ['multiple linear regression', 'multiple predictors', 'multivariable regression', 'two or more predictors'],
+  'multiple-regression':  ['multiple linear regression', 'multiple predictors', 'multivariable regression', 'two or more predictors', 'vif', 'variance inflation factor', 'collinearity', 'multicollinearity', 'collinearity diagnostic'],
   'logistic-regression':  ['logistic regression', 'binary outcome regression', 'odds ratio from a 2x2 table', 'predict yes no outcome'],
-  'multiple-logistic-regression': ['multiple logistic regression', 'multivariable logistic regression', 'adjusted odds ratio', 'aor', 'two or more predictors binary outcome', 'logistic regression multiple predictors', 'crude vs adjusted or', 'table 2 adjusted or', 'firth', "firth's method", 'penalized likelihood', 'bias-reduced logistic regression', 'complete separation', 'quasi-complete separation', 'model did not converge'],
+  'multiple-logistic-regression': ['multiple logistic regression', 'multivariable logistic regression', 'adjusted odds ratio', 'aor', 'two or more predictors binary outcome', 'logistic regression multiple predictors', 'crude vs adjusted or', 'table 2 adjusted or', 'firth', "firth's method", 'penalized likelihood', 'bias-reduced logistic regression', 'complete separation', 'quasi-complete separation', 'model did not converge', 'vif', 'variance inflation factor', 'collinearity', 'multicollinearity', 'events per variable', 'events per predictor', 'epv', 'model stability'],
   'multivariable-predictor': ['prediction calculator', 'predict an outcome', 'diet', 'health behavior', 'medications', 'risk score calculator', 'score a new patient', 'apply a regression equation', 'multiple predictors prediction'],
 
   // Effect Sizes & Agreement
@@ -20971,6 +21044,8 @@ const NOTATION = {
     { symbol: 'R^2_{adj}', meaning: 'R² adjusted for the number of predictors, penalizing models that add predictors without real explanatory power.' },
     { symbol: 'F', meaning: 'F-statistic testing whether the full set of predictors together significantly explains Y.' },
     { symbol: 'SSR', meaning: 'Regression sum of squares — variation in Y explained by all the predictors combined.' },
+    { symbol: 'VIF_j', meaning: "Variance Inflation Factor for predictor j — how much its coefficient's variance is inflated by collinearity with the other predictors; VIF ≥ 5 is conventionally flagged as concerning, VIF ≥ 10 as severe." },
+    { symbol: 'R_j^2', meaning: "R² from regressing predictor j on every other predictor alone — the quantity VIF_j is built from." },
   ],
   'logistic-regression': [
     { symbol: 'P(Y=1)', meaning: 'Predicted probability of the outcome occurring given the exposure value X.' },
@@ -20996,6 +21071,8 @@ const NOTATION = {
     { symbol: 'LL,\\ LL_0', meaning: "Log-likelihood of the fitted model, and of the intercept-only ('null') model — the basis of the likelihood-ratio test." },
     { symbol: 'G^2', meaning: 'Likelihood-ratio test statistic for the overall model, 2(LL − LL₀), compared to a chi-square distribution with k degrees of freedom.' },
     { symbol: 'h_i', meaning: "Firth's-method-only term: subject i's hat-matrix diagonal, wᵢ·xᵢ'(X'WX)⁻¹xᵢ — how much leverage that subject has on the fit, used to bias-correct the score equation." },
+    { symbol: 'VIF_j', meaning: "Variance Inflation Factor for predictor j — how much its coefficient's variance is inflated by collinearity with the other predictors; VIF ≥ 5 is conventionally flagged as concerning, VIF ≥ 10 as severe." },
+    { symbol: 'R_j^2', meaning: "R² from regressing predictor j on every other predictor alone — the quantity VIF_j is built from." },
   ],
   'multivariable-predictor': [
     { symbol: '\\eta', meaning: 'Linear predictor — the intercept plus every predictor’s coefficient times its value, added together.' },
