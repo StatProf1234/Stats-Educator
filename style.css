@@ -704,18 +704,19 @@ body {
 .frontdoor-title { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.15; margin-bottom: 10px; }
 .frontdoor-sub { font-size: 14px; color: var(--text-2); line-height: 1.6; max-width: 62ch; margin-bottom: 18px; }
 
-/* No explicit height — stretch alignment on .frontdoor-hero sizes this
-   to match the text column (title + subtitle + search) automatically,
-   so it always ends flush with the search box's bottom edge even if
-   that text wraps differently at a narrower viewport. Width is derived
-   from that stretched height via aspect-ratio (matching hero-desk.png's
-   own 800x447 ratio) rather than fixed, so object-fit: cover has no
-   need to crop the sides — a fixed width forced a much narrower box
-   than the image's ratio, cutting off content at the left/right edges. */
+/* Fixed width + aspect-ratio (matching hero-desk.png's own 800x447
+   ratio) rather than stretching to the text column's height: letting
+   this box's height track the text column via align-items: stretch
+   fed back into the width needed to keep the image uncropped, which
+   fought with the text column for space and shrank it in turn.
+   align-self: flex-start opts this box out of that stretch so both
+   columns size independently — object-fit: cover then has no need to
+   crop the sides since the box ratio already matches the image. */
 .frontdoor-hero-img {
   flex-shrink: 0;
+  align-self: flex-start;
+  width: 340px;
   aspect-ratio: 800 / 447;
-  max-width: 380px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
