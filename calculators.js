@@ -605,7 +605,7 @@ const CALCULATORS = [
     id:          'or-to-nnt-nnh',
     name:        'OR to NNTB & NNTH',
     hint:        'OR → RR → ARR → NNTB / NNTH',
-    category:    'Epidemiology & Risk',
+    category:    'Conversions & Back-Calculations',
     description: 'Converts an odds ratio and baseline control event rate to relative risk, absolute risk difference, and the number needed to treat for an additional beneficial outcome (NNTB, if OR < 1) or an additional harmful outcome (NNTH, if OR > 1). Formerly known as NNT and NNH, respectively.',
 
     formulas: [
@@ -1349,7 +1349,7 @@ const CALCULATORS = [
     id:          'se-lnrr-lnor',
     name:        'SE of ln(RR) & ln(OR) — 2×2 Table',
     hint:        'SE(p₁−p₂) · SE(ln RR) · SE(ln OR)',
-    category:    'Epidemiology & Risk',
+    category:    'Conversions & Back-Calculations',
     description: 'Computes the standard error of a difference in proportions, ln(RR), and ln(OR) from a 2×2 table of exposure and outcome counts.',
 
     formulas: [
@@ -1503,7 +1503,7 @@ const CALCULATORS = [
     id:          'revman-sd',
     name:        'RevMan — Finding SD',
     hint:        'SD from SE or 95% CI',
-    category:    'Descriptive Statistics',
+    category:    'Conversions & Back-Calculations',
     description: 'Derives standard deviations from confidence intervals or standard errors for meta-analysis.',
 
     formulas: [
@@ -1594,6 +1594,173 @@ const CALCULATORS = [
         { label: 'Method',                          value: method,               ci: null, isRatio: false, isText: true },
         { label: 'Back-Computed SE (SD / √n)',      value: f(sd / Math.sqrt(n)), ci: null, isRatio: false },
         { label: 'Sample Size (n)',                 value: n,                    ci: null, isRatio: false },
+      ];
+    }
+  },
+
+  /* ── 112. PROBABILITY ↔ ODDS ────────────────────────────────────────────
+     The plain probability/odds transform, in isolation from any
+     ratio — the intuition-builder behind why an odds ratio and a
+     risk ratio are different numbers (see the Probability vs. Odds
+     row of the Glossary of Abbreviations and Symbols).                */
+  {
+    id:          'probability-odds-convert',
+    name:        'Probability ↔ Odds',
+    hint:        'Odds = p/(1−p)  ⇄  p = Odds/(1+Odds)',
+    category:    'Conversions & Back-Calculations',
+    description: "Converts a single probability (risk) to its equivalent odds, or an odds value back to probability — the plain transform behind why an odds ratio isn't the same number as a risk ratio.",
+
+    formulas: [
+      {
+        label: 'Odds from Probability',
+        latex: '\\text{Odds} = \\dfrac{p}{1-p}'
+      },
+      {
+        label: 'Probability from Odds',
+        latex: 'p = \\dfrac{\\text{Odds}}{1+\\text{Odds}}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'probability', label: 'Probability (0–1) — leave blank if entering odds instead', default: 0.20 },
+      { id: 'odds',        label: 'Odds — leave blank if entering probability instead',        default: ''   },
+    ],
+
+    example({ probability, odds }) {
+      const provided = v => v !== '' && v != null && isFinite(v);
+      const probGiven = provided(probability) && probability > 0 && probability < 1;
+      const oddsGiven = provided(odds) && odds > 0;
+      if (!probGiven && !oddsGiven) return 'Enter a probability, or an odds value, to see a worked medical example here.';
+      const f = v => +v.toFixed(3);
+      if (probGiven) {
+        const o = probability / (1 - probability);
+        return `A disease has a ${f(probability * 100)}% probability (risk) of occurring over a patient's lifetime. As odds, that's ${f(o)} — or about 1-to-${f(1 / o)} — noticeably different from the probability itself once the risk climbs much past the low, rare-outcome range where the two nearly coincide.`;
+      }
+      const p = odds / (1 + odds);
+      return `A form reports odds of ${odds}-to-1 for an event. Converting to probability gives p = ${f(p * 100)}% — the number that plugs directly into most other calculators on this site, since almost all of them expect a probability, not raw odds.`;
+    },
+
+    calculate({ probability, odds }) {
+      const provided = v => v !== '' && v != null && isFinite(v);
+      const probGiven = provided(probability);
+      const oddsGiven = provided(odds);
+
+      if (!probGiven && !oddsGiven) return [err('Enter either a Probability or an Odds value.')];
+
+      let p, o, method;
+      if (probGiven) {
+        if (probability <= 0 || probability >= 1) return [err('Probability must be between 0 and 1 (exclusive)')];
+        p = probability;
+        o = p / (1 - p);
+        method = 'Probability → Odds';
+      } else {
+        if (!isFinite(odds) || odds <= 0) return [err('Odds must be greater than 0')];
+        o = odds;
+        p = o / (1 + o);
+        method = 'Odds → Probability';
+      }
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Probability (p)', value: f(p), ci: null, isRatio: false, highlight: true },
+        { label: 'Odds', value: f(o), ci: null, isRatio: false, highlight: true },
+        { label: 'Odds, as a Ratio', isText: true, ci: null, isRatio: false,
+          value: `1-to-${f(1 / o, 3)} against, i.e. ${f(o, 3)}-to-1 in favor.` },
+        { label: 'Method', value: method, ci: null, isRatio: false, isText: true },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'Odds and probability diverge more as p moves away from 0 — they are nearly equal only when p is small (a rare outcome), the same condition under which an odds ratio closely approximates a risk ratio.' },
+      ];
+    }
+  },
+
+  /* ── 113. SMD (COHEN'S d) ↔ CORRELATION r ──────────────────────────────
+     Borenstein et al.'s point-biserial conversion (also in the
+     Cochrane Handbook §10.6) between a standardized mean difference
+     and a correlation coefficient, treating group membership as a
+     dichotomized continuous variable — lets a continuous-outcome
+     trial and a correlational study enter the same meta-analysis.    */
+  {
+    id:          'smd-r-convert',
+    name:        "SMD (Cohen's d) ↔ Correlation r",
+    hint:        'a=(n₁+n₂)²/(n₁n₂); r=d/√(d²+a); d=r√(a/(1−r²))',
+    category:    'Conversions & Back-Calculations',
+    description: "Converts a standardized mean difference (Cohen's d / Hedges' g) to the equivalent point-biserial correlation r, and back — for combining a continuous-outcome study with a correlational one in the same meta-analysis.",
+
+    formulas: [
+      {
+        label: 'Sample-Size Correction Factor',
+        latex: 'a = \\dfrac{(n_1+n_2)^2}{n_1 n_2}'
+      },
+      {
+        label: 'r from d, and d from r',
+        latex: 'r = \\dfrac{d}{\\sqrt{d^2+a}} \\qquad d = r\\sqrt{\\dfrac{a}{1-r^2}}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'n1', label: 'Group 1 Sample Size (n₁)',                       default: 30  },
+      { id: 'n2', label: 'Group 2 Sample Size (n₂)',                       default: 30  },
+      { id: 'd',  label: "Cohen's d / Hedges' g — leave blank if entering r instead", default: 0.5 },
+      { id: 'r',  label: 'Correlation r — leave blank if entering d instead',         default: ''  },
+    ],
+
+    example({ n1, n2, d, r }) {
+      const provided = v => v !== '' && v != null && isFinite(v);
+      n1 = Math.round(n1); n2 = Math.round(n2);
+      if (!isFinite(n1) || n1 < 2 || !isFinite(n2) || n2 < 2)
+        return 'Enter both group sample sizes to see a worked medical example here.';
+      const dGiven = provided(d);
+      const rGiven = provided(r) && r > -1 && r < 1;
+      if (!dGiven && !rGiven) return 'Enter either a d/g value or a correlation r to see a worked medical example here.';
+      const a = (n1 + n2) ** 2 / (n1 * n2);
+      const f = v => +v.toFixed(3);
+      if (dGiven) {
+        const rOut = d / Math.sqrt(d * d + a);
+        return `A trial (n₁ = ${n1}, n₂ = ${n2}) reports Hedges' g = ${d} for a symptom-severity scale. A separate study in the same meta-analysis measured the same exposure only as a continuous score correlated with severity. Converting g to its point-biserial equivalent, r = ${f(rOut)}, lets both studies be pooled on one common scale.`;
+      }
+      const dOut = r * Math.sqrt(a / (1 - r * r));
+      return `A correlational study (n₁ = ${n1}, n₂ = ${n2} if split at the median) reports r = ${r} between exposure and outcome. Converted to a standardized mean difference, d = ${f(dOut)} — the form needed to pool it alongside trials that reported Cohen's d or Hedges' g directly.`;
+    },
+
+    calculate({ n1, n2, d, r }) {
+      const provided = v => v !== '' && v != null && isFinite(v);
+      n1 = Math.round(n1); n2 = Math.round(n2);
+
+      if (!isFinite(n1) || n1 < 2) return [err('Group 1 Sample Size (n₁) must be at least 2')];
+      if (!isFinite(n2) || n2 < 2) return [err('Group 2 Sample Size (n₂) must be at least 2')];
+
+      const dGiven = provided(d);
+      const rGiven = provided(r);
+
+      if (!dGiven && !rGiven) return [err('Enter either a Cohen’s d / Hedges’ g value, or a Correlation r.')];
+
+      const a = (n1 + n2) ** 2 / (n1 * n2);
+
+      let dOut, rOut, method;
+      if (dGiven) {
+        if (!isFinite(d)) return [err('Cohen’s d / Hedges’ g must be a number')];
+        dOut = d;
+        rOut = d / Math.sqrt(d * d + a);
+        method = "d → r";
+      } else {
+        if (!isFinite(r) || r <= -1 || r >= 1) return [err('Correlation r must be between −1 and 1 (exclusive)')];
+        rOut = r;
+        dOut = r * Math.sqrt(a / (1 - r * r));
+        method = "r → d";
+      }
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Sample-Size Correction Factor (a)', value: f(a), ci: null, isRatio: false },
+        { label: "Cohen's d / Hedges' g", value: f(dOut), ci: null, isRatio: false, highlight: true },
+        { label: 'Correlation (r)', value: f(rOut), ci: null, isRatio: false, highlight: true },
+        { label: 'Method', value: method, ci: null, isRatio: false, isText: true },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'This is an algebraic re-expression under the point-biserial model (group membership treated as an artificially dichotomized, normally distributed latent trait) — valid for combining studies in a meta-analysis, but it doesn\'t create new information beyond what d (or r) and the group sizes already contain. See <a href="#learn/appraisal-md-vs-smd">Mean Difference vs. Standardized Mean Difference</a> for background on d and g themselves.' },
       ];
     }
   },
@@ -9101,7 +9268,7 @@ const CALCULATORS = [
     id:          'or-to-rr',
     name:        'Odds Ratio to Risk Ratio',
     hint:        'RR = OR / (1 + CER·(OR−1))',
-    category:    'Epidemiology & Risk',
+    category:    'Conversions & Back-Calculations',
     description: 'Converts an odds ratio to a risk ratio using the control event rate.',
 
     formulas: [
@@ -9143,6 +9310,147 @@ const CALCULATORS = [
         { label: 'Experimental Event Rate (EER)', value: f(EER), ci: null, isRatio: false },
         { label: 'Note', isText: true, ci: null, isRatio: false,
           value: 'OR and RR diverge more as the Control Event Rate moves away from 0 — they are nearly equal only when CER is small (a rare outcome).' },
+      ];
+    }
+  },
+
+  /* ── 110. p-VALUE FROM A RATIO AND ITS CI ──────────────────────────────
+     Back-calculates the log-scale SE implied by a reported CI on a
+     ratio measure (RR/OR/HR), then the z-statistic and two-tailed
+     p-value — the Altman & Bland (BMJ 2011) "obtaining a p-value from
+     a CI" method, applied on the log scale since ratio-measure CIs
+     are constructed there, not on the ratio scale directly.          */
+  {
+    id:          'ratio-ci-to-pvalue',
+    name:        'p-Value from a Ratio and Its CI',
+    hint:        'SE=(ln UL−ln LL)/(2z); z=ln(estimate)/SE',
+    category:    'Conversions & Back-Calculations',
+    description: 'Back-calculates the two-tailed p-value for a risk ratio, odds ratio, or hazard ratio from its published point estimate and confidence interval — for a paper that reports the ratio and CI but not an exact p-value.',
+
+    formulas: [
+      {
+        label: 'Implied SE of ln(Estimate) from the CI',
+        latex: 'SE = \\dfrac{\\ln(CI_{upper}) - \\ln(CI_{lower})}{2\\,z_{CI}}'
+      },
+      {
+        label: 'z-Statistic and Two-Tailed p-Value',
+        latex: 'z = \\dfrac{\\ln(\\text{estimate})}{SE} \\qquad p = 2\\left(1-\\Phi(|z|)\\right)'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'estimate',        label: 'Ratio Estimate (RR, OR, or HR)',   default: 0.72 },
+      { id: 'ciLower',         label: 'CI Lower Bound',                  default: 0.55 },
+      { id: 'ciUpper',         label: 'CI Upper Bound',                  default: 0.94 },
+      { id: 'confidenceLevel', label: 'Confidence Level of the CI (%)',  default: 95   },
+    ],
+
+    example({ estimate, ciLower, ciUpper, confidenceLevel }) {
+      if (!isFinite(estimate) || estimate <= 0 || !isFinite(ciLower) || ciLower <= 0 ||
+          !isFinite(ciUpper) || ciUpper <= ciLower || !isFinite(confidenceLevel) || confidenceLevel <= 0 || confidenceLevel >= 100 ||
+          typeof jStat === 'undefined' || !jStat.normal)
+        return 'Enter a ratio estimate and its confidence interval to see a worked medical example here.';
+      const zCI  = jStat.normal.inv(1 - (1 - confidenceLevel / 100) / 2, 0, 1);
+      const seLn = (Math.log(ciUpper) - Math.log(ciLower)) / (2 * zCI);
+      const z    = Math.log(estimate) / seLn;
+      const p    = 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1));
+      const f = v => +v.toFixed(3);
+      return `A trial reports a hazard ratio of ${estimate} (${confidenceLevel}% CI ${ciLower}–${ciUpper}) for a new anticoagulant, but the abstract never states an exact p-value. Working back from the CI width gives SE(ln HR) = ${f(seLn)}, z = ${f(z)}, and p ${p < 0.001 ? '< 0.001' : `= ${f(p)}`} — enough to know whether this specific comparison actually crossed the α = 0.05 threshold before citing it as "significant."`;
+    },
+
+    calculate({ estimate, ciLower, ciUpper, confidenceLevel }) {
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+      if (!isFinite(estimate) || estimate <= 0) return [err('Ratio Estimate must be greater than 0')];
+      if (!isFinite(ciLower) || ciLower <= 0) return [err('CI Lower Bound must be greater than 0')];
+      if (!isFinite(ciUpper) || ciUpper <= ciLower) return [err('CI Upper Bound must be greater than the CI Lower Bound')];
+      if (!isFinite(confidenceLevel) || confidenceLevel <= 0 || confidenceLevel >= 100) return [err('Confidence Level must be between 0 and 100')];
+
+      const zCI  = jStat.normal.inv(1 - (1 - confidenceLevel / 100) / 2, 0, 1);
+      const seLn = (Math.log(ciUpper) - Math.log(ciLower)) / (2 * zCI);
+      const z    = Math.log(estimate) / seLn;
+      const p    = 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1));
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Implied SE of ln(Estimate)', value: f(seLn), ci: null, isRatio: false },
+        { label: 'z-Statistic', value: f(z), ci: null, isRatio: false, highlight: true },
+        { label: 'Two-Tailed p-Value', value: formatPValue(p), ci: null, isRatio: false, highlight: true },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'This assumes the reported CI is a standard Wald-type interval, symmetric on the log scale — true for the great majority of RR/OR/HR estimates from a regression model or the delta method. It will not exactly match a p-value computed a different way (e.g. an exact or Mantel-Haenszel test). See <a href="#learn/appraisal-p-values">What a P-Value Actually Means</a> for how to interpret the result.' },
+      ];
+    }
+  },
+
+  /* ── 111. CI FROM A RATIO AND ITS p-VALUE ──────────────────────────────
+     The reverse conversion: reconstructs a confidence interval for a
+     ratio measure from its point estimate and an exact p-value, using
+     the same log-scale SE algebra run backwards.                     */
+  {
+    id:          'ratio-pvalue-to-ci',
+    name:        'CI from a Ratio and Its p-Value',
+    hint:        'z=Φ⁻¹(1−p/2); SE=|ln(estimate)|/z',
+    category:    'Conversions & Back-Calculations',
+    description: 'Back-calculates a confidence interval for a risk ratio, odds ratio, or hazard ratio from its published point estimate and exact two-tailed p-value — for a paper that reports one but not the other.',
+
+    formulas: [
+      {
+        label: 'z from the p-Value',
+        latex: 'z = \\Phi^{-1}\\!\\left(1-\\tfrac{p}{2}\\right)'
+      },
+      {
+        label: 'Implied SE and Reconstructed CI',
+        latex: 'SE = \\dfrac{|\\ln(\\text{estimate})|}{z} \\qquad CI = \\text{estimate}\\times e^{\\,\\pm\\, z_{out}\\,SE}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'estimate',   label: 'Ratio Estimate (RR, OR, or HR)',       default: 1.8  },
+      { id: 'pValue',     label: 'Two-Tailed p-Value',                    default: 0.03 },
+      { id: 'outputLevel', label: 'Confidence Level to Construct (%)',   default: 95   },
+    ],
+
+    example({ estimate, pValue, outputLevel }) {
+      if (!isFinite(estimate) || estimate <= 0 || Math.abs(Math.log(estimate)) < 1e-9 ||
+          !isFinite(pValue) || pValue <= 0 || pValue >= 1 ||
+          !isFinite(outputLevel) || outputLevel <= 0 || outputLevel >= 100 ||
+          typeof jStat === 'undefined' || !jStat.normal)
+        return 'Enter a ratio estimate and its p-value to see a worked medical example here.';
+      const zP    = jStat.normal.inv(1 - pValue / 2, 0, 1);
+      const seLn  = Math.abs(Math.log(estimate)) / zP;
+      const zOut  = jStat.normal.inv(1 - (1 - outputLevel / 100) / 2, 0, 1);
+      const ciLow = estimate * Math.exp(-zOut * seLn);
+      const ciHi  = estimate * Math.exp(zOut * seLn);
+      const f = v => +v.toFixed(3);
+      return `A meta-analysis writeup states "OR = ${estimate}, p = ${pValue}" for an exposure, without giving a CI. Working the p-value back through the log-scale SE reconstructs a ${outputLevel}% CI of ${f(ciLow)}–${f(ciHi)} — enough to judge the estimate's precision, and to enter it into a forest plot alongside studies that did report a CI.`;
+    },
+
+    calculate({ estimate, pValue, outputLevel }) {
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+      if (!isFinite(estimate) || estimate <= 0) return [err('Ratio Estimate must be greater than 0')];
+      if (Math.abs(Math.log(estimate)) < 1e-9)
+        return [err('An estimate of exactly 1 implies no effect at all — a p-value alone cannot determine an implied standard error in that case.')];
+      if (!isFinite(pValue) || pValue <= 0 || pValue >= 1) return [err('p-Value must be between 0 and 1 (exclusive)')];
+      if (!isFinite(outputLevel) || outputLevel <= 0 || outputLevel >= 100) return [err('Confidence Level must be between 0 and 100')];
+
+      const zP    = jStat.normal.inv(1 - pValue / 2, 0, 1);
+      const seLn  = Math.abs(Math.log(estimate)) / zP;
+      const zOut  = jStat.normal.inv(1 - (1 - outputLevel / 100) / 2, 0, 1);
+      const ciLow = estimate * Math.exp(-zOut * seLn);
+      const ciHi  = estimate * Math.exp(zOut * seLn);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'z (from p-Value)', value: f(zP), ci: null, isRatio: false },
+        { label: 'Implied SE of ln(Estimate)', value: f(seLn), ci: null, isRatio: false },
+        { label: `Reconstructed ${outputLevel}% CI`, value: f(estimate), ci: [f(ciLow), f(ciHi)], isRatio: true, highlight: true },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'This assumes a standard Wald-type CI, symmetric on the log scale — the reconstruction is an approximation of what the original study would have reported, not a recovery of its exact numbers. See <a href="#learn/appraisal-confidence-intervals">Confidence Intervals: What "95%" Actually Covers</a> for how to interpret the result.' },
       ];
     }
   },
@@ -18996,7 +19304,6 @@ const CALCULATOR_INDEX = [
   { id: 'standard-error',       name: 'Standard Error of the Mean',       category: 'Descriptive Statistics',      description: 'Computes the standard error of the mean from SD and sample size.',                            status: 'available' },
   { id: 'se-proportion',        name: 'Standard Error of a Proportion',  category: 'Descriptive Statistics',      description: 'Computes the standard error of a single sample proportion from p and n.',                     status: 'available' },
   { id: 'variance-sd-sem-graph',name: 'Variance, Standard Deviation & Standard Error of the Mean — Graph', category: 'Descriptive Statistics', description: 'Plots variance, standard deviation, and standard error of the mean together.',                 status: 'available' },
-  { id: 'revman-sd',            name: 'RevMan — Finding SD',             category: 'Descriptive Statistics',      description: 'Derives standard deviations from confidence intervals or standard errors for meta-analysis.',  status: 'available' },
   { id: 'combine-groups',       name: 'Combining Groups (Mean, SD & N)', category: 'Descriptive Statistics',  description: 'Combines 2 to 4 separately reported subgroups (e.g., age bands, sites, or sexes) into one overall mean, SD, and N, as if the raw data itself had been pooled.', status: 'available' },
   { id: 'interquartile-range',  name: 'Interquartile Range (IQR)',       category: 'Descriptive Statistics',  description: "Computes Q1, the median, Q3, and the interquartile range from raw data, flags outliers using Tukey's 1.5×IQR fences, and draws a box-and-whisker plot.", status: 'available' },
   { id: 'weighted-average',     name: 'Weighted Average / Weighted Score', category: 'Descriptive Statistics', description: 'Combines several scores into one overall score using weights you assign directly — course grades, rubric items, or composite quality indices.', status: 'available' },
@@ -19112,11 +19419,8 @@ const CALCULATOR_INDEX = [
   { id: 'rr-or-baseline-risk-explorer', name: 'RR/OR & Baseline Risk Explorer', category: 'Epidemiology & Risk',   description: 'Holds RR or OR fixed while you slide baseline risk, showing how the absolute risk difference, NNT, and 2×2 table change even though the relative effect does not.', status: 'available' },
   { id: 'nested-case-control',  name: 'Nested Case-Control (1:1 Matched)', category: 'Epidemiology & Risk',       description: 'Computes a matched odds ratio from 1:1 nested case-control pairs — a direct estimate of the incidence rate ratio due to risk-set sampling.', status: 'available' },
   { id: 'mantel-haenszel',      name: 'Mantel-Haenszel Stratified 2×2 Analysis', category: 'Epidemiology & Risk', description: 'Pools an odds ratio and risk ratio across several 2×2 tables — one per confounder stratum (site, age band, sex) — using the Mantel-Haenszel method, tests the pooled association, and flags whether the crude and adjusted estimates differ enough to suggest confounding.', status: 'available' },
-  { id: 'se-lnrr-lnor',            name: 'SE of ln(RR) & ln(OR) — 2×2 Table', category: 'Epidemiology & Risk',   description: 'Computes the standard error of a difference in proportions, ln(RR), and ln(OR) from a 2×2 table of exposure and outcome counts.', status: 'available' },
   { id: 'se-rate',                 name: 'Standard Error of a Rate',      category: 'Epidemiology & Risk',        description: 'Computes the standard error of an incidence rate from the number of events and total person-time.', status: 'available' },
   { id: 'se-rate-ratio',           name: 'Standard Error of a Rate Ratio', category: 'Epidemiology & Risk',       description: "Computes the standard error of ln(Rate Ratio) and a 95% CI from two groups' event counts and person-time.", status: 'available' },
-  { id: 'or-to-nnt-nnh',           name: 'OR to NNTB & NNTH',             category: 'Epidemiology & Risk',         description: 'Converts an odds ratio and control event rate to the number needed to treat for an additional beneficial outcome (NNTB) or harmful outcome (NNTH) via absolute risk difference. Formerly known as NNT and NNH.',    status: 'available' },
-  { id: 'or-to-rr',                name: 'Odds Ratio to Risk Ratio',     category: 'Epidemiology & Risk',         description: 'Converts an odds ratio to a risk ratio using the control event rate.',                         status: 'available' },
   { id: 'attributable-fraction',   name: 'Attributable Fraction (AFe & PAF)', category: 'Epidemiology & Risk',   description: 'Estimates the fraction of disease attributable to the exposure, both among the exposed (AFe) and across the whole population (Population Attributable Fraction, PAF).',     status: 'available' },
   { id: 'par',                     name: 'Population Attributable Risk', category: 'Epidemiology & Risk',         description: 'Quantifies how much of the disease burden would be eliminated by removing the exposure.',      status: 'available' },
   { id: 'incidence-rate',          name: 'Incidence Rate & Rate Ratio',  category: 'Epidemiology & Risk',         description: 'Calculates incidence rates, rate ratio, and their confidence intervals from person-time data.', status: 'available' },
@@ -19124,7 +19428,19 @@ const CALCULATOR_INDEX = [
   { id: 'assoc-pred-intervals',    name: 'Measures of Association — Prediction Intervals', category: 'Epidemiology & Risk', description: 'Extends OR and RR estimates with prediction intervals for future studies.',        status: 'available' },
   { id: 'interaction-test',        name: 'Test for Interaction Between Two Effects', category: 'Epidemiology & Risk', description: 'Tests whether two subgroup effect estimates (RR, OR, HR, or a mean difference) differ significantly from each other.', status: 'available' },
 
-  // ── 11. DIAGNOSTIC TESTING ────────────────────────────────────────────
+  // ── 11. CONVERSIONS & BACK-CALCULATIONS ───────────────────────────────
+  // Grouped by "you have X, need Y" rather than by statistical domain —
+  // deriving a stat a paper didn't report from ones it did.
+  { id: 'revman-sd',            name: 'RevMan — Finding SD',             category: 'Conversions & Back-Calculations', description: 'Derives standard deviations from confidence intervals or standard errors for meta-analysis.',  status: 'available' },
+  { id: 'se-lnrr-lnor',         name: 'SE of ln(RR) & ln(OR) — 2×2 Table', category: 'Conversions & Back-Calculations', description: 'Computes the standard error of a difference in proportions, ln(RR), and ln(OR) from a 2×2 table of exposure and outcome counts.', status: 'available' },
+  { id: 'or-to-rr',             name: 'Odds Ratio to Risk Ratio',        category: 'Conversions & Back-Calculations', description: 'Converts an odds ratio to a risk ratio using the control event rate.',                         status: 'available' },
+  { id: 'or-to-nnt-nnh',        name: 'OR to NNTB & NNTH',               category: 'Conversions & Back-Calculations', description: 'Converts an odds ratio and control event rate to the number needed to treat for an additional beneficial outcome (NNTB) or harmful outcome (NNTH) via absolute risk difference. Formerly known as NNT and NNH.',    status: 'available' },
+  { id: 'ratio-ci-to-pvalue',   name: 'p-Value from a Ratio and Its CI', category: 'Conversions & Back-Calculations', description: 'Back-calculates the two-tailed p-value for a risk ratio, odds ratio, or hazard ratio from its published point estimate and confidence interval.', status: 'available' },
+  { id: 'ratio-pvalue-to-ci',   name: 'CI from a Ratio and Its p-Value', category: 'Conversions & Back-Calculations', description: 'Back-calculates a confidence interval for a risk ratio, odds ratio, or hazard ratio from its published point estimate and exact p-value.', status: 'available' },
+  { id: 'probability-odds-convert', name: 'Probability ↔ Odds',         category: 'Conversions & Back-Calculations', description: "Converts a single probability (risk) to its equivalent odds, or an odds value back to probability.", status: 'available' },
+  { id: 'smd-r-convert',        name: "SMD (Cohen's d) ↔ Correlation r", category: 'Conversions & Back-Calculations', description: "Converts a standardized mean difference to the equivalent point-biserial correlation r, and back, for combining studies that report different effect measures in one meta-analysis.", status: 'available' },
+
+  // ── 12. DIAGNOSTIC TESTING ────────────────────────────────────────────
   { id: 'sensitivity-specificity', name: 'Sensitivity, Specificity & LR', category: 'Diagnostic Testing',        description: 'Calculates sensitivity, specificity, and positive/negative likelihood ratios from a 2×2 table.', status: 'available'  },
   { id: 'diagnostic-accuracy',     name: 'Diagnostic Test Accuracy (2×2)', category: 'Diagnostic Testing',       description: 'Full diagnostic accuracy calculator: Se, Sp, PPV, NPV, LR+, LR−, and accuracy.',              status: 'available' },
   { id: 'post-test-probability',   name: 'Post-Test Probability',         category: 'Diagnostic Testing',         description: 'Updates pre-test probability to post-test probability using likelihood ratios.',               status: 'available' },
@@ -19132,7 +19448,7 @@ const CALCULATOR_INDEX = [
   { id: 'serial-parallel-testing', name: 'Serial & Parallel Testing',    category: 'Diagnostic Testing',          description: 'Models the combined performance of tests run in series or parallel.',                         status: 'available' },
   { id: 'ppv-npv-vs-prevalence',   name: 'PPV/NPV vs Prevalence',        category: 'Diagnostic Testing',          description: 'Shows how positive and negative predictive value change with disease prevalence, for a test with fixed sensitivity and specificity.', status: 'available' },
 
-  // ── 12. BAYESIAN & META-ANALYSIS ─────────────────────────────────────
+  // ── 13. BAYESIAN & META-ANALYSIS ─────────────────────────────────────
   { id: 'bayes-theorem',           name: "Bayes' Theorem",               category: 'Bayesian & Meta-Analysis',    description: 'Computes posterior probability from prior, likelihood, and marginal probability.',               status: 'available' },
   { id: 'bayesian-cri',            name: 'Bayesian Credible Intervals',  category: 'Bayesian & Meta-Analysis',    description: 'Derives Beta-posterior credible intervals for a proportion given prior and observed data.',      status: 'available' },
   { id: 'bayes-factor',            name: 'Bayes Factor',                 category: 'Bayesian & Meta-Analysis',    description: 'Quantifies the relative evidence for H₁ vs H₀ on a continuous scale.',                         status: 'available' },
@@ -19143,16 +19459,16 @@ const CALCULATOR_INDEX = [
   { id: 'network-meta-analysis',   name: 'Network Meta-Analysis (Indirect & Mixed Comparisons)', category: 'Bayesian & Meta-Analysis', description: 'Combines direct and indirect evidence across three or more named treatments into one connected network, producing a network diagram, a full league table, heterogeneity statistics, and a frequentist treatment ranking.', status: 'available' },
   { id: 'meta-analysis-correlations', name: 'Meta-Analysis for Correlations', category: 'Bayesian & Meta-Analysis', description: 'Pools correlation coefficients across studies using the Fisher z transformation, tests heterogeneity, and computes a prediction interval for the true correlation.', status: 'available' },
 
-  // ── 13. SURVIVAL ANALYSIS ─────────────────────────────────────────────
+  // ── 14. SURVIVAL ANALYSIS ─────────────────────────────────────────────
   { id: 'kaplan-meier',            name: 'Kaplan-Meier Survival Curve',  category: 'Survival Analysis',           description: 'Estimates the probability of surviving past each time point from time-to-event data with censoring, plotting a step curve and reporting median survival time.', status: 'available' },
   { id: 'log-rank-test',           name: 'Log-Rank Test',                category: 'Survival Analysis',           description: 'Compares survival distributions between two groups using the log-rank test, from time-to-event data with censoring.', status: 'available' },
   { id: 'cox-ph',                  name: 'Cox Proportional Hazards (Hazard Ratio)', category: 'Survival Analysis', description: 'Estimates the hazard ratio between two groups from time-to-event data with censoring, via a univariate Cox regression.', status: 'available' },
 
-  // ── 14. GENETICS & GENOMICS ───────────────────────────────────────────
+  // ── 15. GENETICS & GENOMICS ───────────────────────────────────────────
   { id: 'hardy-weinberg-equilibrium', name: 'Hardy-Weinberg Equilibrium Test', category: 'Genetics & Genomics', description: 'Tests whether observed genotype counts for a biallelic marker match Hardy-Weinberg equilibrium expectations, and reports allele frequencies and the inbreeding coefficient.', status: 'available' },
   { id: 'mendelian-randomization',    name: 'Mendelian Randomization (IVW & MR-Egger)', category: 'Genetics & Genomics', description: "Estimates a modifiable exposure's causal effect on an outcome from genetic instruments (SNPs), using inverse-variance-weighted (IVW) pooling and MR-Egger regression, with instrument-strength (F-statistic) and directional-pleiotropy (Egger intercept) checks.", status: 'available' },
 
-  // ── 15. PATIENT-REPORTED OUTCOMES ─────────────────────────────────────
+  // ── 16. PATIENT-REPORTED OUTCOMES ─────────────────────────────────────
   { id: 'mid-calculator', name: 'Minimal Important Difference (MID)', category: 'Patient-Reported Outcomes', description: "Estimates a minimal important difference (MID) for a patient-reported outcome measure using distribution-based methods (standard error of measurement, half a standard deviation, Cohen's d thresholds), alongside an optional anchor-based estimate for comparison.", status: 'available' },
 
 ];
@@ -20376,6 +20692,12 @@ const SEARCH_KEYWORDS = {
   'assoc-pred-intervals':    ['prediction interval for odds ratio', 'pool multiple studies or rr'],
   'interaction-test':        ['interaction test', 'subgroup analysis', 'effect modification', 'compare two subgroups', 'test for interaction', 'table 2 fallacy'],
 
+  // Conversions & Back-Calculations
+  'ratio-ci-to-pvalue':      ['p-value from confidence interval', 'derive p-value from ci', 'back-calculate p-value', 'ci to p-value', 'altman bland p-value', 'hazard ratio p-value from ci', 'odds ratio p-value from ci', 'risk ratio p-value from ci'],
+  'ratio-pvalue-to-ci':      ['confidence interval from p-value', 'derive ci from p-value', 'back-calculate confidence interval', 'p-value to ci', 'reconstruct confidence interval', 'meta-analysis missing ci'],
+  'probability-odds-convert': ['convert probability to odds', 'convert odds to probability', 'risk to odds', 'odds to risk', 'probability odds converter'],
+  'smd-r-convert':           ['convert cohens d to correlation', 'convert d to r', 'convert r to d', 'standardized mean difference to correlation', "hedges g to r", 'point-biserial correlation', 'meta-analysis mixed effect measures'],
+
   // Diagnostic Testing
   'sensitivity-specificity': ['sensitivity', 'specificity', 'likelihood ratios', 'diagnostic test properties', 'diagnostic accuracy study'],
   'diagnostic-accuracy':     ['diagnostic accuracy', 'ppv', 'npv', 'positive predictive value', 'negative predictive value', 'diagnostic accuracy study'],
@@ -21387,6 +21709,30 @@ const NOTATION = {
     { symbol: 'CER', meaning: "Control event rate — the outcome's baseline probability in the unexposed/untreated group." },
     { symbol: 'RR', meaning: 'Risk ratio implied by the odds ratio once the baseline rate is taken into account.' },
     { symbol: 'EER', meaning: 'Experimental event rate — the event rate implied for the exposed/treated group (CER × RR).' },
+  ],
+  'ratio-ci-to-pvalue': [
+    { symbol: '\\text{estimate}', meaning: 'The reported RR, OR, or HR point estimate.' },
+    { symbol: 'CI_{upper} / CI_{lower}', meaning: "The reported confidence interval's bounds, on the ratio scale." },
+    { symbol: 'z_{CI}', meaning: "The critical value matching the CI's own confidence level (e.g. 1.96 for 95%)." },
+    { symbol: 'SE', meaning: 'The implied standard error of ln(estimate), back-calculated from the width of the CI on the log scale.' },
+    { symbol: 'z', meaning: 'The resulting test statistic, ln(estimate) divided by its implied SE.' },
+  ],
+  'ratio-pvalue-to-ci': [
+    { symbol: '\\text{estimate}', meaning: 'The reported RR, OR, or HR point estimate.' },
+    { symbol: 'p', meaning: 'The reported two-tailed p-value for that estimate.' },
+    { symbol: 'z', meaning: 'The test statistic implied by the p-value, Φ⁻¹(1 − p/2).' },
+    { symbol: 'SE', meaning: 'The implied standard error of ln(estimate), back-calculated from z.' },
+    { symbol: 'z_{out}', meaning: 'The critical value for the confidence level you want the reconstructed CI built at.' },
+  ],
+  'probability-odds-convert': [
+    { symbol: 'p', meaning: 'Probability (risk) — the chance of the event, on a 0-to-1 scale.' },
+    { symbol: '\\text{Odds}', meaning: 'The same chance re-expressed as p/(1−p), on a 0-to-infinity scale.' },
+  ],
+  'smd-r-convert': [
+    { symbol: 'n_1, n_2', meaning: 'The two groups’ sample sizes.' },
+    { symbol: 'a', meaning: 'A sample-size correction factor, (n₁+n₂)²/(n₁n₂) — equal to 4 when the groups are the same size.' },
+    { symbol: 'd', meaning: "Cohen's d / Hedges' g, the standardized mean difference between the two groups." },
+    { symbol: 'r', meaning: 'The equivalent point-biserial correlation between group membership and the outcome.' },
   ],
   'attributable-fraction': [
     { symbol: 'RR', meaning: 'Relative risk of the disease comparing exposed to unexposed individuals.' },
@@ -25386,7 +25732,7 @@ const GUIDES = [
         heading: 'Probability vs. Odds',
         html: `<div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody>
           <tr><td><span id="gloss-probability"></span>Probability</td><td style="text-align:left;">The chance that an event occurs, expressed on a 0-to-1 (or 0%-to-100%) scale — the long-run proportion of times the event would occur if the same situation were repeated indefinitely. Absolute risk, sensitivity, specificity, and a p-value are all probabilities in this sense, even though none of them is labeled "probability" by name.</td><td style="text-align:left;"><a href="#binomial-probability">Binomial Probability Calculator</a></td></tr>
-          <tr><td><span id="gloss-odds"></span>Odds</td><td style="text-align:left;">A transformation of probability onto a 0-to-infinity scale: probability divided by (1 minus that probability). A 50% probability is 1-to-1 odds (odds of 1); a 10% probability is odds of 0.11; a 90% probability is odds of 9. Odds and probability agree closely only when the probability is small — the same "rare outcome" condition under which an odds ratio closely approximates a relative risk — and diverge as probability climbs toward 100%, where odds grows without bound while probability cannot exceed 1. Odds, not probability, is the quantity a likelihood ratio multiplies (pretest odds &times; LR = posttest odds) and the quantity an odds ratio compares between two groups.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#diagnostic-accuracy">Diagnostic Test Accuracy (2&times;2)</a>; <a href="#learn/reading-fagan-nomogram">How to Read a Fagan Nomogram (Learn guide)</a></td></tr>
+          <tr><td><span id="gloss-odds"></span>Odds</td><td style="text-align:left;">A transformation of probability onto a 0-to-infinity scale: probability divided by (1 minus that probability). A 50% probability is 1-to-1 odds (odds of 1); a 10% probability is odds of 0.11; a 90% probability is odds of 9. Odds and probability agree closely only when the probability is small — the same "rare outcome" condition under which an odds ratio closely approximates a relative risk — and diverge as probability climbs toward 100%, where odds grows without bound while probability cannot exceed 1. Odds, not probability, is the quantity a likelihood ratio multiplies (pretest odds &times; LR = posttest odds) and the quantity an odds ratio compares between two groups.</td><td style="text-align:left;"><a href="#probability-odds-convert">Probability &harr; Odds</a>; <a href="#measures-of-association">Measures of Association</a>; <a href="#diagnostic-accuracy">Diagnostic Test Accuracy (2&times;2)</a>; <a href="#learn/reading-fagan-nomogram">How to Read a Fagan Nomogram (Learn guide)</a></td></tr>
         </tbody></table></div>`,
       },
       {

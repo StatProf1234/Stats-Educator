@@ -535,6 +535,7 @@ function hubToggleHtml(active) {
 const HOME_CATEGORY_ORDER = [
   'Descriptive Statistics',
   'Epidemiology & Risk',
+  'Conversions & Back-Calculations',
   'T-Tests & Z-Tests',
   'Chi-Square & Categorical',
   'Effect Sizes & Agreement',
