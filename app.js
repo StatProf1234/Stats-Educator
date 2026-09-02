@@ -88,6 +88,23 @@ document.addEventListener('DOMContentLoaded', () => {
     pendingCategoryScroll = cat;
   });
 
+  // Ctrl+Alt+P — print the current view with every accordion section
+  // (guide sections, "Medical Example" blocks) forced open first, so
+  // the printout isn't missing whatever happened to be collapsed.
+  // Ctrl+Alt+D — download the entire current view (same open-everything
+  // treatment) as a standalone .html file. Both keystroke-only for now,
+  // no on-page buttons.
+  document.addEventListener('keydown', e => {
+    if (!e.ctrlKey || !e.altKey) return;
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      printCurrentView();
+    } else if (e.key === 'd' || e.key === 'D') {
+      e.preventDefault();
+      downloadCurrentView();
+    }
+  });
+
   // Chart export (PNG/JPG) — a single delegated listener attached
   // once here, rather than one per button, since showResults()
   // rebuilds the results DOM (and every button in it) from scratch
@@ -2529,6 +2546,149 @@ function slugify(s) {
    since the <img> loads the SVG in its own document context — text
    will just fall back to a generic monospace font in that case, not
    fail to export. */
+// Ctrl+Alt+P handler — opens every collapsed <details> in the current
+// view (both .guide-accordion-item sections and .example-block
+// "Medical Example" blocks use the same native element) before
+// printing, since a browser's print view otherwise only shows
+// whatever happens to already be expanded on screen. Left open
+// afterward rather than restored, since the user likely wants to
+// keep browsing what they just printed.
+function printCurrentView() {
+  document.querySelectorAll('#view details:not([open])').forEach(d => { d.open = true; });
+  window.print();
+}
+
+// Copies each live form control's current value into the matching
+// (by id) element in a cloned subtree. Needed because cloneNode only
+// copies HTML attributes, not the live DOM properties a browser tracks
+// separately once a user types/selects — without this, a downloaded
+// snapshot would show every input back at its original default instead
+// of what's actually on screen.
+function syncFormValuesIntoClone(liveRoot, cloneRoot) {
+  liveRoot.querySelectorAll('input, textarea, select').forEach(orig => {
+    if (!orig.id) return;
+    const clone = cloneRoot.querySelector(`#${CSS.escape(orig.id)}`);
+    if (!clone) return;
+    if (orig.tagName === 'SELECT') {
+      Array.from(clone.options).forEach((opt, i) => {
+        if (orig.options[i]?.selected) opt.setAttribute('selected', 'selected');
+        else opt.removeAttribute('selected');
+      });
+    } else if (orig.tagName === 'TEXTAREA') {
+      clone.textContent = orig.value;
+    } else if (orig.type === 'checkbox' || orig.type === 'radio') {
+      if (orig.checked) clone.setAttribute('checked', 'checked');
+      else clone.removeAttribute('checked');
+    } else {
+      clone.setAttribute('value', orig.value);
+    }
+  });
+}
+
+// Ctrl+Alt+D handler — saves the entire current view (whichever
+// calculator or guide page is open, every accordion expanded, inputs
+// showing their current values) as one standalone .html file.
+// Deliberately does NOT try to bring over the site's real stylesheet:
+// fetch() of local files is blocked under file:// (the common way to
+// run this no-build-step project), reading it back via
+// document.styleSheets[].cssRules is *also* blocked there (a
+// SecurityError, even though the browser renders the same stylesheet
+// fine), and linking to it by absolute path only stays styled as long
+// as this site's files never move. All three are fragile in ways that
+// fail silently. Instead this ships a small hand-written stylesheet
+// inline — plainer than the live site, but self-contained: it always
+// renders the same regardless of where the file is opened from or
+// whether this site still exists at its current location.
+// Lazily loads vendor/katex/katex-embedded.js (see
+// scripts/build-katex-embed.js) — a self-contained copy of KaTeX's CSS
+// with its fonts inlined as base64 data URIs — and resolves with its
+// CSS text. A <script src> tag, unlike fetch()/cssRules, isn't blocked
+// under file://, which is what makes this work at all; not loaded
+// eagerly on every page view since it's ~350KB and only needed for
+// Ctrl+Alt+D. Cached on window.KATEX_EMBEDDED_CSS after the first call.
+// Resolves with '' (degrading to plain-text formulas) if it fails to
+// load, rather than blocking the download entirely.
+function loadKatexEmbeddedCss() {
+  if (window.KATEX_EMBEDDED_CSS) return Promise.resolve(window.KATEX_EMBEDDED_CSS);
+  return new Promise(resolve => {
+    const script = document.createElement('script');
+    script.src = new URL('vendor/katex/katex-embedded.js', location.href).href;
+    script.onload = () => resolve(window.KATEX_EMBEDDED_CSS || '');
+    script.onerror = () => resolve('');
+    document.head.appendChild(script);
+  });
+}
+
+async function downloadCurrentView() {
+  const viewEl = document.getElementById('view');
+  if (!viewEl || !viewEl.firstElementChild) return;
+
+  const clone = viewEl.cloneNode(true);
+  clone.id = 'view';
+  clone.querySelectorAll('details').forEach(d => d.setAttribute('open', ''));
+  syncFormValuesIntoClone(viewEl, clone);
+  clone.querySelectorAll('.calc-actions, .export-chart-btn').forEach(el => el.remove());
+
+  const heading = (clone.querySelector('h1')?.textContent || document.title || 'The Biostat Toolkit').trim();
+  const slug = heading.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'page';
+
+  const katexCss = await loadKatexEmbeddedCss();
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${esc(heading)}</title>
+<style>
+${katexCss}
+body { font-family: system-ui, sans-serif; color: #1A1A2E; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+h1, h2, h3 { font-weight: 700; margin: 24px 0 10px; }
+h1 { font-size: 24px; }
+p { color: #333; margin-bottom: 12px; max-width: 680px; }
+a { color: #2952CC; }
+table { border-collapse: collapse; margin: 12px 0; }
+th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+hr { border: none; border-top: 1px solid #ccc; margin: 32px 0; }
+summary { font-weight: 600; cursor: default; margin: 14px 0 4px; }
+details { margin-bottom: 6px; }
+.inputs-grid, .input-field { display: block; }
+.input-field { margin-bottom: 8px; }
+.input-label { font-weight: 500; font-size: 13px; color: #555; display: block; }
+.results-header, .result-row { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid #ddd; padding: 8px 0; }
+.results-header-cell, .result-label { font-weight: 600; }
+.result-value, .result-ci { text-align: right; white-space: nowrap; }
+.input-el { border: 1px solid #bbb; border-radius: 4px; padding: 5px 8px; font-size: 14px; }
+.table-instruction { font-size: 13px; color: #555; margin-bottom: 12px; }
+.design-callout { border: 1px solid #bbb; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; background: #f7f8fa; }
+.design-callout-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #777; margin-bottom: 4px; }
+.table-2x2 { display: grid; grid-template-columns: 90px 1fr 1fr 64px; gap: 7px; min-width: 360px; margin-bottom: 16px; }
+.t2-corner, .t2-col-head, .t2-row-head, .t2-total-head, .t2-total { display: flex; align-items: center; justify-content: center; padding: 7px; font-size: 12px; font-weight: 600; text-align: center; }
+.t2-col-head, .t2-row-head { background: #f0f2f6; border: 1px solid #ccc; border-radius: 6px; }
+.t2-row-head { justify-content: flex-end; padding-right: 10px; }
+.t2-total { background: #f7f8fa; border: 1px dashed #ccc; }
+.t2-cell { position: relative; }
+.t2-cell-label { position: absolute; top: 6px; left: 10px; font-size: 10px; font-weight: 600; color: #2952CC; }
+.t2-cell .input-el { padding-top: 20px; padding-bottom: 7px; width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+${clone.outerHTML}
+<hr>
+<p style="font-size:12px;color:#777;">Saved from The Biostat Toolkit — ${esc(location.origin + location.pathname + location.hash)}</p>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${slug}.html`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function exportSVGAsImage(svgEl, filename, format) {
   const RESOLUTION_SCALE = 3;
   const viewBox = svgEl.getAttribute('viewBox');

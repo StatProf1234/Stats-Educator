@@ -2841,6 +2841,26 @@ body {
   .result-row.has-ci .result-ci { display: none; }
 }
 
+/* ── PRINT ─────────────────────────────────────────── */
+/* #app/#sidebar/#main are all fixed to 100vh with overflow-y: auto for
+   on-screen scrolling (see #app/#sidebar/#main above) — left as-is,
+   printing would only capture whatever slice of #main happened to be
+   scrolled into view, clipped exactly like on screen, alongside the
+   sidebar. Reset everything to normal document flow so the full
+   content prints across as many pages as it needs, sidebar-free.
+   Triggered by Ctrl+Alt+P (see printCurrentView() in app.js), but
+   applies to the browser's own File > Print too. */
+
+@media print {
+  #sidebar { display: none; }
+  #app { display: block; height: auto; }
+  #main { overflow: visible; height: auto; }
+  #view { overflow: visible; height: auto; padding: 0; }
+
+  /* Interactive-only controls that mean nothing on paper. */
+  .calc-actions, .export-chart-btn, .sidebar-toggle { display: none; }
+}
+
 /* ── UTILITY ───────────────────────────────────────── */
 
 [hidden] { display: none !important; }
