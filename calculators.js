@@ -3609,6 +3609,96 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 27c. SAMPLE SIZE — SENSITIVITY & SPECIFICITY ──────────────────────
+     Precision-based sample size for a diagnostic accuracy study
+     (Buderer, 1996): how many diseased and non-diseased subjects are
+     needed to estimate sensitivity and specificity within a target
+     margin of error, then — via the expected disease prevalence — the
+     total sample size a consecutively-recruited study needs to enroll
+     enough of both.                                                     */
+  {
+    id:          'sample-size-sens-spec',
+    name:        'Sample Size — Sensitivity & Specificity',
+    hint:        'n = z²·Se(1−Se)/L² (diseased); z²·Sp(1−Sp)/L² (non-diseased)',
+    category:    'Power & Sample Size',
+    description: "Determines how many diseased and non-diseased subjects are needed to estimate a diagnostic test's sensitivity and specificity within a target precision, and the total sample size implied by disease prevalence.",
+
+    formulas: [
+      {
+        label: 'Diseased Subjects Needed (for Sensitivity precision)',
+        latex: 'n_D = \\dfrac{z^{2}\\,Se(1-Se)}{L_{Se}^{2}}'
+      },
+      {
+        label: 'Non-Diseased Subjects Needed (for Specificity precision)',
+        latex: 'n_H = \\dfrac{z^{2}\\,Sp(1-Sp)}{L_{Sp}^{2}}'
+      },
+      {
+        label: 'Total Sample Size Implied by Prevalence',
+        latex: 'N = \\max\\!\\left(\\dfrac{n_D}{\\text{prevalence}},\\ \\dfrac{n_H}{1-\\text{prevalence}}\\right)'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'confidence',  label: 'Confidence Level (e.g. 0.95 for 95%)',               default: 0.95 },
+      { id: 'expectedSe',  label: 'Expected Sensitivity (Se, 0–1)',                     default: 0.85 },
+      { id: 'expectedSp',  label: 'Expected Specificity (Sp, 0–1)',                     default: 0.90 },
+      { id: 'precisionSe', label: 'Desired Precision for Se (L_Se, e.g. 0.05 for ±5%)', default: 0.05 },
+      { id: 'precisionSp', label: 'Desired Precision for Sp (L_Sp, e.g. 0.05 for ±5%)', default: 0.05 },
+      { id: 'prevalence',  label: 'Expected Disease Prevalence (0–1)',                  default: 0.30 },
+    ],
+
+    example({ confidence, expectedSe, expectedSp, precisionSe, precisionSp, prevalence }) {
+      if (!isFinite(confidence) || confidence <= 0 || confidence >= 1 ||
+          !isFinite(expectedSe) || expectedSe <= 0 || expectedSe >= 1 ||
+          !isFinite(expectedSp) || expectedSp <= 0 || expectedSp >= 1 ||
+          !isFinite(precisionSe) || precisionSe <= 0 || precisionSe >= 1 ||
+          !isFinite(precisionSp) || precisionSp <= 0 || precisionSp >= 1 ||
+          !isFinite(prevalence) || prevalence <= 0 || prevalence >= 1 ||
+          typeof jStat === 'undefined' || !jStat.normal)
+        return 'Enter a confidence level, expected sensitivity/specificity, desired precision for each, and the expected disease prevalence to see a worked example here.';
+
+      const z   = jStat.normal.inv(1 - (1 - confidence) / 2, 0, 1);
+      const nD  = Math.ceil((z ** 2 * expectedSe * (1 - expectedSe)) / precisionSe ** 2);
+      const nH  = Math.ceil((z ** 2 * expectedSp * (1 - expectedSp)) / precisionSp ** 2);
+      const N   = Math.ceil(Math.max(nD / prevalence, nH / (1 - prevalence)));
+      const pct = v => (v * 100).toFixed(v * 100 % 1 === 0 ? 0 : 1);
+
+      return `You're validating a new rapid test against a reference standard, expecting sensitivity ≈ ${pct(expectedSe)}% and specificity ≈ ${pct(expectedSp)}%, and want each estimated within ±${pct(precisionSe)} / ±${pct(precisionSp)} percentage points at ${pct(confidence)}% confidence. That takes at least ${nD} diseased and ${nH} non-diseased subjects — and with disease prevalence around ${pct(prevalence)}% in the population you're recruiting from, a consecutively-enrolled sample needs N = ${N} total patients to reliably end up with enough of both.`;
+    },
+
+    calculate({ confidence, expectedSe, expectedSp, precisionSe, precisionSp, prevalence }) {
+      if (!isFinite(confidence) || confidence <= 0 || confidence >= 1)    return [err('Confidence Level must be between 0 and 1 (exclusive)')];
+      if (!isFinite(expectedSe) || expectedSe <= 0 || expectedSe >= 1)    return [err('Expected Sensitivity must be between 0 and 1 (exclusive)')];
+      if (!isFinite(expectedSp) || expectedSp <= 0 || expectedSp >= 1)    return [err('Expected Specificity must be between 0 and 1 (exclusive)')];
+      if (!isFinite(precisionSe) || precisionSe <= 0 || precisionSe >= 1) return [err('Desired Precision for Se must be between 0 and 1 (exclusive)')];
+      if (!isFinite(precisionSp) || precisionSp <= 0 || precisionSp >= 1) return [err('Desired Precision for Sp must be between 0 and 1 (exclusive)')];
+      if (!isFinite(prevalence) || prevalence <= 0 || prevalence >= 1)    return [err('Expected Disease Prevalence must be between 0 and 1 (exclusive)')];
+      if (typeof jStat === 'undefined' || !jStat.normal)
+        return [err('The statistics library failed to load — please refresh the page and try again.')];
+
+      const z  = jStat.normal.inv(1 - (1 - confidence) / 2, 0, 1);
+      const nD = Math.ceil((z ** 2 * expectedSe * (1 - expectedSe)) / precisionSe ** 2);
+      const nH = Math.ceil((z ** 2 * expectedSp * (1 - expectedSp)) / precisionSp ** 2);
+      const N_fromSe = Math.ceil(nD / prevalence);
+      const N_fromSp = Math.ceil(nH / (1 - prevalence));
+      const N  = Math.max(N_fromSe, N_fromSp);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      return [
+        { label: 'Critical Value (z)', value: f(z), ci: null, isRatio: false },
+        { label: 'Diseased Subjects Needed (n_D, for Se precision)', value: nD, ci: null, isRatio: false },
+        { label: 'Non-Diseased Subjects Needed (n_H, for Sp precision)', value: nH, ci: null, isRatio: false },
+        { label: 'Total Sample Size Implied by Se Requirement', value: N_fromSe, ci: null, isRatio: false },
+        { label: 'Total Sample Size Implied by Sp Requirement', value: N_fromSp, ci: null, isRatio: false },
+        { label: 'Required Total Sample Size (N)', value: N, ci: null, isRatio: false, highlight: true },
+        { label: 'Note', isText: true, ci: null, isRatio: false,
+          value: `If you're recruiting a case-control-style study with fixed, separately-chosen numbers of diseased and non-diseased subjects, you only need n_D = ${nD} diseased and n_H = ${nH} non-diseased subjects — disease prevalence doesn't enter into it. If instead you're enrolling consecutively from a population at the prevalence entered above (a cohort or cross-sectional design), you need N = ${N} total patients: whichever subgroup (diseased or non-diseased) is rarer at that prevalence is what drives this number up, since the other subgroup will then comfortably clear its own requirement.` }
+      ];
+    }
+  },
+
   /* ── 28. 1-WAY ANOVA ────────────────────────────────────────────────────
      F-test for differences among 3–6 independent group means, from
      each group's mean, SD, and n. Groups 4–6 are optional.             */
@@ -19410,6 +19500,7 @@ const CALCULATOR_INDEX = [
   { id: 'sample-size-survival', name: 'Sample Size — Survival Analysis (Log-Rank / Cox PH)', category: 'Power & Sample Size', description: "Determines the number of events — and, given an expected event probability, the total sample size — needed to detect a specified hazard ratio with a log-rank test or Cox proportional hazards model, using Schoenfeld's formula.", status: 'available' },
   { id: 'sample-size-anova-f',  name: "Sample Size — ANOVA (Cohen's f)", category: 'Power & Sample Size', description: "Determines the per-cell sample size needed to detect a specified Cohen's f effect size for a fixed-effects ANOVA main effect or interaction, covering both one-way and factorial designs.", status: 'available' },
   { id: 'sample-size-survey',   name: 'Sample Size for a Survey',        category: 'Power & Sample Size',         description: 'Determines how many respondents are needed to estimate a population proportion within a target margin of error, with optional finite-population correction and response-rate adjustment.', status: 'available' },
+  { id: 'sample-size-sens-spec', name: 'Sample Size — Sensitivity & Specificity', category: 'Power & Sample Size', description: "Determines how many diseased and non-diseased subjects are needed to estimate a diagnostic test's sensitivity and specificity within a target precision, and the total sample size implied by disease prevalence.", status: 'available' },
   { id: 'power-ppv-fpp',        name: 'Power, Effect Size, PPV & FPP',   category: 'Power & Sample Size',         description: 'Links statistical power to positive predictive value and false positive probability.',          status: 'available' },
   { id: 'power-delta-alpha',    name: 'Power as a Function of δ & α',    category: 'Power & Sample Size',         description: 'Shows how power changes across a range of delta and alpha values simultaneously.',             status: 'available' },
   { id: 'type1-type2-errors',   name: 'Type I & Type II Error Explorer', category: 'Power & Sample Size',         description: 'An interactive decision matrix showing all four possible outcomes of a hypothesis test — two correct decisions and two errors — and how trading off α against power shifts the risk of each.', status: 'available' },
@@ -20070,9 +20161,11 @@ const WIZARD_TREE = {
       { label: "I'm not testing a hypothesis — I just want to estimate a proportion (e.g. a survey)", next: 'ssSurveyResult' },
       { label: 'Two proportions, but randomizing by cluster (clinic, school, community) rather than by individual', next: 'ssClusterResult' },
       { label: 'Time-to-event (survival) outcome — log-rank test or Cox regression', next: 'ssSurvivalResult' },
+      { label: "A diagnostic test's sensitivity and/or specificity, to a target precision", next: 'ssSensSpecResult' },
     ]
   },
   ssSurvivalResult: { results: [ { id: 'sample-size-survival', why: "Required number of events — and, given an expected event probability, the total sample size — to detect a hazard ratio via Schoenfeld's formula. Power here depends on events observed, not subjects enrolled." } ] },
+  ssSensSpecResult: { results: [ { id: 'sample-size-sens-spec', why: "How many diseased and non-diseased subjects a diagnostic accuracy study needs to estimate Se and Sp to a target precision — and, via disease prevalence, the total sample size to enroll." } ] },
   ss1meanResult: { results: [ { id: 'sample-size-1mean', why: 'Required n to detect a difference from a hypothesized mean.' } ] },
   ss2meanResult: { results: [ { id: 'sample-size-2mean', why: 'Required per-group n to detect a difference between two independent means.' } ] },
   ssAnovaResult: { results: [ { id: 'sample-size-anova-f', why: "Required per-cell n from Cohen's f, for a one-way ANOVA or for a main effect/interaction within a larger factorial design." } ] },
@@ -20490,6 +20583,7 @@ const DESIGN_WIZARD_TREE = {
       { id: 'appraisal-appraising-diagnostic-studies', why: 'Evaluating a test against a reference standard is exactly this design\'s purpose — most of its appraisal risk comes from how patients were selected and whether everyone got the same reference standard, worth planning for up front rather than fixing after the fact.' },
       { id: 'diagnostic-accuracy', why: 'Computes sensitivity, specificity, PPV, NPV, and likelihood ratios from your 2×2 table of test result vs. reference standard.' },
       { id: 'roc-auc', why: "If your test produces a continuous or ordinal result rather than a single cutoff, this finds discrimination (AUC) across every possible threshold." },
+      { id: 'sample-size-sens-spec', why: 'Plan how many diseased and non-diseased subjects to enroll before running the study, rather than computing accuracy after the fact.' },
     ]
   },
   aiStudyResult: {
@@ -20671,6 +20765,7 @@ const SEARCH_KEYWORDS = {
   'sample-size-survival': ['survival sample size', 'schoenfeld formula', 'number of events needed', 'cox regression sample size', 'log-rank sample size', 'log rank sample size', 'time-to-event sample size', 'events needed hazard ratio', 'survival power analysis', 'events required survival analysis'],
   'sample-size-anova-f': ['sample size for anova', "cohen's f sample size", 'a priori power analysis anova', 'sample size main effect', 'sample size interaction', 'sample size factorial design', 'gpower anova', 'noncentral f sample size', 'how many per group anova', 'ncp', 'non-centrality parameter', 'noncentrality parameter'],
   'sample-size-survey': ['survey sample size', 'how many people to survey', 'margin of error', 'estimate a proportion', 'poll sample size', 'questionnaire sample size', 'response rate'],
+  'sample-size-sens-spec': ['sample size for sensitivity and specificity', 'diagnostic accuracy study sample size', 'how many patients diagnostic test validation', 'buderer formula', 'sample size diagnostic test', 'sample size sensitivity specificity precision', 'how many diseased subjects needed', 'validation study sample size'],
   'power-ppv-fpp':      ['false positive risk', 'positive predictive value of a significant result'],
   'power-delta-alpha':  ['power table by effect size and alpha'],
   'type1-type2-errors': ['type i error', 'type ii error', 'false positive', 'false negative', 'decision matrix', 'alpha beta tradeoff', 'confusion matrix hypothesis test'],
@@ -21623,6 +21718,16 @@ const NOTATION = {
     { symbol: 'n_0', meaning: 'Base required sample size before any adjustments.' },
     { symbol: 'N', meaning: 'Known population size, used only for the finite population correction.' },
     { symbol: 'n_{adj}', meaning: 'Sample size after finite population correction.' },
+  ],
+  'sample-size-sens-spec': [
+    { symbol: 'z', meaning: 'Critical value from the standard normal distribution for the chosen confidence level (e.g. 1.96 for 95%).' },
+    { symbol: 'Se', meaning: 'Expected sensitivity of the test being validated.' },
+    { symbol: 'Sp', meaning: 'Expected specificity of the test being validated.' },
+    { symbol: 'L_{Se}', meaning: 'Desired precision (half-width of the confidence interval) for the sensitivity estimate.' },
+    { symbol: 'L_{Sp}', meaning: 'Desired precision (half-width of the confidence interval) for the specificity estimate.' },
+    { symbol: 'n_D', meaning: 'Number of diseased (reference-standard-positive) subjects needed to estimate sensitivity within L_Se.' },
+    { symbol: 'n_H', meaning: 'Number of non-diseased (reference-standard-negative) subjects needed to estimate specificity within L_Sp.' },
+    { symbol: 'N', meaning: 'Total sample size a consecutively-recruited study needs, given the expected disease prevalence, so that both the diseased and non-diseased subgroups are large enough.' },
   ],
   'power-ppv-fpp': [
     { symbol: 'R', meaning: 'Pre-Study Odds — the ratio of the probability an effect is real to the probability it is not.' },
@@ -25167,6 +25272,7 @@ const GUIDES = [
       { id: 'appraisal-diagnostic-tests-prevalence', why: 'Covers how prevalence affects predictive value once accuracy figures like sensitivity and specificity are established — this guide covers whether those figures are trustworthy in the first place.' },
       { id: 'appraisal-study-design', why: 'Places diagnostic accuracy studies within the broader design landscape.' },
       { id: 'appraisal-appraising-ai-studies', why: 'The AI/ML-specific version of this same appraisal, adding data-leakage and external-validation concerns a conventional diagnostic study doesn\'t have to worry about.' },
+      { id: 'sample-size-sens-spec', why: 'The planning-stage counterpart to this appraisal checklist: how many diseased and non-diseased subjects a diagnostic accuracy study needs to enroll before it starts.' },
     ],
   },
 
