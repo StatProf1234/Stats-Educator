@@ -3640,11 +3640,11 @@ const CALCULATORS = [
 
     inputLayout: 'grid',
     inputs: [
-      { id: 'confidence',  label: 'Confidence Level (e.g. 0.95 for 95%)',               default: 0.95 },
       { id: 'expectedSe',  label: 'Expected Sensitivity (Se, 0–1)',                     default: 0.85 },
       { id: 'expectedSp',  label: 'Expected Specificity (Sp, 0–1)',                     default: 0.90 },
-      { id: 'precisionSe', label: 'Desired Precision for Se (L_Se, e.g. 0.05 for ±5%)', default: 0.05 },
-      { id: 'precisionSp', label: 'Desired Precision for Sp (L_Sp, e.g. 0.05 for ±5%)', default: 0.05 },
+      { id: 'precisionSe', label: 'Desired Precision / Margin of Error for Se (L_Se, e.g. 0.05 for ±5%)', default: 0.05 },
+      { id: 'precisionSp', label: 'Desired Precision / Margin of Error for Sp (L_Sp, e.g. 0.05 for ±5%)', default: 0.05 },
+      { id: 'confidence',  label: 'Confidence Level (e.g. 0.95 for 95%)',               default: 0.95 },
       { id: 'prevalence',  label: 'Expected Disease Prevalence (0–1)',                  default: 0.30 },
     ],
 
