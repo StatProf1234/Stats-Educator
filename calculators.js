@@ -12240,6 +12240,119 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 114. MEASURES OF CENTRAL TENDENCY ────────────────────────────────
+     Arithmetic mean, median, and mode alongside the geometric and
+     harmonic means — both undefined here unless every value is
+     strictly positive, matching the standard convention (they involve
+     ln x and 1/x respectively). Geometric mean in particular is the
+     textbook-correct summary for ratio/log-scale data (titers,
+     dilutions, fold-changes) where the arithmetic mean is skewed by
+     the top end of the scale.                                         */
+  {
+    id:          'central-tendency',
+    name:        'Measures of Central Tendency',
+    hint:        'x̄ · GM · HM · median · mode',
+    category:    'Descriptive Statistics',
+    description: 'Computes the arithmetic, geometric, and harmonic means alongside the median and mode from raw data — useful for judging which "average" best represents a skewed or ratio/log-scale dataset (titers, dilutions, growth rates).',
+
+    formulas: [
+      {
+        label: 'Arithmetic Mean',
+        latex: '\\bar{x} = \\dfrac{1}{n}\\sum_{i=1}^n x_i'
+      },
+      {
+        label: 'Geometric Mean (requires all x_i > 0)',
+        latex: 'GM = \\left(\\prod_{i=1}^n x_i\\right)^{1/n} = \\exp\\!\\left(\\dfrac{1}{n}\\sum_{i=1}^n \\ln x_i\\right)'
+      },
+      {
+        label: 'Harmonic Mean (requires all x_i > 0)',
+        latex: 'HM = \\dfrac{n}{\\sum_{i=1}^n \\left(1/x_i\\right)}'
+      },
+      {
+        label: 'Median',
+        latex: '\\text{Median} = x_{\\left(\\frac{n+1}{2}\\right)} \\;\\text{or}\\; \\tfrac{1}{2}\\!\\left(x_{(n/2)} + x_{(n/2+1)}\\right)'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'data', type: 'textarea', label: 'Data (comma-separated)', default: '10,20,20,40,80,160,320' },
+    ],
+
+    example({ data }) {
+      const x = parseNumberList(data);
+      if (x.some(v => !isFinite(v)) || x.length < 2)
+        return 'Enter at least 2 numeric values to see a worked medical example here.';
+      const n = x.length;
+      const sorted = [...x].sort((a, b) => a - b);
+      const mean = x.reduce((s, v) => s + v, 0) / n;
+      const median = medianOfSorted(sorted);
+      const allPositive = x.every(v => v > 0);
+      const f = v => +v.toFixed(2);
+      if (!allPositive) {
+        return `A lab reports ${n} values with mean ${f(mean)} and median ${f(median)}. Because at least one value is zero or negative, the geometric and harmonic means aren't defined here — both require every value to be strictly positive.`;
+      }
+      const gm = Math.exp(x.reduce((s, v) => s + Math.log(v), 0) / n);
+      return `A serology lab runs ${n} serum samples through a two-fold dilution series and reports the reciprocal endpoint titer for each. The arithmetic mean of ${f(mean)} is pulled upward by the highest titers on this doubling scale, while the geometric mean — the conventional summary statistic for titers — comes out to ${f(gm)}, much closer to where most samples actually cluster. The median (${f(median)}) tells a similar story to the geometric mean here, without assuming anything about the scale the data was measured on.`;
+    },
+
+    calculate({ data }) {
+      const x = parseNumberList(data);
+      if (x.some(v => !isFinite(v))) return [err('All values must be numeric')];
+      if (x.length < 2) return [err('Enter at least 2 numeric values')];
+
+      const n = x.length;
+      const sorted = [...x].sort((a, b) => a - b);
+      const mean = x.reduce((s, v) => s + v, 0) / n;
+      const median = medianOfSorted(sorted);
+
+      const freq = new Map();
+      for (const v of x) freq.set(v, (freq.get(v) || 0) + 1);
+      const maxFreq = Math.max(...freq.values());
+      const modes = maxFreq > 1
+        ? [...freq.entries()].filter(([, c]) => c === maxFreq).map(([v]) => v).sort((a, b) => a - b)
+        : [];
+
+      const allPositive = x.every(v => v > 0);
+      const geometricMean = allPositive ? Math.exp(x.reduce((s, v) => s + Math.log(v), 0) / n) : null;
+      const harmonicMean = allPositive ? n / x.reduce((s, v) => s + 1 / v, 0) : null;
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Sample Size (n)', value: n, ci: null, isRatio: false },
+        { label: 'Arithmetic Mean', value: f(mean), ci: null, isRatio: false, highlight: true },
+        { label: 'Median', value: f(median), ci: null, isRatio: false },
+        { label: 'Mode', isText: true, ci: null, isRatio: false,
+          value: modes.length === 0
+            ? 'No repeated value (all values unique)'
+            : modes.join(', ') + (modes.length > 1 ? ' (multimodal)' : '') },
+      ];
+
+      if (allPositive) {
+        rows.push({ label: 'Geometric Mean', value: f(geometricMean), ci: null, isRatio: false, highlight: true });
+        rows.push({ label: 'Harmonic Mean', value: f(harmonicMean), ci: null, isRatio: false });
+      } else {
+        rows.push({ label: 'Geometric & Harmonic Mean', isText: true, ci: null, isRatio: false,
+          value: 'Undefined here — both require every value to be strictly positive (the data includes a zero or negative value).' });
+      }
+
+      rows.push({ label: 'Central Tendency Plot', isSVG: true,
+        svg: centralTendencyPlotSVG(sorted, { mean, median, geometricMean, harmonicMean }) });
+
+      const orderNote = allPositive
+        ? (Math.abs(mean - geometricMean) < 1e-9 && Math.abs(geometricMean - harmonicMean) < 1e-9
+            ? 'All values are equal, so every measure of central tendency coincides. '
+            : `As expected for positive data, Arithmetic Mean (${f(mean, 2)}) ≥ Geometric Mean (${f(geometricMean, 2)}) ≥ Harmonic Mean (${f(harmonicMean, 2)}). `)
+        : '';
+
+      rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `${orderNote}Use the geometric mean for data measured on a ratio or log scale (antibody titers, dilutions, fold-changes, growth rates) — it resists distortion from a few very large values far better than the arithmetic mean. Use the harmonic mean for averaging rates or ratios with a varying denominator (e.g., speeds, or per-study sample sizes). Use the median when the data is skewed or has outliers, since — unlike every mean above — it isn't pulled toward extreme values. The mode is most useful for categorical or heavily repeated-value data, and is often undefined (as here, if no value repeats) for continuous measurements.` });
+
+      return rows;
+    }
+  },
+
   /* ── 91. HARTUNG-KNAPP-SIDIK-JONKMAN (HKSJ) METHOD ──────────────────────
      The standard DerSimonian-Laird random-effects CI (θ̂ ± z·SE) treats
      τ² as if it were known exactly, which understates uncertainty —
@@ -16989,6 +17102,56 @@ function boxPlotSVG(sorted, q1, median, q3, lowerFence, upperFence) {
 </svg>`;
 }
 
+// Dot/strip plot for 'central-tendency': stacks repeated values
+// vertically (the standard dot-plot convention for ties) and overlays
+// vertical marker lines for the mean, median, and — when defined —
+// the geometric and harmonic means, so the reader can see at a glance
+// how far a skewed dataset pulls the arithmetic mean away from the
+// rest of the values.
+function centralTendencyPlotSVG(sorted, { mean, median, geometricMean, harmonicMean }) {
+  const W = 560, H = 150;
+  const PL = 24, PR = 24, PT = 34;
+  const plotW = W - PL - PR;
+  const baseline = H - 28;
+
+  let lo = sorted[0], hi = sorted[sorted.length - 1];
+  const pad = (hi - lo) * 0.08 || 1;
+  lo -= pad; hi += pad;
+  const toX = v => PL + ((v - lo) / (hi - lo)) * plotW;
+
+  const stacks = new Map();
+  const dots = sorted.map(v => {
+    const k = stacks.get(v) || 0;
+    stacks.set(v, k + 1);
+    const cy = Math.max(PT + 6, baseline - 5 - k * 7);
+    return `<circle cx="${toX(v).toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="#4E6EDB" opacity=".55"/>`;
+  }).join('');
+
+  const markers = [
+    { label: 'Mean',   value: mean,   color: '#1A1A2E', dash: '' },
+    { label: 'Median', value: median, color: '#E07B2C', dash: '4,3' },
+  ];
+  if (geometricMean != null) markers.push({ label: 'GM', value: geometricMean, color: '#2E8E5A', dash: '2,3' });
+  if (harmonicMean  != null) markers.push({ label: 'HM', value: harmonicMean,  color: '#8985AE', dash: '1,3' });
+
+  const lines = markers.map(m =>
+    `<line x1="${toX(m.value).toFixed(1)}" y1="${PT}" x2="${toX(m.value).toFixed(1)}" y2="${baseline}" stroke="${m.color}" stroke-width="1.6"${m.dash ? ` stroke-dasharray="${m.dash}"` : ''}/>`
+  ).join('');
+
+  const legend = markers.map((m, i) => `
+  <circle cx="${(PL + i * 120 + 4).toFixed(1)}" cy="12" r="3" fill="${m.color}"/>
+  <text x="${(PL + i * 120 + 12).toFixed(1)}" y="15" font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#7B8099">${m.label}=${(+m.value.toFixed(2))}</text>`
+  ).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" aria-label="Dot plot of the data with the mean, median, geometric mean, and harmonic mean marked">${legend}
+  <line x1="${PL}" y1="${baseline}" x2="${W - PR}" y2="${baseline}" stroke="#CDD2E0" stroke-width="1.5"/>
+  ${lines}
+  ${dots}
+  <text x="${PL}" y="${H - 6}" text-anchor="start" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${(+lo.toFixed(2))}</text>
+  <text x="${W - PR}" y="${H - 6}" text-anchor="end" font-family="'IBM Plex Mono',monospace" font-size="8" fill="#7B8099">${(+hi.toFixed(2))}</text>
+</svg>`;
+}
+
 // Full binomial PMF via the stable multiplicative recurrence
 // P(0) = (1-p)^n,  P(i) = P(i-1) * (n-i+1)/i * p/(1-p) — avoids
 // computing C(n,k) directly, which overflows for large n.
@@ -19397,6 +19560,7 @@ const CALCULATOR_INDEX = [
   { id: 'combine-groups',       name: 'Combining Groups (Mean, SD & N)', category: 'Descriptive Statistics',  description: 'Combines 2 to 4 separately reported subgroups (e.g., age bands, sites, or sexes) into one overall mean, SD, and N, as if the raw data itself had been pooled.', status: 'available' },
   { id: 'interquartile-range',  name: 'Interquartile Range (IQR)',       category: 'Descriptive Statistics',  description: "Computes Q1, the median, Q3, and the interquartile range from raw data, flags outliers using Tukey's 1.5×IQR fences, and draws a box-and-whisker plot.", status: 'available' },
   { id: 'weighted-average',     name: 'Weighted Average / Weighted Score', category: 'Descriptive Statistics', description: 'Combines several scores into one overall score using weights you assign directly — course grades, rubric items, or composite quality indices.', status: 'available' },
+  { id: 'central-tendency',     name: 'Measures of Central Tendency',   category: 'Descriptive Statistics',  description: 'Computes the arithmetic, geometric, and harmonic means alongside the median and mode from raw data, with a dot plot showing where each falls.', status: 'available' },
 
   // ── 2. PROBABILITY & DISTRIBUTIONS ───────────────────────────────────
   { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution, with a shaded one- or two-tailed rejection region drawn on the curve itself.',    status: 'available' },
@@ -20664,6 +20828,7 @@ const SEARCH_KEYWORDS = {
   'combine-groups':        ['combine groups', 'pooled mean and sd', 'overall mean and sd', 'merge male and female', 'combining subgroups', 'grand mean and sd', 'cochrane combine groups', 'combine multiple groups', 'combine four groups', 'weighted average mean and sd'],
   'interquartile-range':   ['interquartile range', 'iqr', 'q1', 'q3', 'first quartile', 'third quartile', 'box plot', 'box and whisker plot', 'tukey fences', 'outlier detection', 'five number summary'],
   'weighted-average':      ['weighted average', 'weighted mean', 'weighted score', 'weighted grade', 'course grade calculator', 'exam weights', 'combine exam scores', 'rubric score', 'composite score'],
+  'central-tendency':      ['central tendency', 'geometric mean', 'harmonic mean', 'average', 'arithmetic mean', 'mode', 'median calculator', 'gmt', 'geometric mean titer', 'measures of central tendency', 'mean median mode'],
 
   // Probability & Distributions
   'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve', 'percentage to z score', 'percentile to z score', 'inverse normal', 'inverse cdf'],
@@ -20906,6 +21071,13 @@ const NOTATION = {
     { symbol: 'x_i', meaning: "Each component's own score (e.g., a single exam grade)." },
     { symbol: 'w_i', meaning: "Each component's assigned weight — set directly by you, not derived from a sample size." },
     { symbol: '\\bar{x}_w', meaning: 'The weighted mean — the combined score after weighting.' },
+  ],
+  'central-tendency': [
+    { symbol: '\\bar{x}', meaning: 'The arithmetic mean — the familiar sum-divided-by-count average.' },
+    { symbol: 'GM', meaning: 'The geometric mean — the n-th root of the product of the values; defined only when every value is strictly positive.' },
+    { symbol: 'HM', meaning: 'The harmonic mean — n divided by the sum of reciprocals; also defined only for strictly positive values.' },
+    { symbol: '\\text{Median}', meaning: 'The middle value once the data is sorted (or the average of the two middle values, for an even n).' },
+    { symbol: '\\text{Mode}', meaning: 'The most frequently occurring value(s); undefined ("no mode") when every value occurs exactly once.' },
   ],
 
   // Probability & Distributions
