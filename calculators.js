@@ -4126,6 +4126,200 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 115. IMBALANCED CLASSIFICATION METRICS (F1, BALANCED ACCURACY & MCC) ──
+     Same TP/FP/FN/TN confusion matrix as 'diagnostic-accuracy', through
+     the metrics ML papers report for an imbalanced outcome instead of
+     plain accuracy: precision/recall (PPV/Se under their stats/epi
+     names), the F1 score (their harmonic mean, not average — see
+     'central-tendency' for why that distinction matters), balanced
+     accuracy (Se and Sp's arithmetic mean), and the Matthews
+     correlation coefficient (MCC), which uses all four cells at once
+     and rewards a model only when it performs adequately on both
+     classes simultaneously.                                           */
+  {
+    id:          'imbalanced-classification-metrics',
+    name:        'Imbalanced Classification Metrics (F1, Balanced Accuracy & MCC)',
+    hint:        'F1 · Balanced Accuracy · MCC — from one confusion matrix',
+    category:    'Diagnostic Testing',
+    description: 'Computes precision, recall, F1, balanced accuracy, and the Matthews correlation coefficient (MCC) from one confusion matrix — the metrics that correct for the misleadingly high accuracy a rare, imbalanced outcome produces.',
+
+    formulas: [
+      {
+        label: 'Precision & Recall',
+        latex: 'Precision = \\dfrac{a}{a+b}\\;(=PPV) \\qquad Recall = \\dfrac{a}{a+c}\\;(=Se)'
+      },
+      {
+        label: 'F1 Score',
+        latex: 'F_1 = \\dfrac{2 \\times Precision \\times Recall}{Precision + Recall} = \\dfrac{2a}{2a+b+c}'
+      },
+      {
+        label: 'Balanced Accuracy',
+        latex: 'Balanced\\ Accuracy = \\dfrac{Se + Sp}{2}'
+      },
+      {
+        label: 'Matthews Correlation Coefficient',
+        latex: 'MCC = \\dfrac{ad-bc}{\\sqrt{(a+b)(a+c)(d+b)(d+c)}}'
+      }
+    ],
+
+    inputLayout: '2x2',
+    tableLabels: { colPos: 'Actual +', colNeg: 'Actual −', rowPos: 'Predicted +', rowNeg: 'Predicted −' },
+    inputs: [
+      { id: 'a', label: 'a', desc: 'True Positive (Predicted+ & Actual+)',  default: 10  },
+      { id: 'b', label: 'b', desc: 'False Positive (Predicted+ & Actual−)', default: 5   },
+      { id: 'c', label: 'c', desc: 'False Negative (Predicted− & Actual+)', default: 40  },
+      { id: 'd', label: 'd', desc: 'True Negative (Predicted− & Actual−)',  default: 945 },
+    ],
+
+    example({ a, b, c, d }) {
+      if (![a, b, c, d].every(v => isFinite(v) && v >= 0) || a + c === 0 || b + d === 0)
+        return 'Enter counts for all four cells of the confusion matrix to see a worked example here.';
+      const N = a + b + c + d;
+      const acc = (a + d) / N;
+      const recall = a / (a + c);
+      const pct = v => (v * 100).toFixed(1);
+      return `A model trained to flag a rare complication (${a + c} of ${N} cases, ${pct((a + c) / N)}% prevalence) is evaluated on a held-out test set. It predicts positive for ${a + b} cases, correctly catching ${a} of the ${a + c} true cases. Plain accuracy looks reassuring at ${pct(acc)}%, but that figure is dominated by the majority class — recall (the fraction of true cases actually caught) tells a very different story at only ${pct(recall)}%. Balanced accuracy and MCC, below, are built specifically so a lopsided majority class can't hide that gap.`;
+    },
+
+    calculate({ a, b, c, d }) {
+      if (![a, b, c, d].every(v => isFinite(v) && v >= 0)) return [err('All four cells must be zero or greater')];
+      const diseased = a + c, healthy = b + d;
+      if (diseased === 0 || healthy === 0) return [err('Both the Actual+ and Actual− columns need at least one case')];
+
+      const N = a + b + c + d;
+      const Se = a / diseased;
+      const Sp = d / healthy;
+      const acc = (a + d) / N;
+      const balAcc = (Se + Sp) / 2;
+      const predPos = a + b;
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'Accuracy (for comparison)', value: f(acc), ci: null, isRatio: false },
+        { label: 'Recall / Sensitivity (Se)', value: f(Se), ci: null, isRatio: false },
+        { label: 'Specificity (Sp)', value: f(Sp), ci: null, isRatio: false },
+      ];
+
+      if (predPos === 0) {
+        rows.push({ label: 'Precision & F1', isText: true, ci: null, isRatio: false,
+          value: 'Undefined — the model made no positive predictions in this table (a + b = 0).' });
+      } else {
+        const precision = a / predPos;
+        const f1 = (precision + Se) > 0 ? 2 * precision * Se / (precision + Se) : 0;
+        rows.push(
+          { label: 'Precision / PPV', value: f(precision), ci: null, isRatio: false },
+          { label: 'F1 Score', value: f(f1), ci: null, isRatio: false, highlight: true },
+        );
+      }
+
+      rows.push({ label: 'Balanced Accuracy', value: f(balAcc), ci: null, isRatio: false, highlight: true });
+
+      const mccDenomSq = (a + b) * (a + c) * (d + b) * (d + c);
+      if (mccDenomSq === 0) {
+        rows.push({ label: 'Matthews Correlation Coefficient (MCC)', value: 0, ci: null, isRatio: false, highlight: true });
+        rows.push({ label: 'Note', isText: true, ci: null, isRatio: false,
+          value: 'MCC is conventionally set to 0 here — one row or column of the confusion matrix is entirely empty, which makes its usual formula divide by zero.' });
+      } else {
+        const mcc = (a * d - b * c) / Math.sqrt(mccDenomSq);
+        rows.push({ label: 'Matthews Correlation Coefficient (MCC)', value: f(mcc), ci: null, isRatio: false, highlight: true });
+      }
+
+      rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `Accuracy alone can look excellent on an imbalanced outcome while badly missing the minority class — the gap between accuracy (${f(acc, 3)}) and recall (${f(Se, 3)}) above is exactly that failure mode. Balanced accuracy weights both classes equally regardless of size, and MCC goes further, using all four confusion-matrix cells at once and rewarding a model only when it performs adequately on both classes simultaneously — several methodologists now argue MCC should replace F1 as the default imbalanced-classification metric, since F1 (like precision and recall) is silent on how the model handles true negatives (d).` });
+
+      return rows;
+    }
+  },
+
+  /* ── 116. BRIER SCORE ────────────────────────────────────────────────
+     Mean squared error of a predicted probability against its 0/1
+     outcome — the calibration-side counterpart to the discrimination
+     question AUC answers. Compared here against the 'reference' Brier
+     score of a naive model that always predicts the sample's own
+     observed event rate, giving a Brier Skill Score that answers a
+     sharper question than the raw number alone: does this model
+     actually beat the simplest possible baseline?                     */
+  {
+    id:          'brier-score',
+    name:        'Brier Score',
+    hint:        'BS = mean[(p̂ − y)²]',
+    category:    'Diagnostic Testing',
+    description: 'Computes the Brier score — the mean squared difference between each predicted probability and its actual 0/1 outcome — a calibration measure for probabilistic predictions, compared against a naive base-rate-only baseline.',
+
+    formulas: [
+      {
+        label: 'Brier Score',
+        latex: 'BS = \\dfrac{1}{n}\\sum_{i=1}^n \\left(\\hat{p}_i - y_i\\right)^2'
+      },
+      {
+        label: 'Reference (Base-Rate) Brier Score',
+        latex: 'BS_{ref} = \\bar{y}(1-\\bar{y})'
+      },
+      {
+        label: 'Brier Skill Score',
+        latex: 'BSS = 1 - \\dfrac{BS}{BS_{ref}}'
+      }
+    ],
+
+    inputLayout: 'grid',
+    inputs: [
+      { id: 'predicted', type: 'textarea', label: 'Predicted Probabilities (0–1, comma-separated)', default: '0.9,0.8,0.2,0.6,0.3,0.1,0.7,0.4' },
+      { id: 'actual',    type: 'textarea', label: 'Actual Outcomes (0 or 1, comma-separated)',       default: '1,1,0,1,0,0,1,0' },
+    ],
+
+    example({ predicted, actual }) {
+      const p = parseNumberList(predicted), y = parseNumberList(actual);
+      if (p.length < 1 || p.length !== y.length || p.some(v => !isFinite(v) || v < 0 || v > 1) || y.some(v => v !== 0 && v !== 1))
+        return 'Enter matching lists of predicted probabilities (0–1) and actual outcomes (0 or 1) to see a worked medical example here.';
+      const n = p.length;
+      const bs = p.reduce((s, v, i) => s + (v - y[i]) ** 2, 0) / n;
+      const ybar = y.reduce((s, v) => s + v, 0) / n;
+      const bsRef = ybar * (1 - ybar);
+      const f = v => +v.toFixed(3);
+      return `A model predicts each of ${n} patients' probability of a complication; the Brier score comes out to ${f(bs)} — the mean squared gap between each predicted probability and what actually happened. A naive model that ignored every patient's individual risk factors and just predicted the overall complication rate (${f(ybar)}) for everyone would score ${f(bsRef)}, so this model's actual skill over that baseline is what the Brier Skill Score below quantifies.`;
+    },
+
+    calculate({ predicted, actual }) {
+      const p = parseNumberList(predicted), y = parseNumberList(actual);
+      if (p.some(v => !isFinite(v))) return [err('All predicted probabilities must be numeric')];
+      if (y.some(v => !isFinite(v))) return [err('All actual outcomes must be numeric')];
+      if (p.length !== y.length) return [err('Predicted probabilities and actual outcomes must have the same number of values')];
+      if (p.length < 1) return [err('Enter at least 1 paired value')];
+      if (p.some(v => v < 0 || v > 1)) return [err('Predicted probabilities must each be between 0 and 1')];
+      if (y.some(v => v !== 0 && v !== 1)) return [err('Actual outcomes must each be exactly 0 or 1')];
+
+      const n = p.length;
+      const bs = p.reduce((s, v, i) => s + (v - y[i]) ** 2, 0) / n;
+      const ybar = y.reduce((s, v) => s + v, 0) / n;
+      const bsRef = ybar * (1 - ybar);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'n', value: n, ci: null, isRatio: false },
+        { label: 'Observed Event Rate (ȳ)', value: f(ybar), ci: null, isRatio: false },
+        { label: 'Brier Score', value: f(bs), ci: null, isRatio: false, highlight: true },
+      ];
+
+      if (bsRef === 0) {
+        rows.push({ label: 'Reference Brier Score & Skill Score', isText: true, ci: null, isRatio: false,
+          value: 'Not computable — every actual outcome in this sample is the same value, so a base-rate-only baseline would be a perfect (but useless) predictor.' });
+      } else {
+        const bss = 1 - bs / bsRef;
+        rows.push(
+          { label: 'Reference Brier Score (base-rate-only model)', value: f(bsRef), ci: null, isRatio: false },
+          { label: 'Brier Skill Score (BSS)', value: f(bss), ci: null, isRatio: false, highlight: true },
+        );
+      }
+
+      rows.push({ label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `Brier score ranges from 0 (perfect) to 1 (worst possible), and is the calibration-side counterpart to the discrimination question AUC answers — a model can discriminate well (high AUC) while still being poorly calibrated (a mediocre Brier score), if its stated probabilities are systematically too high or too low. The Brier Skill Score compares this model's Brier score against the simplest possible baseline (always predicting the sample's own event rate): a positive BSS means the model adds real information beyond that baseline, and a BSS at or below 0 means it doesn't.` });
+
+      return rows;
+    }
+  },
+
   /* ── 31. CRITICAL VALUE & P-VALUE (T) ──────────────────────────────────
      Given a t statistic and degrees of freedom, returns its critical
      value and p-value. An optional point estimate backs out the
@@ -19698,6 +19892,8 @@ const CALCULATOR_INDEX = [
   // ── 12. DIAGNOSTIC TESTING ────────────────────────────────────────────
   { id: 'sensitivity-specificity', name: 'Sensitivity, Specificity & LR', category: 'Diagnostic Testing',        description: 'Calculates sensitivity, specificity, and positive/negative likelihood ratios from a 2×2 table.', status: 'available'  },
   { id: 'diagnostic-accuracy',     name: 'Diagnostic Test Accuracy (2×2)', category: 'Diagnostic Testing',       description: 'Full diagnostic accuracy calculator: Se, Sp, PPV, NPV, LR+, LR−, and accuracy.',              status: 'available' },
+  { id: 'imbalanced-classification-metrics', name: 'Imbalanced Classification Metrics (F1, Balanced Accuracy & MCC)', category: 'Diagnostic Testing', description: 'Computes precision, recall, F1, balanced accuracy, and the Matthews correlation coefficient (MCC) from a confusion matrix — the metrics ML papers use to correct for the misleading accuracy a rare, imbalanced outcome produces.', status: 'available' },
+  { id: 'brier-score',             name: 'Brier Score',                   category: 'Diagnostic Testing',        description: 'Computes the Brier score and Brier Skill Score — the mean squared error of a predicted probability against its actual 0/1 outcome, compared against a naive base-rate baseline.', status: 'available' },
   { id: 'post-test-probability',   name: 'Post-Test Probability',         category: 'Diagnostic Testing',         description: 'Updates pre-test probability to post-test probability using likelihood ratios.',               status: 'available' },
   { id: 'roc-auc',                 name: 'ROC Curve & AUC',              category: 'Diagnostic Testing',          description: 'Plots the receiver operating characteristic curve and computes the area under the curve.',     status: 'available' },
   { id: 'serial-parallel-testing', name: 'Serial & Parallel Testing',    category: 'Diagnostic Testing',          description: 'Models the combined performance of tests run in series or parallel.',                         status: 'available' },
@@ -20961,6 +21157,8 @@ const SEARCH_KEYWORDS = {
   // Diagnostic Testing
   'sensitivity-specificity': ['sensitivity', 'specificity', 'likelihood ratios', 'diagnostic test properties', 'diagnostic accuracy study'],
   'diagnostic-accuracy':     ['diagnostic accuracy', 'ppv', 'npv', 'positive predictive value', 'negative predictive value', 'diagnostic accuracy study'],
+  'imbalanced-classification-metrics': ['f1 score', 'f1', 'balanced accuracy', 'matthews correlation coefficient', 'mcc', 'precision recall', 'confusion matrix', 'class imbalance', 'imbalanced classification'],
+  'brier-score':             ['brier score', 'calibration', 'predicted probability', 'brier skill score', 'probability calibration'],
   'post-test-probability':   ['post-test probability', 'pre-test probability', 'bayesian update for a diagnostic test'],
   'roc-auc':                 ['roc curve', 'area under the curve', 'auc', 'continuous test cutoff', 'diagnostic accuracy study'],
   'serial-parallel-testing': ['combining two diagnostic tests', 'series testing', 'parallel testing'],
@@ -22077,6 +22275,23 @@ const NOTATION = {
     { symbol: 'LR_{+}', meaning: 'Positive Likelihood Ratio — how much a positive result shifts the odds toward disease.' },
     { symbol: 'LR_{-}', meaning: 'Negative Likelihood Ratio — how much a negative result shifts the odds away from disease.' },
     { symbol: 'Accuracy', meaning: 'Overall proportion of all patients (both positive and negative) that the test classifies correctly.' },
+  ],
+  'imbalanced-classification-metrics': [
+    { symbol: 'a', meaning: 'True Positive count — predicted positive and actually positive.' },
+    { symbol: 'b', meaning: 'False Positive count — predicted positive but actually negative.' },
+    { symbol: 'c', meaning: 'False Negative count — predicted negative but actually positive.' },
+    { symbol: 'd', meaning: 'True Negative count — predicted negative and actually negative.' },
+    { symbol: 'Precision', meaning: 'The same quantity as PPV — proportion of positive predictions that are actually correct.' },
+    { symbol: 'Recall', meaning: 'The same quantity as Sensitivity — proportion of actual positives the model correctly flags.' },
+    { symbol: 'F_1', meaning: 'The harmonic mean of precision and recall — pulled toward whichever of the two is lower, unlike a plain average.' },
+    { symbol: 'MCC', meaning: 'Matthews Correlation Coefficient — ranges from −1 (total disagreement) to +1 (perfect prediction), 0 for a model no better than chance.' },
+  ],
+  'brier-score': [
+    { symbol: '\\hat{p}_i', meaning: "Subject i's predicted probability of the outcome." },
+    { symbol: 'y_i', meaning: "Subject i's actual outcome, coded 0 or 1." },
+    { symbol: 'BS', meaning: 'Brier Score — mean squared error of the predicted probabilities; 0 is perfect, 1 is worst possible.' },
+    { symbol: '\\bar{y}', meaning: "The sample's observed event rate — the constant prediction a naive base-rate-only model would make for everyone." },
+    { symbol: 'BSS', meaning: "Brier Skill Score — how much better (or worse) this model's Brier score is than that naive baseline." },
   ],
   'post-test-probability': [
     { symbol: 'P_{pre}', meaning: 'Pre-Test Probability — the estimated chance of disease before the test result is known.' },
@@ -25469,7 +25684,19 @@ const GUIDES = [
       },
       {
         heading: 'Class imbalance and the choice of metric',
-        html: `<p>Accuracy &mdash; the proportion of all predictions that were correct &mdash; can look excellent while being nearly meaningless when the outcome is rare: a model that always predicts "no disease" for a condition with 2% prevalence is 98% accurate and clinically useless. This is exactly why precision (equivalent to PPV elsewhere on this site) and recall (equivalent to sensitivity) are usually reported alongside or instead of accuracy, often combined into a single F1 score (their harmonic mean), or summarized across every threshold with a precision-recall curve rather than an ROC curve, which can look deceptively strong under severe class imbalance. A paper reporting only accuracy for a rare-outcome classification task, without precision/recall/F1 or the class balance of its test set, is a sign to look more closely rather than take the headline number at face value.</p>`,
+        html: `<p>Accuracy &mdash; the proportion of all predictions that were correct &mdash; can look excellent while being nearly meaningless when the outcome is rare: a model that always predicts "no disease" for a condition with 2% prevalence is 98% accurate and clinically useless. This is exactly why precision (equivalent to PPV elsewhere on this site) and recall (equivalent to sensitivity) are usually reported alongside or instead of accuracy, often combined into a single F1 score (their harmonic mean, not their average &mdash; see the Measures of Central Tendency calculator for why that distinction matters), or summarized across every threshold with a precision-recall curve rather than an ROC curve, which can look deceptively strong under severe class imbalance. Balanced accuracy and the Matthews correlation coefficient (MCC) go a step further than F1, and several methodologists now argue MCC should be the default reported metric for exactly this reason &mdash; see the Imbalanced Classification Metrics calculator to compute all of these from one confusion matrix. A paper reporting only accuracy for a rare-outcome classification task, without precision/recall/F1/MCC or the class balance of its test set, is a sign to look more closely rather than take the headline number at face value.</p>`,
+      },
+      {
+        heading: '"Bias," "confidence," "significant," "robust," "generalization": five false friends',
+        html: `<p>These five words appear constantly in both literatures, but each one means something different &mdash; sometimes incompatibly different &mdash; depending on which field is using it. Treating the ML sense as if it must mean the stats/epi sense (or vice versa) is a specific, well-documented misreading risk, not a stylistic quibble.</p><div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th style="text-align:left;">In ML</th><th style="text-align:left;">In Stats/Epi</th></tr></thead><tbody><tr><td>Bias</td><td style="text-align:left;">Systematic prediction error, or an unfair pattern in a model's outputs toward a demographic subgroup (algorithmic fairness).</td><td style="text-align:left;">A specific technical term for confounding, selection bias, or information bias. A paper claiming to have "reduced bias" may not have addressed confounding at all &mdash; read the methods before assuming shared meaning.</td></tr><tr><td>Confidence</td><td style="text-align:left;">A softmax output score &mdash; the multi-class generalization of a logistic regression's sigmoid output. Absent explicit calibration, it does not behave like a real probability.</td><td style="text-align:left;">A confidence interval &mdash; a range with a defined coverage property. A model can report "95% confidence" and be wrong far more than 5% of the time.</td></tr><tr><td>Significant</td><td style="text-align:left;">Often just "large" or "noteworthy" in the plain-English sense, with no p-value or hypothesis test behind it at all.</td><td style="text-align:left;">Shorthand for a p-value below a pre-specified alpha threshold &mdash; a specific inferential claim.</td></tr><tr><td>Robust</td><td style="text-align:left;">Resists adversarial inputs, or holds up on unfamiliar (out-of-distribution) data &mdash; the same question "Generalization" below asks under a different name.</td><td style="text-align:left;">Stays valid when a statistical assumption (e.g., homoscedasticity) is violated &mdash; think robust standard errors. Neither sense implies the other.</td></tr><tr><td>Generalization</td><td style="text-align:left;">Performance on a held-out test set drawn from the same underlying population as training.</td><td style="text-align:left;">External validity &mdash; does this hold in a genuinely different population, setting, or time period? A model can generalize in the ML sense and still fail external validity.</td></tr></tbody></table></div><p>The practical rule: before crediting a claim built on any of these five words, find the paper's own operational definition of what it actually measured, rather than assuming the word means what it would mean in the other field.</p>`,
+      },
+      {
+        heading: "SHAP values and attention weights: what they do — and don't — tell you",
+        html: `<p>SHAP values, other feature-importance measures, and attention weights are a decomposition of a model's own output &mdash; they quantify how much a feature or input region moved <em>this model's prediction</em>, not how much that feature causally contributed to the outcome. A high SHAP value, or a report that some variable was "the strongest predictor," should not be read the way a large, statistically significant coefficient from a causal regression model would be read; a strong predictor identified this way can still be a poor causal candidate &mdash; for instance, a downstream marker of the true causal driver rather than the driver itself. Attention weights carry an even weaker guarantee: a heuristic for which part of the input the model "focused on," useful for debugging, but not a formal test of association.</p><p>This is also where standard predictive-ML workflows most often diverge from established epidemiological practice, not because of an error but because pure prediction doesn't require the machinery causal inference does: most pipelines have no step equivalent to drawing a DAG or identifying confounders, and cross-validation protects against overfitting to one dataset but does nothing to control the false discovery rate when many candidate predictors (or biomarkers) are screened at once &mdash; a different problem needing its own correction (FWER or FDR). Neither omission is a flaw in a model built only to predict; each becomes one the moment a paper's language drifts from prediction into a causal claim about a specific predictor.</p><p>The closest bridge between the two literatures is the causal-ML subfield &mdash; double machine learning, causal forests, and targeted maximum likelihood estimation (TMLE) &mdash; which independently rebuilt much of the estimand framework's logic (see the companion guide on frequentist vs. Bayesian reasoning and the effect-measures guide), in some cases converging on the identical identification assumptions of exchangeability, positivity, and consistency under entirely new names. A reader already fluent in target trial emulation has more conceptual traction on this ML subfield than its unfamiliar vocabulary might initially suggest.</p>`,
+      },
+      {
+        heading: 'Segmentation metrics: IoU and Dice',
+        html: `<p>A different family of imaging tasks asks a model to output a region rather than a single label or probability &mdash; tracing a lesion's boundary on a radiograph or scan, for instance &mdash; and none of the classification metrics above directly apply to that output. Intersection over Union (IoU) and the Dice coefficient are the two metrics built for this comparison: both quantify how much the predicted region overlaps with the region a human reader outlined as ground truth. Dice is, in fact, mathematically equivalent to computing the F1 score at the level of individual pixels rather than individual cases. Neither has a classical-statistics equivalent, since conventional diagnostic-accuracy work rarely evaluated a model's output as a shape rather than a label.</p>`,
       },
       {
         heading: 'Was the operating threshold pre-specified, or tuned on the same data used to report performance',
@@ -25500,6 +25727,9 @@ const GUIDES = [
       { id: 'appraisal-appraising-diagnostic-studies', why: 'Shares the reference-standard and spectrum-bias concerns of any diagnostic accuracy study, on top of the AI-specific ones this guide adds.' },
       { id: 'appraisal-diagnostic-tests-prevalence', why: 'The same prevalence-dependence lesson, extended to why accuracy alone misleads under class imbalance.' },
       { id: 'appraisal-study-design', why: 'Places AI/ML evaluation studies within the broader design landscape.' },
+      { id: 'imbalanced-classification-metrics', why: 'Computes precision, recall, F1, balanced accuracy, and MCC directly from a confusion matrix, for the class-imbalance problem described here.' },
+      { id: 'brier-score', why: 'Computes the calibration measure this guide distinguishes from AUC-style discrimination.' },
+      { id: 'reference-glossary-concepts', why: 'Quick-reference definitions for the AI/ML terms used throughout this guide.' },
     ],
   },
 
@@ -25980,7 +26210,7 @@ const GUIDES = [
       },
       {
         heading: 'AI/ML Metrics (Same Concepts, Different Names)',
-        html: `<p>Articles evaluating an AI or machine learning model almost always describe its performance using this vocabulary instead of the diagnostic-testing terms above &mdash; but most of it maps directly onto concepts already in this glossary. F1 and the confusion matrix are the two genuinely new ideas; everything else is a rename.</p><div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-accuracy"></span>Accuracy</td><td>Accuracy</td><td style="text-align:left;">The proportion of all predictions (positive and negative) that were correct. Can look excellent while being nearly meaningless when the outcome is rare &mdash; see the AI/ML appraisal guide below.</td><td style="text-align:left;"><a href="#diagnostic-accuracy">Diagnostic Test Accuracy (2&times;2)</a></td></tr><tr><td><span id="gloss-auprc"></span>AUPRC / PR-AUC</td><td>Area Under the Precision-Recall Curve</td><td style="text-align:left;">Like AUC-ROC, but plots Precision against Recall instead of TPR against FPR &mdash; often preferred over AUC-ROC when the positive class is rare, since ROC curves can look deceptively strong under severe class imbalance.</td><td style="text-align:left;"><a href="#roc-auc">ROC Curve &amp; AUC</a>; <a href="#learn/appraisal-appraising-ai-studies">Appraising AI/ML Diagnostic and Prediction Studies (Learn guide)</a></td></tr><tr><td><span id="gloss-auroc"></span>AUROC</td><td>Area Under the ROC Curve</td><td style="text-align:left;">Identical to AUC above &mdash; just the more explicit abbreviation favored in the ML literature.</td><td style="text-align:left;"><a href="#roc-auc">ROC Curve &amp; AUC</a></td></tr><tr><td><span id="gloss-confusion-matrix"></span>Confusion Matrix</td><td>Confusion Matrix</td><td style="text-align:left;">The same 2&times;2 table used throughout this site's epidemiology calculators, just relabeled: predicted vs. actual instead of test result vs. disease status.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#diagnostic-accuracy">Diagnostic Test Accuracy (2&times;2)</a></td></tr><tr><td><span id="gloss-f1"></span>F1 Score</td><td>F1 Score</td><td style="text-align:left;">The harmonic mean of Precision and Recall &mdash; a single number balancing both, precisely because optimizing for one alone (e.g. flagging everything positive for perfect recall) tanks the other.</td><td style="text-align:left;">&mdash;</td></tr><tr><td><span id="gloss-precision"></span>Precision</td><td>Precision (= PPV)</td><td style="text-align:left;">The same quantity as PPV above: the proportion of the model's positive predictions that are actually correct.</td><td style="text-align:left;"><a href="#ppv-npv-vs-prevalence">PPV/NPV vs Prevalence</a></td></tr><tr><td><span id="gloss-recall"></span>Recall</td><td>Recall (= Sensitivity)</td><td style="text-align:left;">The same quantity as Sensitivity above, under its machine-learning name: the proportion of actual positives the model correctly flags.</td><td style="text-align:left;"><a href="#sensitivity-specificity">Sensitivity, Specificity &amp; LR</a></td></tr><tr><td><span id="gloss-tpr-fpr"></span>TPR / FPR</td><td>True Positive Rate / False Positive Rate</td><td style="text-align:left;">TPR is another name for Recall/Sensitivity; FPR = 1 &minus; Specificity. These are exactly the two axes an ROC curve plots.</td><td style="text-align:left;"><a href="#roc-auc">ROC Curve &amp; AUC</a></td></tr></tbody></table></div>`,
+        html: `<p>Articles evaluating an AI or machine learning model almost always describe its performance using this vocabulary instead of the diagnostic-testing terms above &mdash; but most of it maps directly onto concepts already in this glossary. F1, the confusion matrix, balanced accuracy, MCC, and the Brier score are the genuinely new ideas (or the ones without a classical one-line equivalent); everything else is a rename.</p><div class="ref-table-wrap"><table class="ref-table ref-table-left"><thead><tr><th>Term</th><th>Full Name</th><th style="text-align:left;">Definition</th><th style="text-align:left;">Related</th></tr></thead><tbody><tr><td><span id="gloss-accuracy"></span>Accuracy</td><td>Accuracy</td><td style="text-align:left;">The proportion of all predictions (positive and negative) that were correct. Can look excellent while being nearly meaningless when the outcome is rare &mdash; see the AI/ML appraisal guide below.</td><td style="text-align:left;"><a href="#diagnostic-accuracy">Diagnostic Test Accuracy (2&times;2)</a></td></tr><tr><td><span id="gloss-auprc"></span>AUPRC / PR-AUC</td><td>Area Under the Precision-Recall Curve</td><td style="text-align:left;">Like AUC-ROC, but plots Precision against Recall instead of TPR against FPR &mdash; often preferred over AUC-ROC when the positive class is rare, since ROC curves can look deceptively strong under severe class imbalance.</td><td style="text-align:left;"><a href="#roc-auc">ROC Curve &amp; AUC</a>; <a href="#learn/appraisal-appraising-ai-studies">Appraising AI/ML Diagnostic and Prediction Studies (Learn guide)</a></td></tr><tr><td><span id="gloss-auroc"></span>AUROC</td><td>Area Under the ROC Curve</td><td style="text-align:left;">Identical to AUC above &mdash; just the more explicit abbreviation favored in the ML literature.</td><td style="text-align:left;"><a href="#roc-auc">ROC Curve &amp; AUC</a></td></tr><tr><td><span id="gloss-balanced-accuracy"></span>Balanced Accuracy</td><td>Balanced Accuracy</td><td style="text-align:left;">The arithmetic mean of sensitivity and specificity, so each class contributes equally to the score regardless of its size &mdash; a direct fix for plain accuracy's class-imbalance problem above.</td><td style="text-align:left;"><a href="#imbalanced-classification-metrics">Imbalanced Classification Metrics (F1, Balanced Accuracy &amp; MCC)</a></td></tr><tr><td><span id="gloss-brier"></span>Brier Score</td><td>Brier Score</td><td style="text-align:left;">The mean squared error of a predicted probability against its actual 0/1 outcome &mdash; a calibration measure, answering a different question than a discrimination metric like AUC does.</td><td style="text-align:left;"><a href="#brier-score">Brier Score</a></td></tr><tr><td><span id="gloss-confusion-matrix"></span>Confusion Matrix</td><td>Confusion Matrix</td><td style="text-align:left;">The same 2&times;2 table used throughout this site's epidemiology calculators, just relabeled: predicted vs. actual instead of test result vs. disease status.</td><td style="text-align:left;"><a href="#measures-of-association">Measures of Association</a>; <a href="#diagnostic-accuracy">Diagnostic Test Accuracy (2&times;2)</a></td></tr><tr><td><span id="gloss-f1"></span>F1 Score</td><td>F1 Score</td><td style="text-align:left;">The harmonic mean of Precision and Recall &mdash; a single number balancing both, precisely because optimizing for one alone (e.g. flagging everything positive for perfect recall) tanks the other.</td><td style="text-align:left;"><a href="#imbalanced-classification-metrics">Imbalanced Classification Metrics (F1, Balanced Accuracy &amp; MCC)</a>; <a href="#central-tendency">Measures of Central Tendency</a></td></tr><tr><td><span id="gloss-mcc"></span>MCC</td><td>Matthews Correlation Coefficient</td><td style="text-align:left;">Uses all four confusion-matrix cells at once and rewards a model only when it performs well on both classes simultaneously &mdash; several methodologists now argue it should replace F1 as the default imbalanced-classification metric.</td><td style="text-align:left;"><a href="#imbalanced-classification-metrics">Imbalanced Classification Metrics (F1, Balanced Accuracy &amp; MCC)</a></td></tr><tr><td><span id="gloss-precision"></span>Precision</td><td>Precision (= PPV)</td><td style="text-align:left;">The same quantity as PPV above: the proportion of the model's positive predictions that are actually correct.</td><td style="text-align:left;"><a href="#ppv-npv-vs-prevalence">PPV/NPV vs Prevalence</a></td></tr><tr><td><span id="gloss-recall"></span>Recall</td><td>Recall (= Sensitivity)</td><td style="text-align:left;">The same quantity as Sensitivity above, under its machine-learning name: the proportion of actual positives the model correctly flags.</td><td style="text-align:left;"><a href="#sensitivity-specificity">Sensitivity, Specificity &amp; LR</a></td></tr><tr><td><span id="gloss-tpr-fpr"></span>TPR / FPR</td><td>True Positive Rate / False Positive Rate</td><td style="text-align:left;">TPR is another name for Recall/Sensitivity; FPR = 1 &minus; Specificity. These are exactly the two axes an ROC curve plots.</td><td style="text-align:left;"><a href="#roc-auc">ROC Curve &amp; AUC</a></td></tr></tbody></table></div>`,
       },
       {
         heading: 'Agreement & Correlation',
