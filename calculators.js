@@ -12655,6 +12655,106 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 117. SCIENTIFIC & STATISTICS CALCULATOR ─────────────────────────────
+     The one calculator on this site that isn't itself a statistical
+     test or formula — a general-purpose keypad calculator (trig, log,
+     exponents, parentheses, memory) combined with the two things a
+     physical scientific calculator's STAT/COMP modes add on top of
+     plain arithmetic: one-variable descriptive statistics from a data
+     list, and combinatorics (nCr, nPr, n!). inputLayout: 'keypad' hands
+     the whole page off to its own renderer in app.js (renderKeypadCalculator,
+     same handoff pattern as inputLayout: 'explorer') — the live button-
+     by-button expression builder and evaluator is page BEHAVIOR, so it
+     lives in app.js per this file's own documented split; only the
+     Statistics-tab's calculate() (plain data-list → summary stats,
+     identical in shape to every other calculator here) lives below.    */
+  {
+    id:          'scientific-calculator',
+    name:        'Scientific & Statistics Calculator',
+    hint:        'sin cos tan · log ln √ · x² x^y · nCr nPr n! · x̄ s σ',
+    category:    'Descriptive Statistics',
+    description: 'A combined scientific calculator (trigonometric, logarithmic, exponential, and memory functions, in degrees or radians) and one-variable statistics & combinatorics tool — enter a data list for n, Σx, Σx², the mean, and sample/population variance & SD, or use nCr, nPr, and n! directly from the keypad.',
+    inputLayout: 'keypad',
+
+    formulas: [
+      {
+        label: 'Mean, Sum & Sum of Squares',
+        latex: '\\bar{x} = \\dfrac{\\sum x_i}{n}, \\qquad \\sum x_i, \\quad \\sum x_i^2'
+      },
+      {
+        label: 'Sample & Population Variance / SD',
+        latex: 's^2 = \\dfrac{\\sum(x_i-\\bar{x})^2}{n-1}, \\ s=\\sqrt{s^2} \\qquad \\sigma^2 = \\dfrac{\\sum(x_i-\\bar{x})^2}{n}, \\ \\sigma=\\sqrt{\\sigma^2}'
+      },
+      {
+        label: 'Combinations & Permutations',
+        latex: '{}_nC_r = \\dfrac{n!}{r!\\,(n-r)!} \\qquad {}_nP_r = \\dfrac{n!}{(n-r)!}'
+      }
+    ],
+
+    // Only the Statistics tab's data-list input is a "real" calc.inputs
+    // entry — the Scientific tab's keypad reads/writes its own display
+    // state directly in app.js rather than going through calc.inputs /
+    // readInputs() at all, same as an 'explorer' calculator's sliders
+    // don't go through the standard Calculate-button flow either.
+    inputs: [
+      { id: 'data', type: 'textarea', label: 'Statistics Mode — Data values (comma, space, or newline separated)', default: '4, 8, 6, 5, 3, 7, 9, 5, 6, 4' }
+    ],
+
+    example({ data }) {
+      const vals = parseNumberList(data).filter(isFinite);
+      if (vals.length < 2) return 'Enter at least 2 numeric values to see a worked medical example here.';
+      const n = vals.length;
+      const mean = vals.reduce((s, v) => s + v, 0) / n;
+      const sSD = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1));
+      const f = v => +v.toFixed(2);
+      return `A resident logs ${n} patients' fasting glucose readings (mg/dL) into the Statistics tab below. Mean = ${f(mean)}, sample SD = ${f(sSD)} — and switching to the Scientific tab, the same keypad handles everything from a quick unit conversion to checking ${n}C2 = ${n * (n - 1) / 2} ways to pair those patients up for a matched analysis, without leaving the page.`;
+    },
+
+    calculate({ data }) {
+      const vals = parseNumberList(data).filter(v => isFinite(v));
+      if (vals.length < 1) return [err('Enter at least 1 numeric value (comma, space, or newline separated)')];
+
+      const n     = vals.length;
+      const sumX  = vals.reduce((s, v) => s + v, 0);
+      const sumX2 = vals.reduce((s, v) => s + v * v, 0);
+      const mean  = sumX / n;
+      const sorted = vals.slice().sort((a, b) => a - b);
+      const median = medianOfSorted(sorted);
+      const min = sorted[0], max = sorted[n - 1];
+      const ssq  = vals.reduce((s, v) => s + (v - mean) ** 2, 0);
+      const pVar = ssq / n;
+      const pSD  = Math.sqrt(pVar);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [
+        { label: 'N (count)',                  value: n,         ci: null, isRatio: false },
+        { label: 'Sum (Σx)',                   value: f(sumX),   ci: null, isRatio: false },
+        { label: 'Sum of Squares (Σx²)',       value: f(sumX2),  ci: null, isRatio: false },
+        { label: 'Mean (x̄)',                   value: f(mean),   ci: null, isRatio: false, highlight: true },
+        { label: 'Median',                     value: f(median), ci: null, isRatio: false },
+        { label: 'Minimum',                    value: f(min),    ci: null, isRatio: false },
+        { label: 'Maximum',                    value: f(max),    ci: null, isRatio: false },
+        { label: 'Range',                      value: f(max - min), ci: null, isRatio: false },
+      ];
+
+      if (n > 1) {
+        const sVar = ssq / (n - 1);
+        const sSD  = Math.sqrt(sVar);
+        rows.push({ label: 'Sample Variance (s²)', value: f(sVar), ci: null, isRatio: false, highlight: true });
+        rows.push({ label: 'Sample SD (s)',        value: f(sSD),  ci: null, isRatio: false, highlight: true });
+      } else {
+        rows.push({ label: 'Sample Variance & SD', isText: true, ci: null, isRatio: false,
+          value: 'Needs at least 2 values — the n−1 denominator is undefined for a single observation.' });
+      }
+
+      rows.push({ label: 'Population Variance (σ²)', value: f(pVar), ci: null, isRatio: false });
+      rows.push({ label: 'Population SD (σ)',        value: f(pSD),  ci: null, isRatio: false });
+
+      return rows;
+    }
+  },
+
   /* ── 91. HARTUNG-KNAPP-SIDIK-JONKMAN (HKSJ) METHOD ──────────────────────
      The standard DerSimonian-Laird random-effects CI (θ̂ ± z·SE) treats
      τ² as if it were known exactly, which understates uncertainty —
@@ -19929,6 +20029,7 @@ const CALCULATOR_INDEX = [
   { id: 'interquartile-range',  name: 'Interquartile Range (IQR)',       category: 'Descriptive Statistics',  description: "Computes Q1, the median, Q3, and the interquartile range from raw data, flags outliers using Tukey's 1.5×IQR fences, and draws a box-and-whisker plot.", status: 'available' },
   { id: 'weighted-average',     name: 'Weighted Average / Weighted Score', category: 'Descriptive Statistics', description: 'Combines several scores into one overall score using weights you assign directly — course grades, rubric items, or composite quality indices.', status: 'available' },
   { id: 'central-tendency',     name: 'Measures of Central Tendency',   category: 'Descriptive Statistics',  description: 'Computes the arithmetic, geometric, and harmonic means alongside the median and mode from raw data, with a dot plot showing where each falls.', status: 'available' },
+  { id: 'scientific-calculator', name: 'Scientific & Statistics Calculator', category: 'Descriptive Statistics', description: 'A combined scientific calculator (trig, log, exponents, memory) and one-variable statistics & combinatorics tool — n, Σx, Σx², mean, variance/SD from a data list, plus nCr, nPr, and n! on the keypad.', status: 'available' },
 
   // ── 2. PROBABILITY & DISTRIBUTIONS ───────────────────────────────────
   { id: 'z-table',              name: 'z-Distribution Table',            category: 'Probability & Distributions', description: 'Looks up cumulative probabilities and critical values for the standard normal distribution, with a shaded one- or two-tailed rejection region drawn on the curve itself.',    status: 'available' },
@@ -21202,6 +21303,7 @@ const SEARCH_KEYWORDS = {
   'interquartile-range':   ['interquartile range', 'iqr', 'q1', 'q3', 'first quartile', 'third quartile', 'box plot', 'box and whisker plot', 'tukey fences', 'outlier detection', 'five number summary'],
   'weighted-average':      ['weighted average', 'weighted mean', 'weighted score', 'weighted grade', 'course grade calculator', 'exam weights', 'combine exam scores', 'rubric score', 'composite score'],
   'central-tendency':      ['central tendency', 'geometric mean', 'harmonic mean', 'average', 'arithmetic mean', 'mode', 'median calculator', 'gmt', 'geometric mean titer', 'measures of central tendency', 'mean median mode'],
+  'scientific-calculator': ['scientific calculator', 'calculator', 'basic calculator', 'trig calculator', 'sin cos tan', 'log calculator', 'natural log calculator', 'square root calculator', 'exponent calculator', 'combinations calculator', 'permutations calculator', 'factorial calculator', 'ncr', 'npr', 'n choose r', 'memory calculator', 'keypad calculator', 'mean and standard deviation calculator'],
 
   // Probability & Distributions
   'z-table':              ['z score', 'standard normal table', 'z distribution', 'cumulative probability', 'area under the curve', 'percentage to z score', 'percentile to z score', 'inverse normal', 'inverse cdf'],
@@ -21455,6 +21557,17 @@ const NOTATION = {
     { symbol: 'HM', meaning: 'The harmonic mean — n divided by the sum of reciprocals; also defined only for strictly positive values.' },
     { symbol: '\\text{Median}', meaning: 'The middle value once the data is sorted (or the average of the two middle values, for an even n).' },
     { symbol: '\\text{Mode}', meaning: 'The most frequently occurring value(s); undefined ("no mode") when every value occurs exactly once.' },
+  ],
+  'scientific-calculator': [
+    { symbol: 'n', meaning: 'Number of values entered in the Statistics tab\'s data list.' },
+    { symbol: '\\sum x_i', meaning: 'Sum of all entered values.' },
+    { symbol: '\\sum x_i^2', meaning: 'Sum of the squares of all entered values.' },
+    { symbol: '\\bar{x}', meaning: 'The arithmetic mean of the entered values.' },
+    { symbol: 's,\\ s^2', meaning: 'Sample standard deviation and variance (n−1 denominator).' },
+    { symbol: '\\sigma,\\ \\sigma^2', meaning: 'Population standard deviation and variance (n denominator).' },
+    { symbol: '{}_nC_r', meaning: 'Combinations — the number of ways to choose r items from n when order doesn\'t matter (the keypad\'s "nCr" button).' },
+    { symbol: '{}_nP_r', meaning: 'Permutations — the number of ways to arrange r items chosen from n when order does matter (the keypad\'s "nPr" button).' },
+    { symbol: 'n!', meaning: 'Factorial — the product of every whole number from 1 to n.' },
   ],
 
   // Probability & Distributions

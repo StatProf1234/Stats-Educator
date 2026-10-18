@@ -1532,6 +1532,15 @@ function renderCalculator(calc) {
     return;
   }
 
+  // 'keypad' (the Scientific & Statistics Calculator) is likewise handed
+  // off entirely — a live button-by-button expression builder plus a
+  // Statistics-tab data list, instead of the standard inputs-grid +
+  // Calculate + results table.
+  if (calc.inputLayout === 'keypad') {
+    renderKeypadCalculator(calc);
+    return;
+  }
+
   const formulas = calc.formulas.map(f => `
     <div>
       <div class="formula-row-label">${esc(f.label)}</div>
@@ -2062,6 +2071,501 @@ function renderGroupedInputs(calc) {
     : groupTableHtml;
 
   return beforeHtml + groupTableWrapped + afterHtml;
+}
+
+/* ── SCIENTIFIC & STATISTICS CALCULATOR ──────────────────────────────
+   Expression tokenizer / recursive-descent parser / evaluator for the
+   Scientific tab's keypad, plus combinatorics (nCr, nPr), shared by
+   renderKeypadCalculator() below. Grammar (low to high precedence):
+     expr    := term (('+'|'-') term)*
+     term    := unary (('*'|'/'|'nCr'|'nPr') unary)*
+     unary   := ('-'|'+') unary | power
+     power   := postfix ('^' unary)?             // right-assoc
+     postfix := primary ('!' | '%' | '²' | '³')*
+     primary := NUMBER | CONST | FUNC '(' expr ')' | '(' expr ')'
+   Numbers accept a trailing e-notation exponent (2.5e8) the same way a
+   JS float literal does; a bare 'e' elsewhere is Euler's number, 'Ans'
+   recalls the last answer, and 'M' recalls the memory register — both
+   read from the evaluator's ctx rather than a rounded literal, so
+   chained calculations don't lose precision to display rounding.    */
+
+function calcTokenize(str) {
+  const tokens = [];
+  const s = String(str).replace(/\s+/g, '');
+  const isDigit = c => c >= '0' && c <= '9';
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (isDigit(c) || c === '.') {
+      let j = i + 1;
+      while (j < s.length && (isDigit(s[j]) || s[j] === '.')) j++;
+      if (j < s.length && (s[j] === 'e' || s[j] === 'E') &&
+          (isDigit(s[j + 1]) || ((s[j + 1] === '+' || s[j + 1] === '-') && isDigit(s[j + 2])))) {
+        j++;
+        if (s[j] === '+' || s[j] === '-') j++;
+        while (j < s.length && isDigit(s[j])) j++;
+      }
+      const raw = s.slice(i, j);
+      const value = parseFloat(raw);
+      if (isNaN(value)) throw new Error(`"${raw}" isn't a valid number`);
+      tokens.push({ type: 'num', value });
+      i = j;
+      continue;
+    }
+    if (/[a-zA-Z]/.test(c)) {
+      let j = i + 1;
+      while (j < s.length && /[a-zA-Z]/.test(s[j])) j++;
+      const word = s.slice(i, j);
+      const funcs = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'ln', 'sqrt', 'exp'];
+      if (word === 'nCr' || word === 'nPr') tokens.push({ type: 'op', value: word });
+      else if (funcs.includes(word.toLowerCase())) tokens.push({ type: 'func', value: word.toLowerCase() });
+      else if (word === 'Ans') tokens.push({ type: 'const', value: 'ans' });
+      else if (word === 'M') tokens.push({ type: 'const', value: 'mem' });
+      else if (word === 'e') tokens.push({ type: 'const', value: 'e' });
+      else throw new Error(`Unrecognized name "${word}"`);
+      i = j;
+      continue;
+    }
+    if (c === 'π') { tokens.push({ type: 'num', value: Math.PI }); i++; continue; }
+    if (c === '×') { tokens.push({ type: 'op', value: '*' }); i++; continue; }
+    if (c === '÷') { tokens.push({ type: 'op', value: '/' }); i++; continue; }
+    if (c === '−') { tokens.push({ type: 'op', value: '-' }); i++; continue; }
+    if (c === '√') { tokens.push({ type: 'func', value: 'sqrt' }); i++; continue; }
+    if (c === '²') { tokens.push({ type: 'postfix', value: '^2' }); i++; continue; }
+    if (c === '³') { tokens.push({ type: 'postfix', value: '^3' }); i++; continue; }
+    if (c === '!') { tokens.push({ type: 'postfix', value: '!' }); i++; continue; }
+    if (c === '%') { tokens.push({ type: 'postfix', value: '%' }); i++; continue; }
+    if ('+-*/^'.includes(c)) { tokens.push({ type: 'op', value: c }); i++; continue; }
+    if (c === '(' || c === ')') { tokens.push({ type: 'paren', value: c }); i++; continue; }
+    throw new Error(`Unexpected character "${c}"`);
+  }
+  return tokens;
+}
+
+function calcParse(tokens) {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const next = () => tokens[pos++];
+  const isOp = (t, ...vals) => t && t.type === 'op' && vals.includes(t.value);
+
+  function parseExpr() {
+    let node = parseTerm();
+    while (isOp(peek(), '+', '-')) {
+      const op = next().value;
+      node = { type: 'bin', op, left: node, right: parseTerm() };
+    }
+    return node;
+  }
+  function parseTerm() {
+    let node = parseUnary();
+    while (isOp(peek(), '*', '/', 'nCr', 'nPr')) {
+      const op = next().value;
+      node = { type: 'bin', op, left: node, right: parseUnary() };
+    }
+    return node;
+  }
+  function parseUnary() {
+    if (isOp(peek(), '-', '+')) {
+      const op = next().value;
+      return { type: 'unary', op, operand: parseUnary() };
+    }
+    return parsePower();
+  }
+  function parsePower() {
+    let node = parsePostfix();
+    if (isOp(peek(), '^')) {
+      next();
+      node = { type: 'bin', op: '^', left: node, right: parseUnary() };
+    }
+    return node;
+  }
+  function parsePostfix() {
+    let node = parsePrimary();
+    while (peek() && peek().type === 'postfix') node = { type: 'postfix', op: next().value, operand: node };
+    return node;
+  }
+  function parsePrimary() {
+    const t = peek();
+    if (!t) throw new Error('Incomplete expression');
+    if (t.type === 'num')   { next(); return { type: 'num', value: t.value }; }
+    if (t.type === 'const') { next(); return { type: 'const', value: t.value }; }
+    if (t.type === 'func') {
+      next();
+      if (!peek() || peek().type !== 'paren' || peek().value !== '(') throw new Error('Expected "(" after a function');
+      next();
+      const arg = parseExpr();
+      if (!peek() || peek().value !== ')') throw new Error('Missing ")"');
+      next();
+      return { type: 'func', name: t.value, arg };
+    }
+    if (t.type === 'paren' && t.value === '(') {
+      next();
+      const node = parseExpr();
+      if (!peek() || peek().value !== ')') throw new Error('Missing ")"');
+      next();
+      return node;
+    }
+    throw new Error(`Unexpected "${t.value}"`);
+  }
+
+  const result = parseExpr();
+  if (pos !== tokens.length) throw new Error(`Unexpected "${tokens[pos].value}"`);
+  return result;
+}
+
+function calcFactorial(v) {
+  if (v < 0 || !Number.isInteger(v)) throw new Error('n! needs a non-negative whole number');
+  if (v > 170) throw new Error('n! overflow — max is 170!');
+  let r = 1;
+  for (let k = 2; k <= v; k++) r *= k;
+  return r;
+}
+function calcCombinations(n, r) {
+  n = Math.round(n); r = Math.round(r);
+  if (n < 0 || r < 0 || r > n) throw new Error('nCr needs 0 ≤ r ≤ n');
+  r = Math.min(r, n - r);
+  let result = 1;
+  for (let k = 0; k < r; k++) result = (result * (n - k)) / (k + 1);
+  return Math.round(result);
+}
+function calcPermutations(n, r) {
+  n = Math.round(n); r = Math.round(r);
+  if (n < 0 || r < 0 || r > n) throw new Error('nPr needs 0 ≤ r ≤ n');
+  let result = 1;
+  for (let k = 0; k < r; k++) result *= (n - k);
+  return Math.round(result);
+}
+
+function calcEvaluate(node, ctx) {
+  switch (node.type) {
+    case 'num': return node.value;
+    case 'const':
+      if (node.value === 'e')   return Math.E;
+      if (node.value === 'ans') return ctx.ans;
+      if (node.value === 'mem') return ctx.mem;
+      throw new Error('Unknown constant');
+    case 'unary': {
+      const v = calcEvaluate(node.operand, ctx);
+      return node.op === '-' ? -v : v;
+    }
+    case 'postfix': {
+      const v = calcEvaluate(node.operand, ctx);
+      if (node.op === '!')  return calcFactorial(v);
+      if (node.op === '%')  return v / 100;
+      if (node.op === '^2') return v * v;
+      if (node.op === '^3') return v * v * v;
+      throw new Error('Unknown postfix operator');
+    }
+    case 'func': {
+      const v = calcEvaluate(node.arg, ctx);
+      const toRad   = x => ctx.angleMode === 'deg' ? x * Math.PI / 180 : x;
+      const fromRad = x => ctx.angleMode === 'deg' ? x * 180 / Math.PI : x;
+      switch (node.name) {
+        case 'sin':  return Math.sin(toRad(v));
+        case 'cos':  return Math.cos(toRad(v));
+        case 'tan':  return Math.tan(toRad(v));
+        case 'asin': if (v < -1 || v > 1) throw new Error('sin⁻¹ needs a value between -1 and 1'); return fromRad(Math.asin(v));
+        case 'acos': if (v < -1 || v > 1) throw new Error('cos⁻¹ needs a value between -1 and 1'); return fromRad(Math.acos(v));
+        case 'atan': return fromRad(Math.atan(v));
+        case 'log':  if (v <= 0) throw new Error('log needs a positive number'); return Math.log10(v);
+        case 'ln':   if (v <= 0) throw new Error('ln needs a positive number');  return Math.log(v);
+        case 'sqrt': if (v < 0)  throw new Error('√ needs a non-negative number'); return Math.sqrt(v);
+        case 'exp':  return Math.exp(v);
+        default: throw new Error('Unknown function ' + node.name);
+      }
+    }
+    case 'bin': {
+      const l = calcEvaluate(node.left, ctx);
+      const r = calcEvaluate(node.right, ctx);
+      switch (node.op) {
+        case '+': return l + r;
+        case '-': return l - r;
+        case '*': return l * r;
+        case '/': if (r === 0) throw new Error('Division by zero'); return l / r;
+        case '^': return Math.pow(l, r);
+        case 'nCr': return calcCombinations(l, r);
+        case 'nPr': return calcPermutations(l, r);
+        default: throw new Error('Unknown operator ' + node.op);
+      }
+    }
+    default: throw new Error('Unknown expression');
+  }
+}
+
+// Appends as many ')' as needed to balance any '(' left open — so
+// pressing "=" right after "√(9" (without a manually-typed closing
+// paren) still evaluates, the same forgiving behavior most on-screen
+// calculators give their function keys.
+function calcAutoClose(str) {
+  let depth = 0;
+  for (const c of str) { if (c === '(') depth++; else if (c === ')') depth--; }
+  return str + ')'.repeat(Math.max(0, depth));
+}
+
+function calcEvaluateString(str, ctx) {
+  if (!String(str).trim()) throw new Error('Enter an expression first');
+  const value = calcEvaluate(calcParse(calcTokenize(calcAutoClose(str))), ctx);
+  if (!isFinite(value)) throw new Error('Result is not a finite number');
+  return value;
+}
+
+// Rounds a result to 10 significant figures (trimming trailing zeros)
+// for display/chaining, switching to exponential notation outside a
+// reasonable magnitude range rather than printing a wall of digits.
+function formatCalcNumber(v) {
+  if (!isFinite(v)) return 'Error';
+  if (Object.is(v, -0)) v = 0;
+  if (v !== 0 && (Math.abs(v) >= 1e15 || Math.abs(v) < 1e-9)) {
+    return v.toExponential(8).replace(/\.?0+e/, 'e');
+  }
+  let s = v.toPrecision(10);
+  if (s.includes('e')) return s;
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  return s;
+}
+
+// Toggles the sign of whichever number is at the end of the expression
+// (wrapping it as "-(5)"/un-wrapping "-(5)" back to "5") so "±" behaves
+// like a real calculator's sign-change key instead of just prepending a
+// minus that would otherwise read as subtraction. Falls back to
+// starting a new negative number when nothing numeric trails the
+// cursor yet.
+function keypadNegate(expr) {
+  let m = expr.match(/-\((\d+\.?\d*(?:[eE][+-]?\d+)?)\)$/);
+  if (m) return expr.slice(0, m.index) + m[1];
+  m = expr.match(/(\d+\.?\d*(?:[eE][+-]?\d+)?)$/);
+  if (m) return expr.slice(0, m.index) + '-(' + m[0] + ')';
+  return expr + '-';
+}
+
+// Page template for calculators with inputLayout: 'keypad' (the
+// Scientific & Statistics Calculator) — a live interactive keypad
+// instead of the standard inputs-grid + Calculate + results table.
+// Two tabs: "Scientific" (the expression builder/evaluator above,
+// driven entirely by closures in this function) and "Statistics" (the
+// data-list tab, which reuses the ordinary renderGrid()/readInputs()/
+// showResults() pipeline every other calculator uses via calc.inputs/
+// calc.calculate from calculators.js — so that half of the page
+// behaves exactly like a normal calculator).
+function renderKeypadCalculator(calc) {
+  const notation = NOTATION[calc.id] || [];
+  const notationHtml = notation.map(n => `
+    <div class="notation-row">
+      <div class="notation-symbol">${tryKatex(n.symbol, false)}</div>
+      <div class="notation-meaning">${esc(n.meaning)}</div>
+    </div>
+  `).join('');
+
+  const formulasHtml = calc.formulas.map(f => `
+    <div>
+      <div class="formula-row-label">${esc(f.label)}</div>
+      <div class="formula-katex">${tryKatex(f.latex, true)}</div>
+    </div>
+  `).join('');
+
+  view().innerHTML = `
+    <div class="page-breadcrumb">
+      <a href="#calculators">Calculators</a>
+      <span class="page-crumb-sep">›</span>
+      <a href="#calculators" data-expand-cat="${esc(calc.category)}" data-expand-target="home">${esc(calc.category)}</a>
+      <span class="page-crumb-sep">›</span>
+      <span class="page-crumb-current">${esc(calc.name)}</span>
+    </div>
+    <h1 class="calc-title">${esc(calc.name)}</h1>
+    <p class="calc-desc">${esc(calc.description)}</p>
+
+    <div class="hub-toggle keypad-tabs">
+      <button type="button" class="hub-toggle-link keypad-tab active" data-mode="sci">Scientific</button>
+      <button type="button" class="hub-toggle-link keypad-tab" data-mode="stat">Statistics</button>
+    </div>
+
+    <div id="keypad-sci-panel" class="inputs-block"></div>
+    <div id="keypad-stat-panel" class="inputs-block" hidden>
+      <div class="block-label">Inputs</div>
+      ${renderGrid(calc)}
+      <div class="calc-actions">
+        <button class="calc-btn" id="keypad-stat-btn">Calculate</button>
+        <button class="reset-btn" id="keypad-stat-reset" type="button">Reset</button>
+      </div>
+      <div id="results-wrap"></div>
+    </div>
+
+    <div class="formula-block">
+      <div class="block-label">Formula</div>
+      <div class="formula-list">${formulasHtml}</div>
+    </div>
+
+    ${notation.length ? `
+    <div class="notation-block">
+      <div class="block-label">Notation</div>
+      <div class="notation-list">${notationHtml}</div>
+    </div>` : ''}
+  `;
+  document.getElementById('main').scrollTop = 0;
+
+  // ── Scientific tab: all state lives in these closures — route()
+  // rebuilds the whole page from scratch on navigation anyway, so
+  // there's nothing to persist beyond this visit. ───────────────────
+  let expr = '';
+  let angleMode = 'deg';
+  let memory = 0;
+  let ans = 0;
+  let secondActive = false;
+
+  // Button layout as explicit {row, col, rowSpan, colSpan} placements
+  // (rather than relying on grid auto-placement) so the big "=" key
+  // can span 2 rows × 2 cols without pulling its neighbors out of
+  // place — see the CSS grid-column/grid-row set per button below.
+  function buttonSpecs() {
+    const trig = secondActive
+      ? [{ label: 'sin⁻¹', value: 'asin(', title: 'Inverse sine' }, { label: 'cos⁻¹', value: 'acos(', title: 'Inverse cosine' }, { label: 'tan⁻¹', value: 'atan(', title: 'Inverse tangent' }]
+      : [{ label: 'sin', value: 'sin(', title: 'Sine' }, { label: 'cos', value: 'cos(', title: 'Cosine' }, { label: 'tan', value: 'tan(', title: 'Tangent' }];
+
+    return [
+      { r: 1, c: 1, label: '2nd', action: 'toggle2nd', cls: 'keypad-toggle' + (secondActive ? ' active-toggle' : ''), title: 'Inverse trig (sin⁻¹/cos⁻¹/tan⁻¹)' },
+      { r: 1, c: 2, label: angleMode.toUpperCase(), action: 'toggleAngle', cls: 'keypad-toggle', title: 'Switch angle unit (degrees/radians)' },
+      { r: 1, c: 3, label: 'MC', action: 'memClear',  cls: 'keypad-mem', title: 'Memory clear' },
+      { r: 1, c: 4, label: 'MR', action: 'insert', value: 'M', cls: 'keypad-mem', title: 'Memory recall' },
+      { r: 1, c: 5, label: 'M+', action: 'memAdd',   cls: 'keypad-mem', title: 'Add displayed value to memory' },
+      { r: 1, c: 6, label: 'M-', action: 'memSub',   cls: 'keypad-mem', title: 'Subtract displayed value from memory' },
+
+      { r: 2, c: 1, label: 'x²',  action: 'insert', value: '²',  cls: 'keypad-fn', title: 'Square' },
+      { r: 2, c: 2, label: 'x^y', action: 'insert', value: '^',  cls: 'keypad-fn', title: 'Raise to a power' },
+      { r: 2, c: 3, label: '√',   action: 'insert', value: '√(', cls: 'keypad-fn', title: 'Square root' },
+      { r: 2, c: 4, label: 'n!',  action: 'insert', value: '!',  cls: 'keypad-fn', title: 'Factorial' },
+      { r: 2, c: 5, label: '1/x', action: 'insert', value: '1/(', cls: 'keypad-fn', title: 'Reciprocal' },
+      { r: 2, c: 6, label: '%',   action: 'insert', value: '%',  cls: 'keypad-fn', title: 'Percent (÷100)' },
+
+      { r: 3, c: 1, action: 'insert', cls: 'keypad-fn', ...trig[0] },
+      { r: 3, c: 2, action: 'insert', cls: 'keypad-fn', ...trig[1] },
+      { r: 3, c: 3, action: 'insert', cls: 'keypad-fn', ...trig[2] },
+      { r: 3, c: 4, label: 'log', action: 'insert', value: 'log(', cls: 'keypad-fn', title: 'Base-10 logarithm' },
+      { r: 3, c: 5, label: 'ln',  action: 'insert', value: 'ln(',  cls: 'keypad-fn', title: 'Natural logarithm' },
+      { r: 3, c: 6, label: 'π',   action: 'insert', value: 'π',    cls: 'keypad-fn', title: 'Pi' },
+
+      { r: 4, c: 1, label: '(',   action: 'insert', value: '(', cls: 'keypad-fn' },
+      { r: 4, c: 2, label: ')',   action: 'insert', value: ')', cls: 'keypad-fn' },
+      { r: 4, c: 3, label: 'nCr', action: 'insert', value: ' nCr ', cls: 'keypad-fn', title: 'Combinations' },
+      { r: 4, c: 4, label: 'nPr', action: 'insert', value: ' nPr ', cls: 'keypad-fn', title: 'Permutations' },
+      { r: 4, c: 5, label: 'EXP', action: 'insert', value: 'e', cls: 'keypad-fn', title: 'Scientific-notation exponent (e.g. 2.5e8)' },
+      { r: 4, c: 6, label: 'e',   action: 'insert', value: 'e', cls: 'keypad-fn', title: "Euler's number" },
+
+      { r: 5, c: 1, label: '7', action: 'insert', value: '7', cls: 'keypad-num' },
+      { r: 5, c: 2, label: '8', action: 'insert', value: '8', cls: 'keypad-num' },
+      { r: 5, c: 3, label: '9', action: 'insert', value: '9', cls: 'keypad-num' },
+      { r: 5, c: 4, label: '÷', action: 'insert', value: '÷', cls: 'keypad-op' },
+      { r: 5, c: 5, label: 'AC', action: 'clear', cls: 'keypad-fn', title: 'All clear' },
+      { r: 5, c: 6, label: '⌫', action: 'back',  cls: 'keypad-fn', title: 'Backspace' },
+
+      { r: 6, c: 1, label: '4', action: 'insert', value: '4', cls: 'keypad-num' },
+      { r: 6, c: 2, label: '5', action: 'insert', value: '5', cls: 'keypad-num' },
+      { r: 6, c: 3, label: '6', action: 'insert', value: '6', cls: 'keypad-num' },
+      { r: 6, c: 4, label: '×', action: 'insert', value: '×', cls: 'keypad-op' },
+      { r: 6, c: 5, label: 'Ans', action: 'insert', value: 'Ans', cls: 'keypad-fn', title: 'Recall last answer' },
+      { r: 6, c: 6, label: '±', action: 'negate', cls: 'keypad-fn', title: 'Change sign' },
+
+      { r: 7, c: 1, label: '1', action: 'insert', value: '1', cls: 'keypad-num' },
+      { r: 7, c: 2, label: '2', action: 'insert', value: '2', cls: 'keypad-num' },
+      { r: 7, c: 3, label: '3', action: 'insert', value: '3', cls: 'keypad-num' },
+      { r: 7, c: 4, label: '−', action: 'insert', value: '−', cls: 'keypad-op' },
+      { r: 7, c: 5, rs: 2, cs: 2, label: '=', action: 'equals', cls: 'keypad-equals' },
+
+      { r: 8, c: 1, cs: 2, label: '0', action: 'insert', value: '0', cls: 'keypad-num' },
+      { r: 8, c: 3, label: '.', action: 'insert', value: '.', cls: 'keypad-num' },
+      { r: 8, c: 4, label: '+', action: 'insert', value: '+', cls: 'keypad-op' },
+    ];
+  }
+
+  function updateDisplay() {
+    document.getElementById('keypad-display').textContent = expr || '0';
+    const bits = [angleMode.toUpperCase()];
+    if (memory !== 0) bits.push('M');
+    document.getElementById('keypad-status').textContent = bits.join('   ');
+  }
+
+  function showKeypadError(msg) {
+    document.getElementById('keypad-error').textContent = msg || '';
+  }
+
+  function handleKeypadAction(action, value) {
+    showKeypadError('');
+    const evalCtx = () => ({ angleMode, ans, mem: memory });
+    switch (action) {
+      case 'insert': expr += value; break;
+      case 'clear':  expr = ''; break;
+      case 'back':   expr = expr.slice(0, -1); break;
+      case 'negate': expr = keypadNegate(expr); break;
+      case 'toggle2nd':   secondActive = !secondActive; renderSciPanel(); return;
+      case 'toggleAngle': angleMode = angleMode === 'deg' ? 'rad' : 'deg'; renderSciPanel(); return;
+      case 'memClear': memory = 0; break;
+      case 'memAdd': case 'memSub': {
+        try {
+          const v = expr.trim() ? calcEvaluateString(expr, evalCtx()) : ans;
+          memory += action === 'memAdd' ? v : -v;
+          ans = v;
+          expr = formatCalcNumber(v);
+        } catch (e) { showKeypadError(e.message); return; }
+        break;
+      }
+      case 'equals': {
+        try {
+          const v = calcEvaluateString(expr, evalCtx());
+          ans = v;
+          expr = formatCalcNumber(v);
+        } catch (e) { showKeypadError(e.message); return; }
+        break;
+      }
+    }
+    updateDisplay();
+  }
+
+  function renderSciPanel() {
+    const gridHtml = buttonSpecs().map(b => `
+      <button type="button" class="keypad-btn ${b.cls}" data-action="${b.action}"
+        ${b.value != null ? `data-value="${escAttr(b.value)}"` : ''}
+        ${b.title ? `title="${escAttr(b.title)}"` : ''}
+        style="grid-column: ${b.c} / span ${b.cs || 1}; grid-row: ${b.r} / span ${b.rs || 1};">${esc(b.label)}</button>
+    `).join('');
+
+    document.getElementById('keypad-sci-panel').innerHTML = `
+      <div class="block-label">Scientific Calculator</div>
+      <div class="keypad-display-sub" id="keypad-status"></div>
+      <div class="keypad-display" id="keypad-display"></div>
+      <div class="keypad-error" id="keypad-error"></div>
+      <div class="keypad-grid">${gridHtml}</div>
+    `;
+    updateDisplay();
+    document.querySelectorAll('#keypad-sci-panel .keypad-btn').forEach(btn => {
+      btn.addEventListener('click', () => handleKeypadAction(btn.dataset.action, btn.dataset.value));
+    });
+  }
+
+  renderSciPanel();
+
+  // ── Statistics tab: an ordinary calculator embedded in the page —
+  // same renderGrid()/readInputs()/showResults() pipeline every other
+  // calculator uses, just mounted inside this custom template instead
+  // of renderCalculator()'s standard one. ───────────────────────────
+  function runStats() {
+    showResults(calc.calculate(readInputs(calc)), calc.id);
+  }
+  document.getElementById('keypad-stat-btn').addEventListener('click', runStats);
+  document.getElementById('keypad-stat-reset').addEventListener('click', () => {
+    zeroInputs(calc);
+    runStats();
+  });
+  runStats();
+
+  // ── Tab switching ──────────────────────────────────────────────
+  document.querySelectorAll('.keypad-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.keypad-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const isSci = tab.dataset.mode === 'sci';
+      document.getElementById('keypad-sci-panel').hidden = !isSci;
+      document.getElementById('keypad-stat-panel').hidden = isSci;
+    });
+  });
 }
 
 function render2x2(calc) {
