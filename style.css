@@ -2590,6 +2590,8 @@ body {
   cursor: pointer;
 }
 
+.keypad-hint { margin: 2px 0 12px; }
+
 .keypad-display-sub {
   min-height: 15px;
   font-family: var(--font-mono);

@@ -1993,11 +1993,13 @@ function renderInputField(inp) {
                value="${esc(String(inp.default))}"${inp.placeholder ? ` placeholder="${esc(inp.placeholder)}"` : ''} autocomplete="off" spellcheck="false">
       </div>`;
   }
+  const numHint = inp.note ? `<p class="input-hint">${esc(inp.note)}</p>` : '';
   return `
     <div class="input-field"${fieldId}>
       <label class="input-label" for="inp-${inp.id}">${esc(inp.label)}</label>
       <input class="input-el" type="number" id="inp-${inp.id}"
              data-id="${inp.id}" value="${inp.default}" step="any">
+      ${numHint}
     </div>`;
 }
 
@@ -2582,6 +2584,7 @@ function renderKeypadCalculator(calc) {
 
     document.getElementById('keypad-sci-panel').innerHTML = `
       <div class="block-label">Scientific Calculator</div>
+      <p class="input-hint keypad-hint">Click the buttons below, or just type on your keyboard (digits, + − × ÷, Enter for =, Backspace, Esc to clear). nCr and nPr work here too as typed expressions, e.g. "5 nCr 2".</p>
       <div class="keypad-display-sub" id="keypad-status"></div>
       <div class="keypad-display" id="keypad-display"></div>
       <div class="keypad-error" id="keypad-error"></div>

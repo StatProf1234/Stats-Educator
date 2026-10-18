@@ -12707,8 +12707,10 @@ const CALCULATORS = [
     // on this site.
     inputs: [
       { id: 'data',    type: 'textarea', label: 'Data values (comma, space, or newline separated)', default: '4, 8, 6, 5, 3, 7, 9, 5, 6, 4' },
-      { id: 'comboN',  label: 'Combinatorics — n (total items)', default: 10 },
-      { id: 'comboR',  label: 'Combinatorics — r (items chosen) — leave blank for just n!', default: 2 },
+      { id: 'comboN',  label: 'Combinatorics — n (total items)', default: 10,
+        note: 'A separate calculation from the data list above — enter n alone for n! (factorial), or add r below to also get nCr and nPr.' },
+      { id: 'comboR',  label: 'Combinatorics — r (items chosen)', default: 2,
+        note: 'Optional — leave blank to compute just n!. Must be a whole number from 0 to n.' },
     ],
 
     example({ data, comboN, comboR }) {
