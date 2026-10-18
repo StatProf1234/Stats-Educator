@@ -9932,6 +9932,114 @@ const CALCULATORS = [
     }
   },
 
+  /* ── 72b. STANDARDIZED INCIDENCE RATIO (SIR) ─────────────────────────────
+     Indirect standardization: compares a study population's observed
+     event count against the count 'expected' if it had experienced a
+     reference population's (e.g. national registry) stratum-specific
+     rates, given its own stratum-specific person-time — the classic
+     occupational/environmental-cohort tool ("are these workers getting
+     more/fewer cancers than the general population, once we account for
+     their age mix?"). Expected counts (E_i) are taken as already
+     computed from those external reference rates — reproducing a full
+     reference life table isn't in scope here. Multiple strata are
+     optional: a single stratum of overall O vs. overall E works fine
+     when standardization already happened upstream. Exact Poisson CI
+     and test per poissonExactCI()/poissonExactTwoSidedP() above —
+     same method used for the Standardized Mortality Ratio (SMR), just
+     with incident cases instead of deaths.                            */
+  {
+    id:          'sir',
+    name:        'Standardized Incidence Ratio (SIR)',
+    hint:        'SIR = ΣO / ΣE, exact Poisson CI',
+    category:    'Epidemiology & Risk',
+    description: 'Compares a study population\'s observed event count against the count expected from a reference population\'s rates (indirect standardization), with an exact Poisson confidence interval — the same method used for a Standardized Mortality Ratio (SMR).',
+
+    formulas: [
+      {
+        label: 'Standardized Incidence Ratio',
+        latex: 'SIR = \\dfrac{O}{E}, \\quad O=\\textstyle\\sum_i O_i,\\ E=\\sum_i E_i'
+      },
+      {
+        label: 'Exact 95% Poisson CI',
+        latex: 'CI = \\left[\\dfrac{\\chi^2_{\\alpha/2,\\,2O}}{2E},\\ \\dfrac{\\chi^2_{1-\\alpha/2,\\,2(O+1)}}{2E}\\right]'
+      }
+    ],
+
+    inputLayout: 'groups',
+    groupTerm: 'Stratum',
+    groupFields: [
+      { prefix: 'O', label: 'Observed (O)' },
+      { prefix: 'E', label: 'Expected (E)' },
+    ],
+    groupMax: 10,
+    inputs: strataInputsOE([
+      { O: 18, E: 11.4 },
+    ], 10),
+
+    example(values) {
+      const { strata, error } = gatherStrataOE(values, 10);
+      if (error || strata.length < 1 || strata.some(s => s.O < 0 || s.E <= 0))
+        return 'Enter Observed and Expected counts for at least 1 stratum (Expected greater than 0) to see a worked medical example here.';
+      const O = strata.reduce((s, x) => s + x.O, 0);
+      const E = strata.reduce((s, x) => s + x.E, 0);
+      const sir = O / E;
+      const [lo, hi] = poissonExactCI(O, E);
+      const f = (v, dp = 2) => +v.toFixed(dp);
+      const verdict = lo > 1 ? 'significantly more cases than expected' : hi < 1 ? 'significantly fewer cases than expected' : 'not significantly different from the reference population';
+      return `An occupational cohort of solvent-exposed workers develops ${O} cases of a cancer over follow-up; applying age-specific national registry rates to this cohort's own age-specific person-time predicts ${f(E)} cases would occur if these workers had the general population's risk. SIR = ${f(sir)} (95% CI ${f(lo)}–${f(hi)}) — ${verdict}, after accounting for the age mix of the cohort.`;
+    },
+
+    calculate(values) {
+      const { strata, error } = gatherStrataOE(values, 10);
+      if (error) return [err(error)];
+      if (strata.length < 1) return [err('Enter Observed and Expected counts for at least 1 stratum')];
+      if (strata.some(s => s.O < 0)) return [err('Observed counts must be zero or greater')];
+      if (strata.some(s => !isFinite(s.O) || s.O !== Math.round(s.O))) return [err('Observed counts must be whole numbers')];
+      if (strata.some(s => s.E <= 0)) return [err('Expected counts must be greater than 0')];
+
+      const O = strata.reduce((s, x) => s + x.O, 0);
+      const E = strata.reduce((s, x) => s + x.E, 0);
+      const sir = O / E;
+      const [lo, hi] = poissonExactCI(O, E);
+      const pValue = poissonExactTwoSidedP(O, E);
+
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+
+      const rows = [];
+
+      if (strata.length > 1) {
+        strata.forEach(s => {
+          const [sLo, sHi] = poissonExactCI(s.O, s.E);
+          rows.push({ label: `${s.label} — SIR (O=${s.O}, E=${f(s.E, 2)})`, value: f(s.O / s.E), ci: [f(sLo), f(sHi)], isRatio: true });
+        });
+      }
+
+      rows.push({ label: 'Total Observed (O)', value: O, ci: null, isRatio: false });
+      rows.push({ label: 'Total Expected (E)', value: f(E, 2), ci: null, isRatio: false });
+      rows.push({ label: 'Standardized Incidence Ratio (SIR)', value: f(sir), ci: [f(lo), f(hi)], isRatio: true, highlight: true });
+      rows.push({ label: 'Exact Two-Sided p-value (H₀: SIR = 1)', value: formatPValue(pValue), ci: null, isRatio: false, highlight: pValue < 0.05 });
+
+      const verdict = lo > 1
+        ? `significantly more events (${O}) than the ${f(E, 1)} expected from the reference population's rates`
+        : hi < 1
+          ? `significantly fewer events (${O}) than the ${f(E, 1)} expected from the reference population's rates`
+          : `not significantly different from the ${f(E, 1)} events expected from the reference population's rates`;
+      rows.push({
+        label: 'Interpretation', isText: true, ci: null, isRatio: false,
+        value: `This population experienced ${verdict} (SIR = ${f(sir)}, 95% CI ${f(lo)}–${f(hi)}). SIR > 1 means more cases occurred than the reference rates predict; SIR < 1 means fewer. As with any indirectly standardized ratio, SIRs from two different study populations should not be compared directly to each other — each is standardized against the same reference population, not against each other's age/sex mix, so comparing two SIRs can itself be confounded by their differing stratum compositions.`
+      });
+
+      if (strata.length > 1) {
+        rows.push({
+          label: 'Method', isText: true, ci: null, isRatio: false,
+          value: `Each stratum's Expected count (E) should already reflect that stratum's person-time multiplied by the reference population's rate for that stratum (e.g. a specific age band) — this calculator sums the Observed and Expected counts you enter across all ${strata.length} strata and reports one pooled SIR, rather than recomputing expected counts from raw reference rates itself.`
+        });
+      }
+
+      return rows;
+    }
+  },
+
   /* ── 73. IPW & ATE ──────────────────────────────────────────────────────
      Inverse probability weighting and average treatment effect, from
      per-subject (treatment, outcome, propensity score) data — the
@@ -16622,6 +16730,72 @@ function gatherStrata2x2(values, maxStrata = 10) {
   return { strata };
 }
 
+// Generates O{i}/E{i} input fields for i = 1..maxStrata — the 'groups'
+// input layout's column-per-stratum shape, with observed/expected event
+// counts as the field set. Used by the Standardized Incidence Ratio
+// calculator; a single filled-in stratum works fine as a plain
+// overall-O-vs-overall-E entry, since indirect standardization has
+// already happened upstream (E_i = reference rate × stratum person-time)
+// wherever the user got their expected counts from.
+function strataInputsOE(defaults, maxStrata = 10) {
+  const inputs = [];
+  for (let i = 1; i <= maxStrata; i++) {
+    const s = defaults[i - 1] || { O: '', E: '' };
+    inputs.push({ id: `O${i}`, label: `Stratum ${i} — Observed (O)`, default: s.O });
+    inputs.push({ id: `E${i}`, label: `Stratum ${i} — Expected (E)`, default: s.E });
+  }
+  return inputs;
+}
+
+// Reads O{i}/E{i} for i = 1..maxStrata into per-stratum observed/expected
+// pairs, returning only the fully-filled-in strata — same
+// some-but-not-all-fields-is-an-error convention as gatherStrata2x2().
+function gatherStrataOE(values, maxStrata = 10) {
+  const provided = v => v !== '' && v != null && isFinite(v);
+  const strata = [];
+  for (let i = 1; i <= maxStrata; i++) {
+    const O = values['O' + i], E = values['E' + i];
+    const any = provided(O) || provided(E);
+    const all = provided(O) && provided(E);
+    if (all) {
+      strata.push({ label: `Stratum ${i}`, O, E });
+    } else if (any) {
+      return { error: `Stratum ${i}: enter both Observed and Expected, or leave both blank` };
+    }
+  }
+  return { strata };
+}
+
+// Exact Poisson 95% CI for a standardized ratio O/E (indirect
+// standardization), via the standard chi-square relationship (Ulm,
+// 1990 / Breslow & Day, 1987, Vol. II §2.4): with O observed events and
+// E expected events under the reference-population rates,
+//   CI = [ χ²_{α/2, 2O} / (2E),  χ²_{1−α/2, 2(O+1)} / (2E) ]
+// χ²_{p,0} = 0 by convention, so O = 0 gives a lower bound of exactly 0
+// with no special-casing needed.
+function poissonExactCI(O, E, alpha = 0.05) {
+  const lo = jStat.chisquare.inv(alpha / 2, 2 * O) / (2 * E);
+  const hi = jStat.chisquare.inv(1 - alpha / 2, 2 * (O + 1)) / (2 * E);
+  return [lo, hi];
+}
+
+// Exact two-sided Poisson test of an observed count O against an
+// expected count E (i.e. H0: the true SIR is 1) — doubles the smaller
+// one-sided exact tail probability, P(X≤O) or P(X≥O) under Poisson(E).
+// Deliberately the tail-probability definition (not the
+// relative-likelihood "minlike" method the Binomial Hypothesis Test
+// calculator uses) because it's the dual of poissonExactCI() above:
+// the same equal-tailed construction underlies both, so this p-value
+// and that CI always agree on significance (p < α exactly when the CI
+// excludes 1) — unlike minlike p-values, which can disagree with an
+// equal-tailed CI shown alongside them.
+function poissonExactTwoSidedP(O, E) {
+  if (E <= 0) return NaN;
+  const lowerTail = jStat.poisson.cdf(O, E);
+  const upperTail = O === 0 ? 1 : 1 - jStat.poisson.cdf(O - 1, E);
+  return Math.min(1, 2 * Math.min(lowerTail, upperTail));
+}
+
 // Core Mantel-Haenszel computation shared by the calculate() and
 // example() functions of the Mantel-Haenszel Stratified 2×2 Analysis
 // calculator — pooled OR/RR, their variances (Robins-Breslow-Greenland
@@ -19873,6 +20047,7 @@ const CALCULATOR_INDEX = [
   { id: 'attributable-fraction',   name: 'Attributable Fraction (AFe & PAF)', category: 'Epidemiology & Risk',   description: 'Estimates the fraction of disease attributable to the exposure, both among the exposed (AFe) and across the whole population (Population Attributable Fraction, PAF).',     status: 'available' },
   { id: 'par',                     name: 'Population Attributable Risk', category: 'Epidemiology & Risk',         description: 'Quantifies how much of the disease burden would be eliminated by removing the exposure.',      status: 'available' },
   { id: 'incidence-rate',          name: 'Incidence Rate & Rate Ratio',  category: 'Epidemiology & Risk',         description: 'Calculates incidence rates, rate ratio, and their confidence intervals from person-time data.', status: 'available' },
+  { id: 'sir',                     name: 'Standardized Incidence Ratio (SIR)', category: 'Epidemiology & Risk',   description: 'Compares observed events against the count expected from a reference population\'s rates (indirect standardization), with an exact Poisson CI — the same method used for a Standardized Mortality Ratio (SMR).', status: 'available' },
   { id: 'ipw-ate',                 name: 'IPW & ATE',                    category: 'Epidemiology & Risk',         description: 'Inverse probability weighting and average treatment effect for observational studies.',        status: 'available' },
   { id: 'assoc-pred-intervals',    name: 'Measures of Association — Prediction Intervals', category: 'Epidemiology & Risk', description: 'Extends OR and RR estimates with prediction intervals for future studies.',        status: 'available' },
   { id: 'interaction-test',        name: 'Test for Interaction Between Two Effects', category: 'Epidemiology & Risk', description: 'Tests whether two subgroup effect estimates (RR, OR, HR, or a mean difference) differ significantly from each other.', status: 'available' },
@@ -20455,8 +20630,9 @@ const WIZARD_TREE = {
   rateGoal: {
     question: 'What do you want to compute?',
     options: [
-      { label: 'The standard error of a single rate', next: 'seRateResult' },
-      { label: 'Compare two rates (rate ratio)',       next: 'rateRatioResult' },
+      { label: 'The standard error of a single rate',    next: 'seRateResult' },
+      { label: 'Compare two rates (rate ratio)',          next: 'rateRatioResult' },
+      { label: "Compare my group's events to what a reference population's rates would predict", next: 'sirResult' },
     ]
   },
   seRateResult: { results: [ { id: 'se-rate', why: 'Standard error of a single incidence rate from events and person-time.' } ] },
@@ -20466,6 +20642,7 @@ const WIZARD_TREE = {
       { id: 'se-rate-ratio',  why: 'Just the standard error and CI of the rate ratio, if you already have the rates.' },
     ]
   },
+  sirResult: { results: [ { id: 'sir', why: 'Standardized Incidence Ratio — observed events vs. the count expected from a reference population\'s rates, with an exact Poisson CI.' } ] },
 
   attribGoal: {
     question: 'Do you want the fraction of disease attributable to the exposure, or the absolute burden?',
@@ -21107,6 +21284,7 @@ const SEARCH_KEYWORDS = {
   'phi-coefficient': ['phi coefficient', 'effect size for a 2x2 table', 'case-control study'],
   'cohens-kappa':    ["cohen's kappa", 'inter-rater agreement', 'agreement between two raters categorical', 'unordered categories'],
   'weighted-kappa':  ['weighted kappa', 'ordinal agreement between raters', 'agreement ordered categories'],
+  'fleiss-kappa':    ["fleiss' kappa", "fleiss kappa", 'inter-rater agreement three or more raters', 'multiple raters categorical', 'agreement among several raters', 'unordered categories'],
   'icc':             ['intraclass correlation coefficient', 'reliability across three or more raters', 'icc(1,1)', 'icc(2,1)', 'icc(3,1)', 'one-way random', 'two-way random', 'two-way mixed', 'absolute agreement', 'consistency', 'average measures'],
   'bland-altman':    ['bland-altman plot', 'limits of agreement', 'compare two measurement methods', 'agreement between two continuous methods'],
   'eta-squared':     ['eta squared', 'anova effect size'],
@@ -21144,6 +21322,7 @@ const SEARCH_KEYWORDS = {
   'attributable-fraction':   ['attributable fraction', 'fraction of disease due to exposure', 'cohort study'],
   'par':                     ['population attributable risk', 'absolute disease burden', 'cohort study'],
   'incidence-rate':          ['incidence rate', 'rate ratio', 'person-time data', 'cohort study'],
+  'sir':                     ['standardized incidence ratio', 'smr', 'standardized mortality ratio', 'indirect standardization', 'observed vs expected events', 'observed vs expected cases', 'o/e ratio', 'occupational cohort', 'reference population rates', 'age-adjusted ratio'],
   'ipw-ate':                 ['inverse probability weighting', 'propensity score', 'average treatment effect', 'adjust for confounding', 'cohort study'],
   'assoc-pred-intervals':    ['prediction interval for odds ratio', 'pool multiple studies or rr'],
   'interaction-test':        ['interaction test', 'subgroup analysis', 'effect modification', 'compare two subgroups', 'test for interaction', 'table 2 fallacy'],
@@ -21938,6 +22117,17 @@ const NOTATION = {
     { symbol: 'R_i', meaning: 'Total number of cases Rater 1 assigned to category i (row total).' },
     { symbol: 'C_j', meaning: 'Total number of cases Rater 2 assigned to category j (column total).' },
   ],
+  'fleiss-kappa': [
+    { symbol: 'N', meaning: 'Number of subjects (e.g. radiographs) being rated.' },
+    { symbol: 'n', meaning: 'Number of raters who classify each subject.' },
+    { symbol: 'k', meaning: 'Number of unordered categories raters can choose among.' },
+    { symbol: 'n_{ij}', meaning: 'Number of raters who assigned subject i to category j.' },
+    { symbol: 'p_j', meaning: 'Overall proportion of all ratings (across all subjects and raters) that fell into category j.' },
+    { symbol: '\\bar{P}', meaning: 'Mean observed agreement — the average, across subjects, of the proportion of rater pairs that agreed on that subject.' },
+    { symbol: '\\bar{P}_e', meaning: 'Mean expected agreement — the agreement predicted by chance alone, based on how often each category was used overall.' },
+    { symbol: '\\kappa', meaning: "Fleiss' kappa — chance-corrected agreement across all raters at once." },
+    { symbol: 'SE(\\kappa)', meaning: 'Large-sample standard error of kappa (Fleiss, Levin & Paik, 2003), used to build its confidence interval and test it against zero.' },
+  ],
   'icc': [
     { symbol: 'MS_B', meaning: 'Mean square between subjects — average variability in scores from one subject to another.' },
     { symbol: 'SS_B', meaning: 'Sum of squares between subjects, before dividing by its degrees of freedom.' },
@@ -22230,6 +22420,14 @@ const NOTATION = {
     { symbol: 'D_1, PT_1', meaning: "Group 1's event count and person-time." },
     { symbol: 'D_2, PT_2', meaning: "Group 2's event count and person-time." },
     { symbol: 'IRR', meaning: "Incidence rate ratio — Group 1's rate divided by Group 2's rate." },
+  ],
+  'sir': [
+    { symbol: 'O_i', meaning: 'Observed number of events in stratum i (e.g. an age band) of the study population.' },
+    { symbol: 'E_i', meaning: "Expected number of events in stratum i — that stratum's person-time multiplied by the reference population's rate for that stratum." },
+    { symbol: 'O', meaning: 'Total observed events, summed across all strata.' },
+    { symbol: 'E', meaning: 'Total expected events, summed across all strata.' },
+    { symbol: 'SIR', meaning: 'Standardized Incidence Ratio — observed events divided by expected events; 1.0 means the study population matches the reference population exactly.' },
+    { symbol: '\\chi^2_{p,\\,df}', meaning: 'The chi-square distribution\'s inverse CDF at cumulative probability p with df degrees of freedom, used to derive the exact Poisson confidence interval for O/E.' },
   ],
   'ipw-ate': [
     { symbol: 'T_i', meaning: "Subject i's treatment status (1 if treated, 0 if untreated)." },
