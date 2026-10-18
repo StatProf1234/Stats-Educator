@@ -12665,15 +12665,20 @@ const CALCULATORS = [
      the whole page off to its own renderer in app.js (renderKeypadCalculator,
      same handoff pattern as inputLayout: 'explorer') — the live button-
      by-button expression builder and evaluator is page BEHAVIOR, so it
-     lives in app.js per this file's own documented split; only the
-     Statistics-tab's calculate() (plain data-list → summary stats,
-     identical in shape to every other calculator here) lives below.    */
+     lives in app.js per this file's own documented split. The
+     Statistics tab below, though, is an ordinary calc.calculate() like
+     every other calculator here — n/r Combinatorics fields with their
+     own nCr/nPr/n! result rows, not just something you have to already
+     know to type into the keypad as "5 nCr 2" and read off the single
+     display line (the Scientific tab's keypad still accepts that too,
+     for anyone who prefers it one-line, but this is the discoverable,
+     every-other-calculator-on-this-site version).                     */
   {
     id:          'scientific-calculator',
     name:        'Scientific & Statistics Calculator',
     hint:        'sin cos tan · log ln √ · x² x^y · nCr nPr n! · x̄ s σ',
     category:    'Descriptive Statistics',
-    description: 'A combined scientific calculator (trigonometric, logarithmic, exponential, and memory functions, in degrees or radians) and one-variable statistics & combinatorics tool — enter a data list for n, Σx, Σx², the mean, and sample/population variance & SD, or use nCr, nPr, and n! directly from the keypad.',
+    description: 'A combined scientific calculator (trigonometric, logarithmic, exponential, and memory functions, in degrees or radians) and one-variable statistics & combinatorics tool. The Statistics tab computes n, Σx, Σx², mean, and sample/population variance & SD from a data list, plus nCr, nPr, and n! from a separate Combinatorics n/r field — all as ordinary result rows, the same as every other calculator on this site.',
     inputLayout: 'keypad',
 
     formulas: [
@@ -12691,65 +12696,121 @@ const CALCULATORS = [
       }
     ],
 
-    // Only the Statistics tab's data-list input is a "real" calc.inputs
-    // entry — the Scientific tab's keypad reads/writes its own display
-    // state directly in app.js rather than going through calc.inputs /
+    // Only the Statistics tab's fields are "real" calc.inputs entries —
+    // the Scientific tab's keypad reads/writes its own display state
+    // directly in app.js rather than going through calc.inputs /
     // readInputs() at all, same as an 'explorer' calculator's sliders
-    // don't go through the standard Calculate-button flow either.
+    // don't go through the standard Calculate-button flow either. The
+    // data list and the n/r Combinatorics fields are independent of
+    // each other — calculate() below computes whichever section has a
+    // value, same as leaving an "optional" field blank anywhere else
+    // on this site.
     inputs: [
-      { id: 'data', type: 'textarea', label: 'Statistics Mode — Data values (comma, space, or newline separated)', default: '4, 8, 6, 5, 3, 7, 9, 5, 6, 4' }
+      { id: 'data',    type: 'textarea', label: 'Data values (comma, space, or newline separated)', default: '4, 8, 6, 5, 3, 7, 9, 5, 6, 4' },
+      { id: 'comboN',  label: 'Combinatorics — n (total items)', default: 10 },
+      { id: 'comboR',  label: 'Combinatorics — r (items chosen) — leave blank for just n!', default: 2 },
     ],
 
-    example({ data }) {
+    example({ data, comboN, comboR }) {
       const vals = parseNumberList(data).filter(isFinite);
-      if (vals.length < 2) return 'Enter at least 2 numeric values to see a worked medical example here.';
-      const n = vals.length;
-      const mean = vals.reduce((s, v) => s + v, 0) / n;
-      const sSD = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1));
-      const f = v => +v.toFixed(2);
-      return `A resident logs ${n} patients' fasting glucose readings (mg/dL) into the Statistics tab below. Mean = ${f(mean)}, sample SD = ${f(sSD)} — and switching to the Scientific tab, the same keypad handles everything from a quick unit conversion to checking ${n}C2 = ${n * (n - 1) / 2} ways to pair those patients up for a matched analysis, without leaving the page.`;
+      const hasN = comboN !== '' && comboN != null && isFinite(comboN);
+      if (vals.length < 2 && !hasN) return 'Enter at least 2 numeric values, or a Combinatorics n, to see a worked medical example here.';
+      const parts = [];
+      if (vals.length >= 2) {
+        const n = vals.length;
+        const mean = vals.reduce((s, v) => s + v, 0) / n;
+        const sSD = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1));
+        const f = v => +v.toFixed(2);
+        parts.push(`A resident logs ${n} patients' fasting glucose readings (mg/dL) into the data list below. Mean = ${f(mean)}, sample SD = ${f(sSD)}.`);
+      }
+      if (hasN) {
+        const n = Math.round(comboN);
+        const hasR = comboR !== '' && comboR != null && isFinite(comboR) && comboR >= 0 && comboR <= n;
+        if (hasR) {
+          const r = Math.round(comboR);
+          parts.push(`Separately, the Combinatorics fields answer a different question: out of ${n} eligible patients, there are ${n}C${r} = ${scCalcCombinations(n, r)} ways to choose an unordered group of ${r} for a sub-study, or ${n}P${r} = ${scCalcPermutations(n, r)} ways if their order (e.g. enrollment sequence) matters.`);
+        } else {
+          parts.push(`Separately, the Combinatorics n field alone gives ${n}! = ${scCalcFactorial(n)} — the number of ways to fully order all ${n} items; add an r to also get nCr and nPr.`);
+        }
+      }
+      return parts.join(' ');
     },
 
-    calculate({ data }) {
+    calculate({ data, comboN, comboR }) {
       const vals = parseNumberList(data).filter(v => isFinite(v));
-      if (vals.length < 1) return [err('Enter at least 1 numeric value (comma, space, or newline separated)')];
+      const hasData = vals.length > 0;
+      const hasN = comboN !== '' && comboN != null && isFinite(comboN);
+      const hasR = comboR !== '' && comboR != null && isFinite(comboR);
 
-      const n     = vals.length;
-      const sumX  = vals.reduce((s, v) => s + v, 0);
-      const sumX2 = vals.reduce((s, v) => s + v * v, 0);
-      const mean  = sumX / n;
-      const sorted = vals.slice().sort((a, b) => a - b);
-      const median = medianOfSorted(sorted);
-      const min = sorted[0], max = sorted[n - 1];
-      const ssq  = vals.reduce((s, v) => s + (v - mean) ** 2, 0);
-      const pVar = ssq / n;
-      const pSD  = Math.sqrt(pVar);
-
-      const f = (v, dp = 4) => +(v.toFixed(dp));
-
-      const rows = [
-        { label: 'N (count)',                  value: n,         ci: null, isRatio: false },
-        { label: 'Sum (Σx)',                   value: f(sumX),   ci: null, isRatio: false },
-        { label: 'Sum of Squares (Σx²)',       value: f(sumX2),  ci: null, isRatio: false },
-        { label: 'Mean (x̄)',                   value: f(mean),   ci: null, isRatio: false, highlight: true },
-        { label: 'Median',                     value: f(median), ci: null, isRatio: false },
-        { label: 'Minimum',                    value: f(min),    ci: null, isRatio: false },
-        { label: 'Maximum',                    value: f(max),    ci: null, isRatio: false },
-        { label: 'Range',                      value: f(max - min), ci: null, isRatio: false },
-      ];
-
-      if (n > 1) {
-        const sVar = ssq / (n - 1);
-        const sSD  = Math.sqrt(sVar);
-        rows.push({ label: 'Sample Variance (s²)', value: f(sVar), ci: null, isRatio: false, highlight: true });
-        rows.push({ label: 'Sample SD (s)',        value: f(sSD),  ci: null, isRatio: false, highlight: true });
-      } else {
-        rows.push({ label: 'Sample Variance & SD', isText: true, ci: null, isRatio: false,
-          value: 'Needs at least 2 values — the n−1 denominator is undefined for a single observation.' });
+      if (!hasData && !hasN) {
+        return [err('Enter either a data list, a Combinatorics n, or both — each section works independently')];
       }
 
-      rows.push({ label: 'Population Variance (σ²)', value: f(pVar), ci: null, isRatio: false });
-      rows.push({ label: 'Population SD (σ)',        value: f(pSD),  ci: null, isRatio: false });
+      const f = (v, dp = 4) => +(v.toFixed(dp));
+      const rows = [];
+
+      if (hasData) {
+        const n     = vals.length;
+        const sumX  = vals.reduce((s, v) => s + v, 0);
+        const sumX2 = vals.reduce((s, v) => s + v * v, 0);
+        const mean  = sumX / n;
+        const sorted = vals.slice().sort((a, b) => a - b);
+        const median = medianOfSorted(sorted);
+        const min = sorted[0], max = sorted[n - 1];
+        const ssq  = vals.reduce((s, v) => s + (v - mean) ** 2, 0);
+        const pVar = ssq / n;
+        const pSD  = Math.sqrt(pVar);
+
+        rows.push(
+          { label: 'N (count)',            value: n,             ci: null, isRatio: false },
+          { label: 'Sum (Σx)',             value: f(sumX),       ci: null, isRatio: false },
+          { label: 'Sum of Squares (Σx²)', value: f(sumX2),      ci: null, isRatio: false },
+          { label: 'Mean (x̄)',             value: f(mean),       ci: null, isRatio: false, highlight: true },
+          { label: 'Median',               value: f(median),     ci: null, isRatio: false },
+          { label: 'Minimum',              value: f(min),        ci: null, isRatio: false },
+          { label: 'Maximum',              value: f(max),        ci: null, isRatio: false },
+          { label: 'Range',                value: f(max - min),  ci: null, isRatio: false },
+        );
+
+        if (n > 1) {
+          const sVar = ssq / (n - 1);
+          const sSD  = Math.sqrt(sVar);
+          rows.push({ label: 'Sample Variance (s²)', value: f(sVar), ci: null, isRatio: false, highlight: true });
+          rows.push({ label: 'Sample SD (s)',        value: f(sSD),  ci: null, isRatio: false, highlight: true });
+        } else {
+          rows.push({ label: 'Sample Variance & SD', isText: true, ci: null, isRatio: false,
+            value: 'Needs at least 2 values — the n−1 denominator is undefined for a single observation.' });
+        }
+
+        rows.push({ label: 'Population Variance (σ²)', value: f(pVar), ci: null, isRatio: false });
+        rows.push({ label: 'Population SD (σ)',        value: f(pSD),  ci: null, isRatio: false });
+      }
+
+      if (hasN) {
+        const n = Math.round(comboN);
+        if (n < 0) {
+          rows.push(err('Combinatorics n must be zero or greater'));
+        } else {
+          try {
+            rows.push({ label: `Factorial (${n}!)`, value: scCalcFactorial(n), ci: null, isRatio: false, highlight: true });
+          } catch (e) {
+            rows.push({ label: 'Factorial (n!)', isText: true, isError: true, ci: null, isRatio: false, value: e.message });
+          }
+          if (hasR) {
+            const r = Math.round(comboR);
+            if (r < 0 || r > n) {
+              rows.push({ label: 'Combinations & Permutations', isText: true, isError: true, ci: null, isRatio: false,
+                value: `r must be between 0 and n (got r = ${r}, n = ${n})` });
+            } else {
+              rows.push({ label: `Combinations (${n}C${r})`, value: scCalcCombinations(n, r), ci: null, isRatio: false, highlight: true });
+              rows.push({ label: `Permutations (${n}P${r})`, value: scCalcPermutations(n, r), ci: null, isRatio: false, highlight: true });
+            }
+          }
+        }
+      } else if (hasR) {
+        rows.push({ label: 'Combinations & Permutations', isText: true, isError: true, ci: null, isRatio: false,
+          value: 'Enter Combinatorics n too (r alone isn\'t enough to compute nCr/nPr)' });
+      }
 
       return rows;
     }
@@ -15214,6 +15275,31 @@ function computeFragilityIndex(a, b, c, d) {
 // newline separated) into a flat numeric array.
 function parseNumberList(text) {
   return String(text).trim().split(/[,\s]+/).filter(Boolean).map(Number);
+}
+
+// n!, nCr, and nPr for 'scientific-calculator''s Combinatorics fields —
+// a ratio-based computation (rather than literal factorial-then-
+// divide, which would overflow for n well before the division could
+// cancel it back down) so nCr/nPr stay accurate for n into the
+// hundreds even though a literal n! itself already can't exceed 170
+// (see scCalcFactorial's own guard) before double-precision overflows.
+function scCalcFactorial(n) {
+  if (n < 0 || !Number.isInteger(n)) throw new Error('n! needs a non-negative whole number');
+  if (n > 170) throw new Error('n! overflow — max is 170!');
+  let r = 1;
+  for (let k = 2; k <= n; k++) r *= k;
+  return r;
+}
+function scCalcCombinations(n, r) {
+  r = Math.min(r, n - r);
+  let result = 1;
+  for (let k = 0; k < r; k++) result = (result * (n - k)) / (k + 1);
+  return Math.round(result);
+}
+function scCalcPermutations(n, r) {
+  let result = 1;
+  for (let k = 0; k < r; k++) result *= (n - k);
+  return Math.round(result);
 }
 
 // Median of a PRE-SORTED numeric array.

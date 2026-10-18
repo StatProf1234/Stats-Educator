@@ -105,6 +105,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Physical-keyboard input for the Scientific & Statistics Calculator's
+  // Scientific tab — delegated and attached once here (same pattern as
+  // every other document-level listener in this block) rather than
+  // inside renderKeypadCalculator itself, since that function re-runs
+  // on every visit to the page and a listener attached there would
+  // stack a fresh duplicate on `document` each time. keypadKeyHandler
+  // (set by renderKeypadCalculator, declared near it below) is only
+  // ever acted on while that calculator's Scientific tab is actually
+  // the visible page, checked fresh on every keypress rather than
+  // torn down on navigation.
+  document.addEventListener('keydown', e => {
+    const panel = document.getElementById('keypad-sci-panel');
+    if (!panel || panel.hidden || !keypadKeyHandler) return;
+    // Don't steal keystrokes meant for an actual text field — e.g. the
+    // Statistics tab's data-list textarea, reachable from this same
+    // page via its tab switcher.
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return;
+
+    const key = e.key;
+    if (/^[0-9.]$/.test(key) || '+-*/^()%!'.includes(key)) {
+      e.preventDefault();
+      keypadKeyHandler('insert', key);
+    } else if (key === 'Enter' || key === '=') {
+      e.preventDefault();
+      keypadKeyHandler('equals');
+    } else if (key === 'Backspace') {
+      e.preventDefault();
+      keypadKeyHandler('back');
+    } else if (key === 'Escape' || key === 'Delete') {
+      e.preventDefault();
+      keypadKeyHandler('clear');
+    }
+  });
+
   // Chart export (PNG/JPG) — a single delegated listener attached
   // once here, rather than one per button, since showResults()
   // rebuilds the results DOM (and every button in it) from scratch
@@ -2338,6 +2373,13 @@ function keypadNegate(expr) {
   return expr + '-';
 }
 
+// Set by renderKeypadCalculator() below to that render's own
+// handleKeypadAction closure, so the delegated document-level keydown
+// listener (registered once, up in the DOMContentLoaded block) can
+// reach whichever visit's live expr/memory/Ans state is current
+// without itself being re-attached on every render.
+let keypadKeyHandler = null;
+
 // Page template for calculators with inputLayout: 'keypad' (the
 // Scientific & Statistics Calculator) — a live interactive keypad
 // instead of the standard inputs-grid + Calculate + results table.
@@ -2380,9 +2422,18 @@ function renderKeypadCalculator(calc) {
     </div>
 
     <div id="keypad-sci-panel" class="inputs-block"></div>
-    <div id="keypad-stat-panel" class="inputs-block" hidden>
-      <div class="block-label">Inputs</div>
-      ${renderGrid(calc)}
+    <div id="keypad-stat-panel" hidden>
+      ${calc.example ? `
+      <details class="example-block">
+        <summary class="example-summary">Medical Example — when &amp; how to use this</summary>
+        <p class="example-body" id="example-body"></p>
+      </details>` : ''}
+
+      <div class="inputs-block">
+        <div class="block-label">Inputs</div>
+        ${renderGrid(calc)}
+      </div>
+
       <div class="calc-actions">
         <button class="calc-btn" id="keypad-stat-btn">Calculate</button>
         <button class="reset-btn" id="keypad-stat-reset" type="button">Reset</button>
@@ -2519,6 +2570,8 @@ function renderKeypadCalculator(calc) {
     updateDisplay();
   }
 
+  keypadKeyHandler = handleKeypadAction;
+
   function renderSciPanel() {
     const gridHtml = buttonSpecs().map(b => `
       <button type="button" class="keypad-btn ${b.cls}" data-action="${b.action}"
@@ -2547,7 +2600,9 @@ function renderKeypadCalculator(calc) {
   // calculator uses, just mounted inside this custom template instead
   // of renderCalculator()'s standard one. ───────────────────────────
   function runStats() {
-    showResults(calc.calculate(readInputs(calc)), calc.id);
+    const values = readInputs(calc);
+    showResults(calc.calculate(values), calc.id);
+    updateExample(calc, values);
   }
   document.getElementById('keypad-stat-btn').addEventListener('click', runStats);
   document.getElementById('keypad-stat-reset').addEventListener('click', () => {
