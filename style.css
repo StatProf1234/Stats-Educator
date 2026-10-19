@@ -138,6 +138,53 @@ body {
   padding: 2px 4px;
 }
 
+.footer-cite {
+  margin-top: 10px;
+  border-top: 1px solid var(--sidebar-border);
+  padding-top: 10px;
+}
+
+.footer-cite summary {
+  cursor: pointer;
+  color: var(--sidebar-text);
+  user-select: none;
+}
+
+.footer-cite summary:hover {
+  color: #fff;
+}
+
+.footer-cite-body {
+  margin-top: 8px;
+}
+
+.footer-cite-format {
+  margin: 0 0 4px;
+}
+
+.footer-cite-copy {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--sidebar-text);
+  font-size: 10.5px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+
+.footer-cite-copy:hover {
+  background: rgba(255, 255, 255, .08);
+  border-color: var(--accent);
+}
+
+.footer-cite-copy:last-child {
+  margin-bottom: 0;
+}
+
 .brand-abbr {
   display: block;
   font-family: var(--font-display);

@@ -71,6 +71,42 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.closest('a')) setSidebarOpen(false);
   });
 
+  // "Cite this tool" footer block: fill in today's date (APA's long
+  // form and Vancouver's "YYYY Mon DD" form) wherever the static HTML
+  // left a placeholder, in both the visible citation text and the
+  // matching copy button's clipboard payload.
+  {
+    const today = new Date();
+    const dateLong = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const dateShort = today.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+      .replace(/^(\w+) (\d+), (\d+)$/, '$3 $1 $2');
+
+    const dateLongEl = document.querySelector('.footer-cite-date-long');
+    if (dateLongEl) dateLongEl.textContent = dateLong;
+    const dateShortEl = document.querySelector('.footer-cite-date-short');
+    if (dateShortEl) dateShortEl.textContent = dateShort;
+
+    document.querySelectorAll('.footer-cite-copy').forEach(btn => {
+      btn.dataset.citeText = btn.dataset.citeText
+        .replace('{{DATE_LONG}}', dateLong)
+        .replace('{{DATE_SHORT}}', dateShort);
+    });
+  }
+
+  document.querySelectorAll('.footer-cite-copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.citeText).then(() => {
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.disabled = false;
+        }, 1500);
+      });
+    });
+  });
+
   // Breadcrumb category crumb (see renderCalculator/renderGuide's
   // .page-breadcrumb) — pre-expands that category's section before
   // the browser follows the link back to its hub, so the hub lands
